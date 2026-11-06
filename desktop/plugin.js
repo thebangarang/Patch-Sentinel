@@ -125,8 +125,9 @@ function dot(level) {
 function label(text, extra) {
   return jsx('div', {
     style: {
-      fontFamily: MONO, fontSize: '0.5625rem', letterSpacing: '0.14em',
-      textTransform: 'uppercase', color: C.faint, ...(extra || {})
+      fontFamily: MONO, fontSize: '0.75rem', letterSpacing: '0.16em', fontWeight: 700,
+      textTransform: 'uppercase', color: C.accent, paddingBottom: '3px',
+      borderBottom: '1px solid ' + C.accent, display: 'inline-block', ...(extra || {})
     }
   }, text)
 }
@@ -606,14 +607,14 @@ function GapsPanel({ coverage, selected }) {
 
 // --------------------------------------------------------------------------- APPLY GATE
 
-function ApplyGate({ hostLabel, entry }) {
+function ApplyGate({ hostLabel, entry, onRescan, rescannning }) {
   const [typed, setTyped] = useState('')
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const armed = Boolean(hostLabel) && typed.trim() === hostLabel
 
   const run = useCallback(async (dryRun) => {
-    if (!armed || busy) return
+    if (!armed || busy || !entry) return
     setBusy(true)
     setResult(null)
     try {
@@ -630,20 +631,38 @@ function ApplyGate({ hostLabel, entry }) {
   }, [armed, busy, hostLabel, typed])
 
   const steps = (result && result.steps) || []
-  const count = entry ? (entry.pending_count || 0) : null
-  const nothingToDo = count === 0
+  const measured = Boolean(entry)
+  const count = measured ? (entry.pending_count || 0) : null
+  const nothingToDo = measured && count === 0
+  const ready = armed && measured && !nothingToDo
   return jsxs('section', { style: { borderTop: '1px solid ' + C.border, paddingTop: '10px', marginTop: '6px' } }, [
     jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', marginBottom: '6px' } }, [
       label('apply'),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: nothingToDo ? C.faint : C.warn } },
-        count === null ? 'no measurement' : nothingToDo ? 'nothing to apply' : count + ' update(s) to install')
+        !measured ? 'no measurement' : nothingToDo ? 'nothing to apply' : count + ' update(s) to install'),
+      onRescan
+        ? jsx('button', {
+            type: 'button',
+            onClick: onRescan,
+            disabled: rescannning,
+            title: 're-measure every host in the inventory',
+            style: {
+              fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
+              cursor: rescannning ? 'default' : 'pointer',
+              color: rescannning ? C.faint : C.accent, background: 'transparent',
+              border: '1px solid ' + C.border, borderRadius: '3px'
+            }
+          }, rescannning ? 'measuring…' : 'rescan')
+        : null
     ]),
     jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginBottom: '4px' } },
-      nothingToDo
-        ? 'The scan found no updates on ' + hostLabel + ', so both buttons would be pointless — that is not a refusal, there is simply nothing to do.'
-        : 'This is the step that actually pushes the update list above onto ' + (hostLabel || 'the host') +
-          '. “Stage” downloads and prints the command and changes nothing; “Apply” runs it, then re-measures the host and writes a receipt with the versions before and after. It is the same action as asking me in chat.'),
+      !measured
+        ? 'Nothing has been measured for ' + (hostLabel || 'this host') + ' yet — press rescan above, then come back.'
+        : nothingToDo
+          ? 'The scan found 0 updates on ' + hostLabel + ', so there is nothing to stage and nothing to apply. The buttons are disabled because the work is already done — not because something is broken. Rescan after you change something.'
+          : 'This is the step that actually pushes the update list above onto ' + (hostLabel || 'the host') +
+            '. “Stage” downloads and prints the command and changes nothing; “Apply” runs it, then re-measures the host and writes a receipt with the versions before and after. It is the same action as asking me in chat.'),
     nothingToDo ? null : jsxs('div', { style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '6px' } }, [
       'Type ',
       jsx('code', {
@@ -669,11 +688,13 @@ function ApplyGate({ hostLabel, entry }) {
       jsx('button', {
         type: 'button',
         onClick: () => run(true),
-        disabled: !armed || busy || nothingToDo,
-        title: 'Stages the download and prints the command. Changes nothing.',
+        disabled: !ready || busy,
+        title: !measured ? 'nothing measured for this host yet'
+             : nothingToDo ? 'nothing to stage: the scan found 0 updates'
+             : !armed ? 'type the host label above to unlock' : 'stages the download, prints the command, changes nothing',
         style: {
           fontFamily: MONO, fontSize: '0.6875rem', padding: '4px 10px',
-          cursor: armed && !busy ? 'pointer' : 'not-allowed',
+          cursor: ready && !busy ? 'pointer' : 'not-allowed',
           color: armed ? C.accent : C.faint, background: 'transparent',
           border: '1px solid ' + (armed ? C.accent : C.border), borderRadius: '3px'
         }
@@ -681,15 +702,17 @@ function ApplyGate({ hostLabel, entry }) {
       jsx('button', {
         type: 'button',
         onClick: () => run(false),
-        disabled: !armed || busy || nothingToDo,
-        title: 'Applies for real. Writes a receipt with the versions before and after.',
+        disabled: !ready || busy,
+        title: !measured ? 'nothing measured for this host yet'
+             : nothingToDo ? 'nothing to apply: the scan found 0 updates'
+             : !armed ? 'type the host label above to unlock' : 'applies for real, writes a receipt with the versions before and after',
         style: {
           fontFamily: MONO, fontSize: '0.6875rem', padding: '4px 12px',
-          cursor: armed && !busy ? 'pointer' : 'not-allowed',
+          cursor: ready && !busy ? 'pointer' : 'not-allowed',
           color: armed ? C.danger : C.faint, background: 'transparent',
           border: '1px solid ' + (armed ? C.danger : C.border), borderRadius: '3px'
         }
-      }, busy ? '…' : armed && !nothingToDo ? 'apply for real' : 'apply — locked')
+      }, busy ? '…' : ready ? 'apply for real' : nothingToDo ? 'nothing to apply' : 'apply — locked')
     ]),
     result
       ? jsxs('div', { style: { marginTop: '8px', borderTop: '1px dashed ' + C.border, paddingTop: '6px' } }, [
@@ -873,7 +896,7 @@ export function PatchSentinel({ compact }) {
     jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }),
     jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning }),
     jsx(GapsPanel, { coverage, selected }),
-    jsx(ApplyGate, { hostLabel: selected,
+    jsx(ApplyGate, { hostLabel: selected, onRescan: rescan, rescannning: busy,
                      entry: status && status.hosts ? status.hosts[selected] : null }),
     jsx('div', {
       style: {
