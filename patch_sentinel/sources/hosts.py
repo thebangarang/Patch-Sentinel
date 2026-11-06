@@ -11,6 +11,7 @@ An empty target means local too, so ``beelink=`` works.
 """
 from __future__ import annotations
 
+import re
 import socket
 
 
@@ -32,6 +33,49 @@ def parse_inventory(text: str | list | None) -> list[dict]:
             target = None
         hosts.append({"label": label, "target": target})
     return hosts
+
+
+LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$")
+# An ssh target ends up in an ssh argv. Only what can legitimately appear there is accepted, so a
+# crafted target cannot become a second command.
+TARGET_RE = re.compile(r"^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9._\[\]:-]{1,120}$")
+
+
+def validate(label: str, target: str) -> tuple[bool, str]:
+    """Is this host entry safe and unambiguous? Returns (ok, reason)."""
+    label = (label or "").strip()
+    target = (target or "").strip()
+    if not LABEL_RE.match(label):
+        return False, ("a label is 1–32 characters: letters, digits, dot, dash or underscore, "
+                       "starting with a letter or digit")
+    if is_local(target):
+        return True, ""
+    if " " in target or "=" in target or "," in target:
+        return False, "a target cannot contain spaces, '=' or ','"
+    if not TARGET_RE.match(target):
+        return False, ("a target is user@host, host, or user@host:port — nothing else fits in "
+                       "an ssh command line")
+    return True, ""
+
+
+LOCAL_TARGETS = ("", "local", "localhost", "self", "this-box")
+
+
+def is_local(target) -> bool:
+    """Is this entry the machine the plugin runs on? ``local`` arrives as a string from the
+    inventory and as ``None`` from a config that never set a target — both mean the same thing."""
+    return target is None or str(target).strip().lower() in LOCAL_TARGETS
+
+
+def serialize(entries: list[dict]) -> str:
+    """``[{"label": "a", "target": None}, {"label": "b", "target": "vps"}]`` → ``a=local,b=vps``."""
+    parts = []
+    for entry in entries or []:
+        label = (entry.get("label") or "").strip()
+        if not label:
+            continue
+        parts.append(f"{label}={entry.get('target') or 'local'}")
+    return ",".join(parts)
 
 
 def local_label() -> str:

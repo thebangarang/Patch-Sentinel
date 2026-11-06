@@ -108,6 +108,24 @@ wrong either way would manufacture a lag or hide one.
 Where an advisory carries a Workarounds section, the finding also shows the vendor's own temporary
 mitigation — quoted, never invented.
 
+## Adding the machines this pane answers for
+
+The inventory is editable from the pane (`hosts` → **add a host**): label, then the ssh target —
+`user@host:port`, an `ssh` alias from `~/.ssh/config`, or `local` for this machine.
+
+Two rules are enforced by the backend, not the UI:
+
+* **A host is only added after a probe of it succeeded.** The probe is the real scan, so adding a row
+  means something reached that machine and read its package manager. A list that can grow on a typo is
+  a list that lies.
+* **Addresses only, never a credential.** The key stays in your ssh agent; the plugin never reads,
+  stores or forwards one. A target is validated against what can legitimately sit in an ssh argv, so
+  it cannot smuggle a second command.
+
+Removing a host needs its label typed exactly (it throws away that host's history), and the machine
+the plugin runs on cannot be removed at all. A pane edit is written to the plugin's own settings and
+wins over `config.yaml` on the next restart, instead of being silently undone.
+
 ## Patching a remote server, from here
 
 The inventory is just `label=target` pairs, and the target is anything `ssh` understands — so a VPS is

@@ -26,6 +26,15 @@ def register(ctx) -> None:
     from .patch_sentinel import schemas, store, tools
 
     settings = {key: ctx.get_config(key, default) for key, default in DEFAULTS.items()}
+    # A host list edited in the pane wins over config.yaml: the pane writes settings.json and marks
+    # it, and a config value that predates that edit must not quietly undo it on the next restart.
+    saved = {}
+    try:
+        saved = store.load_settings() or {}
+    except OSError:
+        saved = {}
+    if saved.get("hosts_source") == "pane" and saved.get("hosts"):
+        settings["hosts"] = saved["hosts"]
     tools.configure(settings)
     # The dashboard half has no ctx: it reads these back so the pane and the agent cannot disagree
     # about which hosts exist. Only a *non-default* configuration is persisted — the validate/doctor
@@ -33,6 +42,9 @@ def register(ctx) -> None:
     # those would silently wipe a real host list from disk.
     if any(settings.get(key) != default for key, default in DEFAULTS.items()):
         try:
+            for key in ("hosts_source",):
+                if saved.get(key):
+                    settings[key] = saved[key]
             store.save_settings(settings)
         except OSError:
             pass

@@ -160,6 +160,205 @@ function Copy({ text, what, label }) {
   }, done ? 'copied' : (label || 'copy'))
 }
 
+// --------------------------------------------------------------------------- HOSTS
+
+/** Add or remove a machine from the inventory. Addresses only — never a credential. */
+function HostsPanel({ onChanged }) {
+  const [hosts, setHosts] = useState(null)
+  const [open, setOpen] = useState(false)
+  const [newLabel, setNewLabel] = useState('')
+  const [newTarget, setNewTarget] = useState('')
+  const [test, setTest] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [removing, setRemoving] = useState(null)
+  const [typed, setTyped] = useState('')
+
+  const load = useCallback(async () => {
+    try {
+      const answer = await call('/hosts')
+      setHosts((answer && answer.hosts) || [])
+    } catch (err) {
+      setHosts([])
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const runTest = useCallback(async () => {
+    setBusy(true)
+    setTest(null)
+    try {
+      setTest(await call('/hosts/test', { method: 'POST', body: { label: newLabel, target: newTarget } }))
+    } catch (err) {
+      setTest({ ok: false, reason: String(err && err.message ? err.message : err) })
+    } finally {
+      setBusy(false)
+    }
+  }, [newLabel, newTarget])
+
+  const add = useCallback(async () => {
+    setBusy(true)
+    try {
+      const answer = await call('/hosts', { method: 'POST', body: { label: newLabel, target: newTarget } })
+      if (answer && answer.hosts) {
+        setHosts(answer.hosts)
+        setNewLabel('')
+        setNewTarget('')
+        setTest(null)
+        setOpen(false)
+        if (onChanged) onChanged()
+      } else {
+        setTest({ ok: false, reason: (answer && answer.reason) || 'the host was not added' })
+      }
+    } finally {
+      setBusy(false)
+    }
+  }, [newLabel, newTarget, onChanged])
+
+  const remove = useCallback(async (host) => {
+    setBusy(true)
+    try {
+      const answer = await call('/hosts/remove', {
+        method: 'POST', body: { label: host.label, confirm: typed }
+      })
+      if (answer && answer.hosts) {
+        setHosts(answer.hosts)
+        setRemoving(null)
+        setTyped('')
+        if (onChanged) onChanged()
+      } else {
+        setTest({ ok: false, reason: (answer && answer.reason) || 'the host was not removed' })
+      }
+    } finally {
+      setBusy(false)
+    }
+  }, [typed, onChanged])
+
+  return jsxs('section', { style: { marginBottom: '16px' } }, [
+    jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
+      label('hosts'),
+      jsx('span', { style: { flex: 1 } }),
+      jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: C.faint } },
+        hosts ? hosts.length + ' in the inventory' : '…'),
+      jsx('button', {
+        type: 'button',
+        onClick: () => { setOpen((v) => !v); setTest(null) },
+        style: {
+          fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: 'pointer',
+          color: open ? C.accent : C.dim, background: 'transparent',
+          border: '1px solid ' + (open ? C.accent : C.border), borderRadius: '3px'
+        }
+      }, open ? 'close' : 'add a host')
+    ]),
+    (hosts || []).map((host) => jsxs('div', {
+      key: host.label,
+      style: {
+        display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'baseline',
+        fontFamily: MONO, fontSize: '0.625rem', padding: '3px 0',
+        borderTop: '1px solid ' + C.border
+      }
+    }, [
+      jsx('span', { style: { color: C.text } }, host.label),
+      jsx('span', { style: { color: C.dim } }, host.target === 'local' ? 'this machine' : host.target),
+      removing === host.label
+        ? jsxs('span', { style: { display: 'flex', gap: '4px' } }, [
+            jsx('input', {
+              value: typed,
+              onChange: (event) => setTyped(event.target.value),
+              placeholder: 'type ' + host.label,
+              style: {
+                width: '7rem', fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 4px',
+                background: 'transparent', color: C.text, border: '1px solid ' + C.danger,
+                borderRadius: '2px'
+              }
+            }),
+            jsx('button', {
+              type: 'button',
+              onClick: () => remove(host),
+              disabled: busy || typed !== host.label,
+              title: 'removes the host and its measurement history',
+              style: {
+                fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 6px',
+                cursor: typed === host.label ? 'pointer' : 'not-allowed',
+                color: typed === host.label ? C.danger : C.faint, background: 'transparent',
+                border: '1px solid ' + C.border, borderRadius: '2px'
+              }
+            }, 'remove')
+          ])
+        : jsx('button', {
+            type: 'button',
+            onClick: () => { setRemoving(host.label); setTyped('') },
+            disabled: host.target === 'local',
+            title: host.target === 'local'
+              ? 'the machine this plugin runs on is always in the inventory'
+              : 'remove this host',
+            style: {
+              fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 6px',
+              cursor: host.target === 'local' ? 'default' : 'pointer',
+              color: host.target === 'local' ? C.faint : C.dim, background: 'transparent',
+              border: '1px solid ' + C.border, borderRadius: '2px'
+            }
+          }, '×')
+    ])),
+    open
+      ? jsxs('div', { style: { marginTop: '8px', padding: '8px', border: '1px solid ' + C.border, borderRadius: '3px', background: C.panel } }, [
+          jsxs('div', { style: { display: 'flex', gap: '6px', marginBottom: '5px' } }, [
+            jsx('input', {
+              value: label, onChange: (e) => { setLabel(e.target.value); setTest(null) },
+              placeholder: 'label (e.g. vps)',
+              style: {
+                flex: '0 0 30%', fontFamily: MONO, fontSize: '0.625rem', padding: '3px 6px',
+                background: 'transparent', color: C.text, border: '1px solid ' + C.border,
+                borderRadius: '3px'
+              }
+            }),
+            jsx('input', {
+              value: target, onChange: (e) => { setTarget(e.target.value); setTest(null) },
+              placeholder: 'user@host:port, an ssh alias, or local',
+              style: {
+                flex: 1, fontFamily: MONO, fontSize: '0.625rem', padding: '3px 6px',
+                background: 'transparent', color: C.text, border: '1px solid ' + C.border,
+                borderRadius: '3px'
+              }
+            })
+          ]),
+          jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
+            jsx('button', {
+              type: 'button', onClick: runTest, disabled: busy || !newLabel,
+              style: {
+                fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
+                cursor: busy || !newLabel ? 'default' : 'pointer',
+                color: C.accent, background: 'transparent',
+                border: '1px solid ' + C.border, borderRadius: '3px'
+              }
+            }, busy ? '…' : 'test'),
+            jsx('button', {
+              type: 'button', onClick: add, disabled: busy || !test || !test.ok,
+              title: test && test.ok ? 'save it to the inventory' : 'a host is only added after a probe of it succeeded',
+              style: {
+                fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
+                cursor: test && test.ok ? 'pointer' : 'not-allowed',
+                color: test && test.ok ? C.ok : C.faint, background: 'transparent',
+                border: '1px solid ' + (test && test.ok ? C.ok : C.border), borderRadius: '3px'
+              }
+            }, 'add'),
+            jsx('span', { style: { fontSize: '0.625rem', color: C.faint } },
+              'addresses only — the key stays in ssh')
+          ]),
+          test
+            ? jsx('div', {
+                style: { marginTop: '6px', fontSize: '0.625rem', color: test.ok ? C.ok : C.danger, lineHeight: 1.4 }
+              }, test.ok
+                ? 'reached it: ' + (test.adapter || '?') + ' · ' + ((test.os && test.os.id) || '?') + '/'
+                  + ((test.os && test.os.codename) || '?') + ' · kernel '
+                  + ((test.kernel && test.kernel.verdict) || '?') + ' · ' + (test.pending || 0) + ' pending'
+                : (test.reason || 'could not reach it') + (test.detail ? ' — ' + test.detail : ''))
+            : null
+        ])
+      : null
+  ])
+}
+
 // --------------------------------------------------------------------------- NOW
 
 function NowPanel({ status, onRefresh, busy }) {
@@ -809,7 +1008,7 @@ function ApplyGate({ hostLabel, entry, onRescan, rescannning }) {
 
 // --------------------------------------------------------------------------- root
 
-export { NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate }
+export { HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate }
 
 export function PatchSentinel({ compact }) {
   const [status, setStatus] = useState(null)
@@ -959,8 +1158,11 @@ export function PatchSentinel({ compact }) {
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'plan'),
         ' — the system packages above turned into ordered commands (risk, downtime, how to verify, how to undo).'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'gaps'), ' — what this scan could not see. Red here is a fact about the scan, not the host.'),
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'apply'), ' — the only control that changes a machine, and it needs the host name typed.')
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'apply'), ' — the only control that changes a machine, and it needs the host name typed.'),
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'hosts'),
+        ' — the machines this pane answers for. A host is added only after a probe of it succeeds; addresses only, never a key.')
     ]),
+    jsx(HostsPanel, { onChanged: load }),
     jsx(NowPanel, { status, onRefresh: rescan, busy }),
     jsx(UpdatesPanel, { entry: status && status.hosts ? status.hosts[selected] : null,
                         hostLabel: selected, onRescan: rescan, busy }),
