@@ -85,6 +85,17 @@ for (const section of SECTIONS) {
 }
 console.log('  legend and panels agree on ' + SECTIONS.length + ' sections, in order')
 
+// One refresh control, at the top. Three panels used to carry their own "rescan" button doing the
+// same work; the operator could not tell whether they differed.
+const refreshButtons = (root.match(/>rescan all</g) || []).length
+if (refreshButtons !== 1) {
+  throw new Error('expected exactly one rescan control, found ' + refreshButtons)
+}
+if (root.includes('measuring…')) {
+  throw new Error('a per-panel rescan button is still rendered')
+}
+console.log('  exactly one refresh control, in the header')
+
 let bytes = 0
 for (const [name, element] of panes) {
   const html = renderToStaticMarkup(element)

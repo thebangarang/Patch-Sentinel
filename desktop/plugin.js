@@ -421,7 +421,7 @@ function HostsPanel({ onChanged, startOpen }) {
 
 // --------------------------------------------------------------------------- NOW
 
-function NowPanel({ status, onRefresh, busy }) {
+function NowPanel({ status }) {
   const hosts = status && status.hosts ? Object.values(status.hosts) : []
   const blind = (status && status.blind) || []
   const rows = hosts.map((entry) => {
@@ -468,17 +468,7 @@ function NowPanel({ status, onRefresh, busy }) {
       label(SECTION.overview.title),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: C.faint } },
-        ago(status ? status.age_seconds : null) + ' · exit ' + (status && status.exit_code !== null && status.exit_code !== undefined ? status.exit_code : '—')),
-      jsx('button', {
-        type: 'button',
-        onClick: onRefresh,
-        disabled: busy,
-        style: {
-          fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: busy ? 'default' : 'pointer',
-          color: busy ? C.faint : C.accent, background: 'transparent',
-          border: '1px solid ' + C.border, borderRadius: '3px'
-        }
-      }, busy ? 'measuring…' : 'rescan')
+        ago(status ? status.age_seconds : null) + ' · exit ' + (status && status.exit_code !== null && status.exit_code !== undefined ? status.exit_code : '—'))
     ]),
     hosts.length ? rows : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, padding: '6px 0' } },
       (status && status.note) || 'no measurement yet'),
@@ -493,7 +483,7 @@ function NowPanel({ status, onRefresh, busy }) {
 // --------------------------------------------------------------------------- UPDATES
 
 /** The raw update list for the selected host — every package, searchable, copyable. */
-function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
+function UpdatesPanel({ entry, hostLabel }) {
   const [query, setQuery] = useState('')
   const rows = (entry && entry.pending) || []
   const total = (entry && entry.pending_count) || 0
@@ -510,20 +500,7 @@ function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
         hostLabel ? total + ' available' : '—'),
       jsx('span', { style: { fontSize: '0.625rem', color: C.faint } },
         entry && entry.measured_at ? 'measured ' + entry.measured_at.replace('T', ' ').slice(11, 16) + ' UTC' : ''),
-      rows.length ? jsx(Copy, { text, what: 'the update list' }) : null,
-      onRescan
-        ? jsx('button', {
-            type: 'button',
-            onClick: onRescan,
-            disabled: busy,
-            title: 're-measure this host — the list is part of the scan, not a separate query',
-            style: {
-              fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: busy ? 'default' : 'pointer',
-              color: busy ? C.faint : C.accent, background: 'transparent',
-              border: '1px solid ' + C.border, borderRadius: '3px'
-            }
-          }, busy ? 'measuring…' : 'rescan')
-        : null
+      rows.length ? jsx(Copy, { text, what: 'the update list' }) : null
     ]),
     (entry && entry.vendor_lag || []).length
       ? jsxs('div', {
@@ -974,28 +951,55 @@ function GapsPanel({ coverage, selected }) {
 
 // --------------------------------------------------------------------------- APPLY GATE
 
-function ApplyGate({ hostLabel, entry, onRescan, rescannning }) {
+function ApplyGate({ hostLabel, entry }) {
   const [typed, setTyped] = useState('')
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const armed = Boolean(hostLabel) && typed.trim() === hostLabel
 
+  /**
+   * Apply runs as a job too. A real upgrade took 105 s on the Fedora VM; the renderer's bridge cuts a
+   * call at 30 s, so a synchronous apply would report a timeout *while the machine is being patched* —
+   * the one message that invites a second, duplicate apply. Start it, follow it, show what it returned.
+   */
   const run = useCallback(async (dryRun) => {
     if (!armed || busy || !entry) return
     setBusy(true)
     setResult(null)
     try {
-      const answer = await call('/apply', {
+      const started = await call('/apply', {
         method: 'POST',
         body: { host: hostLabel, confirm: typed.trim(), dry_run: dryRun }
       })
-      setResult(answer)
+      if (started && started.error) {
+        setResult({ applied: false, reason: 'the apply could not start: ' + started.error })
+        return
+      }
+      let job = null
+      for (let tick = 0; tick < 400; tick += 1) {
+        await new Promise((resolve) => { setTimeout(resolve, 1500) })
+        try {
+          const jobs = await call('/jobs')
+          job = (jobs && jobs.apply) || null
+        } catch (err) {
+          continue
+        }
+        if (job && !job.running) break
+      }
+      if (job && job.error) {
+        setResult({ applied: false, reason: 'the apply failed: ' + job.error })
+      } else if (job && job.result) {
+        setResult(job.result)
+      } else {
+        setResult({ applied: false,
+                    reason: 'the apply job is still running — check again in a moment, do not run it twice' })
+      }
     } catch (err) {
       setResult({ applied: false, reason: String(err && err.message ? err.message : err) })
     } finally {
       setBusy(false)
     }
-  }, [armed, busy, hostLabel, typed])
+  }, [armed, busy, hostLabel, typed, entry])
 
   const steps = (result && result.steps) || []
   const measured = Boolean(entry)
@@ -1007,21 +1011,7 @@ function ApplyGate({ hostLabel, entry, onRescan, rescannning }) {
       label(SECTION.apply.title),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: nothingToDo ? C.faint : C.warn } },
-        !measured ? 'no measurement' : nothingToDo ? 'nothing to apply' : count + ' update(s) to install'),
-      onRescan
-        ? jsx('button', {
-            type: 'button',
-            onClick: onRescan,
-            disabled: rescannning,
-            title: 're-measure every host in the inventory',
-            style: {
-              fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
-              cursor: rescannning ? 'default' : 'pointer',
-              color: rescannning ? C.faint : C.accent, background: 'transparent',
-              border: '1px solid ' + C.border, borderRadius: '3px'
-            }
-          }, rescannning ? 'measuring…' : 'rescan')
-        : null
+        !measured ? 'no measurement' : nothingToDo ? 'nothing to apply' : count + ' update(s) to install')
     ]),
     jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginBottom: '4px' } },
       !measured
@@ -1124,6 +1114,8 @@ export function PatchSentinel({ compact }) {
   const [health, setHealth] = useState(null)
   const [libraries, setLibraries] = useState(null)
   const [libBusy, setLibBusy] = useState(false)
+  const [scanSeconds, setScanSeconds] = useState(0)
+  const [scanError, setScanError] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -1140,15 +1132,46 @@ export function PatchSentinel({ compact }) {
     }
   }, [])
 
+  /**
+   * The one refresh control. The scan runs as a job on the backend because a renderer call is cut off
+   * at 30 s and a two-server scan takes 40-60: answering inside the request told the operator it timed
+   * out while the work was still finishing. So: start it, follow it, then read the stored answer.
+   */
   const rescan = useCallback(async () => {
+    if (busy) return
     setBusy(true)
+    setScanError(null)
+    setScanSeconds(0)
     try {
-      await call('/scan', { method: 'POST', body: {} })
+      const started = await call('/scan', { method: 'POST', body: {} })
+      if (started && started.error) {
+        setScanError('the scan could not start: ' + started.error)
+        return
+      }
+      // follow the job; 1.5 s apart, up to ~5 minutes
+      for (let tick = 0; tick < 200; tick += 1) {
+        await new Promise((resolve) => { setTimeout(resolve, 1500) })
+        let job = null
+        try {
+          const jobs = await call('/jobs')
+          job = (jobs && jobs.scan) || null
+        } catch (err) {
+          continue                       // a poll that fails once is not a failed scan
+        }
+        if (job && job.seconds) setScanSeconds(job.seconds)
+        if (job && !job.running) {
+          if (job.error) setScanError('the scan failed: ' + job.error)
+          break
+        }
+      }
       await load()
+      setPlan(null)                      // the plan belonged to the old measurement
+    } catch (err) {
+      setScanError(String(err && err.message ? err.message : err))
     } finally {
       setBusy(false)
     }
-  }, [load])
+  }, [busy, load])
 
   const doPlan = useCallback(async (label) => {
     if (!label) return
@@ -1240,8 +1263,25 @@ export function PatchSentinel({ compact }) {
               borderRadius: '3px', colorScheme: 'light dark'
             }
           }, labels.map((name) => jsx('option', { key: name, value: name }, name)))
-        : null
+        : null,
+      jsx('button', {
+        type: 'button',
+        onClick: rescan,
+        disabled: busy,
+        title: 're-measure every server in the inventory — the scan runs on the backend and this button '
+               + 'follows it, so a long scan no longer looks like a failure',
+        style: {
+          fontFamily: MONO, fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.06em',
+          textTransform: 'uppercase', padding: '7px 16px',
+          cursor: busy ? 'default' : 'pointer',
+          color: busy ? C.faint : '#06090c', background: busy ? 'transparent' : C.accent,
+          border: '1px solid ' + (busy ? C.border : C.accent), borderRadius: '4px'
+        }
+      }, busy ? 'scanning…' + (scanSeconds ? ' ' + Math.round(scanSeconds) + ' s' : '') : 'rescan all')
     ]),
+    scanError
+      ? jsx('div', { style: { fontSize: '0.6875rem', color: C.danger, marginBottom: '8px' } }, scanError)
+      : null,
     health && Array.isArray(health.inventory) && health.inventory.length <= 1
       ? jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, marginBottom: '10px' } },
           'the backend loaded an inventory of ' + health.inventory.length + ' host(s)'
@@ -1256,13 +1296,13 @@ export function PatchSentinel({ compact }) {
     }, SECTIONS.map((section) => jsx('div', { key: section.key },
         jsx('b', { style: { color: C.dim } }, section.title), ' — ' + section.blurb))),
     jsx(HostsPanel, { onChanged: load }),
-    jsx(NowPanel, { status, onRefresh: rescan, busy }),
+    jsx(NowPanel, { status }),
     jsx(UpdatesPanel, { entry: status && status.hosts ? status.hosts[selected] : null,
-                        hostLabel: selected, onRescan: rescan, busy }),
+                        hostLabel: selected }),
     jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }),
     jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning }),
     jsx(GapsPanel, { coverage, selected }),
-    jsx(ApplyGate, { hostLabel: selected, onRescan: rescan, rescannning: busy,
+    jsx(ApplyGate, { hostLabel: selected,
                      entry: status && status.hosts ? status.hosts[selected] : null }),
     jsx('div', {
       style: {

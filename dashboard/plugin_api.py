@@ -20,6 +20,7 @@ import importlib.util
 import json
 import os
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -63,20 +64,76 @@ def status() -> dict:
     age = store.scan_age_seconds(scan)
     if scan is None:
         return {"scan": None, "age_seconds": None, "hosts": {}, "blind": [],
-                "exit_code": None,
+                "exit_code": None, "job": _job_state("scan"),
                 "note": "no measurement yet — press Refresh, or ask the agent 'are we patched?'"}
     return {"scan": scan.get("scan"), "age_seconds": age, "hosts": scan.get("hosts") or {},
             "blind": scan.get("blind") or [], "exit_code": scan.get("exit_code"),
-            "answer": scan.get("answer")}
+            "answer": scan.get("answer"), "job": _job_state("scan")}
+
+
+# --------------------------------------------------------------------------- long jobs
+# The desktop's bridge gives a renderer call 30 seconds. A scan of two servers takes 40-60 (an ssh
+# round trip, `dpkg` for every advisory-named package, and a distro upgrade check on each), and a real
+# apply took 105 s on the Fedora VM. Answering inside the request means the pane reports a timeout
+# while the machine is being patched — the worst possible moment to tell someone it failed. So these
+# two routes start a thread and answer at once; the pane follows the job.
+_JOBS: dict[str, dict] = {}
+
+
+def _job(name: str) -> dict:
+    return _JOBS.setdefault(name, {"running": False, "started_at": None, "seconds": None,
+                                   "error": None, "result": None, "finished_at": None})
+
+
+def _job_state(name: str) -> dict:
+    job = _job(name)
+    return {"running": job["running"],
+            "seconds": round(time.time() - job["started_at"], 1) if job["running"] and job["started_at"] else job["seconds"],
+            "error": job["error"], "finished_at": job["finished_at"]}
+
+
+def _run_job(name: str, handler, args: dict) -> None:
+    job = _job(name)
+    try:
+        job["result"] = _payload(handler, args)
+    except Exception as exc:                     # a thread that raises must not look like success
+        job["error"] = f"{type(exc).__name__}: {exc}"[:400]
+        job["result"] = None
+    finally:
+        job["seconds"] = round(time.time() - (job["started_at"] or time.time()), 1)
+        job["finished_at"] = time.time()
+        job["running"] = False
+
+
+def _start(name: str, handler, args: dict) -> dict:
+    """Start one job, or say it is already running. Never two of the same at once."""
+    job = _job(name)
+    if job["running"]:
+        return {"started": False, **_job_state(name),
+                "note": f"a {name} is already running — it started {_job_state(name)['seconds']} s ago"}
+    job.update(running=True, started_at=time.time(), error=None, result=None, finished_at=None)
+    threading.Thread(target=_run_job, args=(name, handler, args), daemon=True).start()
+    return {"started": True, **_job_state(name)}
+
+
+@router.get("/jobs")
+def jobs() -> dict:
+    """What is running, and what the last run returned. The pane polls this while a job runs."""
+    return {name: {**_job_state(name),
+                   "result": (job["result"] if not job["running"] else None)}
+            for name, job in list(_JOBS.items())}
 
 
 @router.post("/scan")
 def scan(body: dict | None = None) -> dict:
-    """Refresh: the same call the model makes when the user asks 'are we patched?'."""
+    """Refresh: the same call the model makes when the user asks 'are we patched?'.
+
+    Starts the scan in a thread and answers immediately — see *long jobs* above for why.
+    """
     args = {}
     if body and body.get("host"):
         args["host"] = str(body["host"])
-    return _payload(tools.cve_scan, args)
+    return _start("scan", tools.cve_scan, args)
 
 
 @router.post("/plan")
@@ -205,7 +262,9 @@ def apply(body: dict | None = None) -> dict:
             "dry_run": bool(payload.get("dry_run", True))}
     if args.get("timeout"):
         args["timeout"] = payload["timeout"]
-    return _payload(tools.cve_apply, args)
+    # an upgrade took 105 s on the Fedora VM: answering inside the request would tell the operator the
+    # apply failed while it is running, and invite a second one. The pane follows `/jobs` instead.
+    return _start("apply", tools.cve_apply, args)
 
 
 _LOADED_AT = time.time()

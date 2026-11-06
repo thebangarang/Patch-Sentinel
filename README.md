@@ -122,6 +122,18 @@ wrong either way would manufacture a lag or hide one.
 Where an advisory carries a Workarounds section, the finding also shows the vendor's own temporary
 mitigation — quoted, never invented.
 
+## Why a scan does not answer instantly
+
+A scan of two servers takes 40-60 seconds: an ssh round trip, `dpkg` for every package an advisory
+names, `apt-cache` for the ones actually installed, and a distro upgrade check on each. The desktop
+bridge cuts a renderer call at 30 seconds, so a synchronous route reported *"timed out connecting to
+Hermes backend"* while the work was still finishing — and a synchronous **apply** would have reported
+a failure while the machine was being patched, which is the one message that invites a second one.
+
+Both run as jobs: `POST /scan` and `POST /apply` answer immediately, `GET /jobs` reports progress and
+the result, and the pane follows them. There is **one** refresh control, at the top — the three
+per-panel "rescan" buttons did the same work and made the pane look like three different actions.
+
 ## Adding the machines this pane answers for
 
 The inventory is editable from the pane (`hosts` → **add a host**): label, then the ssh target —

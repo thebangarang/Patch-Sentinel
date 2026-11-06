@@ -71,15 +71,33 @@ class DashboardRoutes(unittest.TestCase):
         self.assertIn("container image", gaps)
         self.assertTrue(body["gaps"])
 
+    # ---- long jobs ---------------------------------------------------------------------------
+    # `/scan` and `/apply` answer immediately and run on a thread, because the desktop bridge cuts a
+    # renderer call at 30 s while a two-server scan takes 40-60 and a real apply took 105 s. These
+    # helpers follow the job the way the pane does, so the tests exercise the real contract.
+    def follow(self, name, seconds=20.0):
+        import time
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            jobs = self.client.get(self.base + "/jobs").json()
+            job = jobs.get(name) or {}
+            if not job.get("running"):
+                return job
+            time.sleep(0.05)
+        self.fail(f"the {name} job did not finish within {seconds}s")
+
     def test_the_gate_refuses_a_wrongly_typed_host(self):
-        body = self.client.post(self.base + "/apply",
-                                json={"host": "beelink", "confirm": "beelinkk"}).json()
+        started = self.client.post(self.base + "/apply",
+                                   json={"host": "beelink", "confirm": "beelinkk"}).json()
+        self.assertTrue(started["started"])
+        body = self.follow("apply")["result"]
         self.assertFalse(body["applied"])
         self.assertIn("exactly", body["reason"])
 
     def test_an_unknown_host_is_refused_and_the_inventory_is_named(self):
-        body = self.client.post(self.base + "/apply",
-                                json={"host": "no-such-host", "confirm": "no-such-host"}).json()
+        self.client.post(self.base + "/apply",
+                         json={"host": "no-such-host", "confirm": "no-such-host"})
+        body = self.follow("apply")["result"]
         self.assertFalse(body["applied"])
         # the operator typed a name from an older session; the refusal must say which names exist
         self.assertIn("there is no host called", body["reason"])
@@ -91,15 +109,39 @@ class DashboardRoutes(unittest.TestCase):
         from unittest import mock
         with mock.patch.object(self.module.tools, "cve_apply", return_value="{}") as spy:
             self.client.post(self.base + "/apply", json={"host": "beelink", "confirm": "beelink"})
+            self.follow("apply")
         args = spy.call_args[0][0]
         self.assertTrue(args["dry_run"], "a missing dry_run flag must never authorise a change")
         self.assertEqual(args["confirm"], "beelink")
 
+    def test_a_second_start_is_refused_while_one_is_running(self):
+        """Never two scans at once: the second call must say so instead of starting another."""
+        import time
+        from unittest import mock
+        with mock.patch.object(self.module.tools, "cve_scan",
+                               side_effect=lambda *a, **k: (time.sleep(0.4), "{}")[1]):
+            first = self.client.post(self.base + "/scan", json={}).json()
+            self.assertTrue(first["started"])
+            second = self.client.post(self.base + "/scan", json={}).json()
+            self.assertFalse(second["started"])
+            self.assertIn("already running", second["note"])
+            self.follow("scan", 20)
+
+    def test_a_job_that_raises_reports_an_error_not_a_result(self):
+        from unittest import mock
+        with mock.patch.object(self.module.tools, "cve_scan", side_effect=RuntimeError("boom")):
+            self.client.post(self.base + "/scan", json={})
+            job = self.follow("scan")
+        self.assertIn("boom", job["error"])
+        self.assertIsNone(job["result"])
+
     @unittest.skipUnless(os.environ.get("PATCH_SENTINEL_TEST_SCAN") == "1",
                          "set PATCH_SENTINEL_TEST_SCAN=1 to run a real scan")
     def test_a_real_scan_then_a_stored_status(self):
-        scanned = self.client.post(self.base + "/scan", json={}).json()
-        self.assertIn("hosts", scanned)
+        started = self.client.post(self.base + "/scan", json={}).json()
+        self.assertTrue(started["started"])
+        job = self.follow("scan", 300)
+        self.assertTrue(job["result"])
         stored = self.client.get(self.base + "/status").json()
         self.assertIn("age_seconds", stored)
         self.assertLessEqual(stored["age_seconds"], 120)
