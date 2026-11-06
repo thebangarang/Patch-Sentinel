@@ -28,6 +28,7 @@ provides_tools:
   - cve_explain
   - cve_coverage
   - cve_libraries
+  - cve_apply
 provides_hooks: []
 config_schema:
   hosts:

@@ -17,6 +17,7 @@ import json
 import os
 import re
 
+from . import apply as apply_mod
 from . import plan, schemas, store, verdict
 from .sources import cve_tracker, dispatch, languages, osv, usn
 from .sources import hosts as inventory_module
@@ -317,6 +318,39 @@ def cve_plan(args: dict, **kwargs) -> str:
 
 
 @_never_raises
+def cve_apply(args: dict, **kwargs) -> str:
+    """The gated apply. Refuses by default; needs the host name typed and dry_run=false."""
+    requested = str(args.get("host") or "").strip() or _local_label()
+    host = next((h for h in _inventory() if h["label"].lower() == requested.lower()), None)
+    if host is None:
+        return _json({"tool": "cve_apply", "applied": False,
+                      **_refusal(f"host {requested!r} is not in the inventory", nearest=_labels())})
+
+    confirm = str(args.get("confirm") or "")
+    dry_run = args.get("dry_run")
+    dry_run = True if dry_run is None else bool(dry_run)
+    timeout = max(120, min(int(args.get("timeout") or apply_mod.APPLY_TIMEOUT), 1800))
+
+    # The apply must run against a measurement, not against a hope: reuse a fresh scan, else scan.
+    stored = store.load_scan()
+    age = store.scan_age_seconds(stored)
+    entry = None
+    if stored and age is not None and age <= PLAN_MAX_AGE:
+        entry = next((v for k, v in (stored.get("hosts") or {}).items()
+                      if k.lower() == requested.lower()), None)
+    if entry is None:
+        payload = _scan_payload([requested])
+        entry = (payload.get("hosts") or {}).get(requested)
+        if entry is None:
+            return _json({"tool": "cve_apply", "applied": False,
+                          **_refusal(f"{requested!r} could not be measured, so there is nothing "
+                                     "to apply against")})
+
+    result = apply_mod.apply(entry, host["target"], confirm, dry_run=dry_run, timeout=timeout)
+    return _json({"tool": "cve_apply", **result})
+
+
+@_never_raises
 def cve_explain(args: dict, **kwargs) -> str:
     cve = str(args.get("cve_id") or args.get("cve") or "").strip().upper()
     if not cve:
@@ -581,9 +615,10 @@ HANDLERS = {
     "cve_explain": cve_explain,
     "cve_coverage": cve_coverage,
     "cve_libraries": cve_libraries,
+    "cve_apply": cve_apply,
 }
 
 __all__ = ["HANDLERS", "SCHEMAS", "configure", "cve_scan", "cve_plan", "cve_explain",
-           "cve_coverage", "cve_libraries"]
+           "cve_coverage", "cve_libraries", "cve_apply"]
 
 SCHEMAS = schemas.SCHEMAS

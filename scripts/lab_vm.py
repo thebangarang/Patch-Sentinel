@@ -110,6 +110,11 @@ def write_seed(name: str) -> None:
     spec = DISTROS[name]
     p = paths(name)
     pub = Path(str(KEY) + ".pub").read_text().strip()
+    # An optional local fragment lets the operator grant this lab host things the repository must
+    # not ship (a NOPASSWD sudoers rule, for one). It lives under tmp/vms/, is gitignored, and its
+    # absence simply means the host gets no extra policy — which is the default and the safe case.
+    extra = LAB / "seed-extra.yaml"
+    extra_text = extra.read_text(encoding="utf-8") if extra.exists() else ""
     p["userdata"].write_text(
         "#cloud-config\n"
         f"hostname: {spec['label']}\n"
@@ -123,7 +128,7 @@ def write_seed(name: str) -> None:
         "    ssh_authorized_keys:\n"
         f"      - {pub}\n"
         "ssh_pwauth: false\n"
-        "package_update: false\n",
+        "package_update: false\n" + extra_text,
         encoding="utf-8")
     p["meta"].write_text(f"instance-id: {spec['label']}\nlocal-hostname: {spec['label']}\n",
                          encoding="utf-8")
@@ -140,6 +145,10 @@ def up(name: str) -> None:
     if not p["seed"].exists():
         write_seed(name)
     if not p["disk"].exists():
+        # A new disk means a new ssh host key; the old entry would block the plugin's strict
+        # checking with "host key has changed". Drop only this lab VM's loopback entry.
+        sh(["ssh-keygen", "-f", str(Path.home() / ".ssh" / "known_hosts"),
+            "-R", f"[127.0.0.1]:{spec['port']}"])
         result = sh(["qemu-img", "create", "-f", "qcow2", "-F", "qcow2",
                      "-b", str(p["base"]), str(p["disk"]), "20G"])
         if result.returncode != 0:

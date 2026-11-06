@@ -134,5 +134,38 @@ CVE_LIBRARIES = {
     },
 }
 
+CVE_APPLY = {
+    "name": "cve_apply",
+    "description": (
+        "CHANGES THE MACHINE. Runs the patch plan on one host — the only tool here that is not "
+        "read-only — and is refused unless the operator has typed the host name themselves. "
+        "Call it only after the user has seen the plan and explicitly asked to apply it, and only "
+        "with `confirm` set to the exact host label the user typed. `dry_run` defaults to TRUE: "
+        "that call refreshes metadata, prints the exact command and writes a receipt, and applies "
+        "nothing. A real apply needs dry_run=false IN ADDITION to the typed name, so never pass "
+        "it on your own initiative — ask, show the command, and let the user decide. Order of "
+        "operations: preflight (this user must be able to run sudo without a prompt, or it "
+        "refuses), stage (metadata refresh / download-only), apply (full-upgrade on apt, "
+        "upgrade --refresh on rpm), then verify by effect (the host is re-measured: uname -r and "
+        "the pending list) and a receipt line is written to receipts.jsonl. If the kernel was "
+        "updated, the answer says a reboot is still owed — installing is not running."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "host": {"type": "string",
+                     "description": "Host label from cve_scan. Omit for this machine."},
+            "confirm": {"type": "string",
+                        "description": ("The host label, typed by the operator. Must match "
+                                        "exactly or nothing runs.")},
+            "dry_run": {"type": "boolean",
+                        "description": ("true (default) = stage and print, apply nothing. false = "
+                                        "apply for real, only when the user asked for it.")},
+        },
+        "required": ["confirm"],
+    },
+}
+
 SCHEMAS = {schema["name"]: schema
-           for schema in (CVE_SCAN, CVE_PLAN, CVE_EXPLAIN, CVE_COVERAGE, CVE_LIBRARIES)}
+           for schema in (CVE_SCAN, CVE_PLAN, CVE_EXPLAIN, CVE_COVERAGE, CVE_LIBRARIES,
+                          CVE_APPLY)}

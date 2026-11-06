@@ -125,27 +125,18 @@ def coverage() -> dict:
 
 @router.post("/apply")
 def apply(body: dict | None = None) -> dict:
-    """The gate, and only the gate: 0.1.0 refuses to change a machine.
+    """The gate. The typed host name is required; ``dry_run`` defaults to true.
 
-    A real apply is a design in ``docs/design.md`` (*Apply gate*) with four requirements —
-    the host name typed by the operator, a staged download before anything restarts, a receipt
-    written with what changed, and a verification by effect. Implementing three of the four is
-    how a patching tool becomes the reason a box is down, so this route refuses and shows the
-    exact commands it would have run.
+    The route passes straight through to ``cve_apply`` — the pane must not have a shorter route
+    to changing a machine than the agent does, and the operator's typed name is what arms it.
     """
-    host_label = str((body or {}).get("host") or "").strip()
-    typed = str((body or {}).get("confirm") or "").strip()
-    if not host_label:
-        return {"applied": False, "reason": "no host given"}
-    if typed != host_label:
-        return {"applied": False,
-                "reason": f"the gate is armed only by typing {host_label!r} exactly — got {typed!r}"}
-    plan = _payload(tools.cve_plan, {"host": host_label})
-    return {"applied": False, "host": host_label,
-            "reason": "applying is not enabled in 0.1.0 — the plan is the deliverable. A real "
-                      "apply needs a staged download, a receipt and a verify-by-effect (D6).",
-            "would_run": [step.get("command") for step in (plan.get("steps") or [])],
-            "measured_at": plan.get("measured_at")}
+    payload = dict(body or {})
+    args = {"host": str(payload.get("host") or "").strip(),
+            "confirm": str(payload.get("confirm") or ""),
+            "dry_run": bool(payload.get("dry_run", True))}
+    if args.get("timeout"):
+        args["timeout"] = payload["timeout"]
+    return _payload(tools.cve_apply, args)
 
 
 @router.get("/health")

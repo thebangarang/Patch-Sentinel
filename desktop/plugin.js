@@ -288,22 +288,31 @@ function GapsPanel({ coverage }) {
 function ApplyGate({ hostLabel }) {
   const [typed, setTyped] = useState('')
   const [result, setResult] = useState(null)
-  const armed = hostLabel && typed.trim() === hostLabel
+  const [busy, setBusy] = useState(false)
+  const armed = Boolean(hostLabel) && typed.trim() === hostLabel
 
-  const onApply = useCallback(async () => {
-    if (!armed) return
+  const run = useCallback(async (dryRun) => {
+    if (!armed || busy) return
+    setBusy(true)
+    setResult(null)
     try {
-      const answer = await call('/apply', { method: 'POST', body: { host: hostLabel, confirm: typed.trim() } })
+      const answer = await call('/apply', {
+        method: 'POST',
+        body: { host: hostLabel, confirm: typed.trim(), dry_run: dryRun }
+      })
       setResult(answer)
     } catch (err) {
       setResult({ applied: false, reason: String(err && err.message ? err.message : err) })
+    } finally {
+      setBusy(false)
     }
-  }, [armed, hostLabel, typed])
+  }, [armed, busy, hostLabel, typed])
 
+  const steps = (result && result.steps) || []
   return jsxs('section', { style: { borderTop: '1px solid ' + C.border, paddingTop: '10px', marginTop: '6px' } }, [
     label('apply', { marginBottom: '6px' }),
     jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginBottom: '6px' } },
-      'Type the host name (' + (hostLabel || '—') + ') to arm the gate. The plan is proposed, never run on its own.'),
+      'Type the host name (' + (hostLabel || '—') + ') to arm the gate. A dry run stages and prints; applying changes the host and writes a receipt.'),
     jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
       jsx('input', {
         value: typed,
@@ -316,25 +325,49 @@ function ApplyGate({ hostLabel }) {
       }),
       jsx('button', {
         type: 'button',
-        onClick: onApply,
-        disabled: !armed,
+        onClick: () => run(true),
+        disabled: !armed || busy,
+        title: 'Stages the download and prints the command. Changes nothing.',
+        style: {
+          fontFamily: MONO, fontSize: '0.6875rem', padding: '4px 10px',
+          cursor: armed && !busy ? 'pointer' : 'not-allowed',
+          color: armed ? C.accent : C.faint, background: 'transparent',
+          border: '1px solid ' + (armed ? C.accent : C.border), borderRadius: '3px'
+        }
+      }, busy ? '…' : 'dry run'),
+      jsx('button', {
+        type: 'button',
+        onClick: () => run(false),
+        disabled: !armed || busy,
+        title: 'Applies for real. Writes a receipt with the versions before and after.',
         style: {
           fontFamily: MONO, fontSize: '0.6875rem', padding: '4px 12px',
-          cursor: armed ? 'pointer' : 'not-allowed',
-          color: armed ? C.danger : C.faint,
-          background: 'transparent',
-          border: '1px solid ' + (armed ? C.danger : C.border),
-          borderRadius: '3px'
+          cursor: armed && !busy ? 'pointer' : 'not-allowed',
+          color: armed ? C.danger : C.faint, background: 'transparent',
+          border: '1px solid ' + (armed ? C.danger : C.border), borderRadius: '3px'
         }
       }, armed ? 'apply' : 'locked')
     ]),
     result
-      ? jsx('div', {
-          style: {
-            marginTop: '6px', fontFamily: MONO, fontSize: '0.6875rem',
-            color: result.applied ? C.ok : C.warn, whiteSpace: 'pre-wrap'
-          }
-        }, result.applied ? 'applied — ' + JSON.stringify(result.receipt || {}) : (result.reason || 'refused'))
+      ? jsxs('div', { style: { marginTop: '8px', borderTop: '1px dashed ' + C.border, paddingTop: '6px' } }, [
+          jsx('div', {
+            style: {
+              fontFamily: MONO, fontSize: '0.6875rem',
+              color: result.applied ? C.ok : (result.dry_run ? C.accent : C.warn)
+            }
+          }, (result.applied ? 'applied — ' : (result.dry_run ? 'dry run — ' : 'refused — ')) + (result.reason || '')),
+          steps.length
+            ? jsx('div', { style: { marginTop: '4px' } }, steps.map((step, index) =>
+                jsx('div', {
+                  key: index,
+                  style: { fontFamily: MONO, fontSize: '0.625rem', color: step.ok ? C.dim : C.danger }
+                }, step.action + ' · rc ' + step.rc + ' · ' + step.duration_s + 's' + (step.ok ? '' : ' · ' + (step.output || '').slice(0, 160)))))
+            : null,
+          result.receipt
+            ? jsx('div', { style: { marginTop: '4px', fontSize: '0.625rem', color: C.faint } },
+                'receipt written · ' + (result.receipt.outcome || '') + ' · reboot owed: ' + String(Boolean(result.reboot_required)))
+            : null
+        ])
       : null
   ])
 }
