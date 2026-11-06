@@ -452,19 +452,30 @@ def cve_coverage(args: dict, **kwargs) -> str:
                     "outcome": "ok" if scan.get("usn_ok") else "refused",
                     "url": scan.get("usn_url")})
 
+    implemented = sorted(dispatch.FAMILY_BY_OS)
     gaps = [
         {"gap": "CVEs inside container image layers", "state": "not measured",
          "why": "needs an image scanner (trivy) and a vulnerability database; v0.2",
          "consequence": "a rebuilt image is reported as 'an update exists', never as "
                         "'these CVEs are fixed'"},
-        {"gap": "language and package-manager dependencies (npm, pip, go, cargo)",
-         "state": "not measured",
-         "why": "needs an SBOM and a dependency scanner (osv-scanner); v0.2",
-         "consequence": "a vulnerable library inside your own code is invisible to this scan"},
-        {"gap": "hosts that do not run Ubuntu", "state": "not measured",
-         "why": "the advisory feed read here is Ubuntu's ('release' = " + str(scan.get("release")) + ")",
-         "consequence": "deb-based facts still read, advisory attribution does not"},
+        {"gap": "language packages outside the global trees",
+         "state": "partly measured",
+         "why": "cve_libraries reads npm's global tree and the pip environment on PATH; "
+                "per-project lockfiles, other virtualenvs and vendor/ directories are not read",
+         "consequence": "a vulnerable dependency of one project can be invisible while the "
+                        "machine-level list is clean"},
+        {"gap": "operating systems without an adapter", "state": "not measured",
+         "why": f"adapters exist for: {', '.join(implemented)}; every other OS answers "
+                "'unsupported' with its own id (SUSE, Arch, Alpine, macOS and Windows are not "
+                "implemented yet)",
+         "consequence": "such a host is a red gap in this list, never a green 'patched'"},
     ]
+    if scan.get("release"):
+        gaps.append({"gap": "advisory attribution on non-Ubuntu hosts", "state": "not attributed",
+                     "why": "the notice feed read here is Ubuntu's (release = "
+                            f"{scan.get('release')}); other distros' pending lists are measured "
+                            "but the advisory id is not named",
+                     "consequence": "the update is still listed, the CVE behind it is not"})
     unreachable = [b for b in (stored.get("blind") or []) if b.get("class") == "host"]
     for blind in stored.get("blind") or []:
         if blind.get("class") == "host":

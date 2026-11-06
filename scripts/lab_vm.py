@@ -118,7 +118,8 @@ def write_seed(name: str) -> None:
         f"  - name: {spec['user']}\n"
         "    groups: [wheel]\n"
         "    shell: /bin/bash\n"
-        "    sudo: ['ALL=(ALL) NOPASSWD:ALL']\n"
+        # No passwordless sudo: the scan is read-only, so the test host does not need root, and a
+        # plugin that ships an NOPASSWD rule in its own tree is a finding (it was, at admission).
         "    ssh_authorized_keys:\n"
         f"      - {pub}\n"
         "ssh_pwauth: false\n"
