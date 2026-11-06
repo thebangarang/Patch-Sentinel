@@ -90,6 +90,24 @@ not a shell block) before it is a real claim.
 
 `docs/lab.md` has the lab recipe and every number above.
 
+## "There is a CVE but Ubuntu has not shipped the fix yet"
+
+A host can be *correctly* reported as `0 pending` while a known CVE is still open — because the
+archive has nothing to install. Folding that into "nothing to do" is the false comfort this plugin
+exists to remove, so it is now its own state, **vendor lag**:
+
+> 3 fix(es) exist upstream but not in this archive yet
+> `openssl 3.0.13-1ubuntu0.3 → 3.0.13-1ubuntu0.4 (USN-9001-1)`
+
+The comparison uses Ubuntu's notice feed (which names a fixed version per release) against the host's
+own `dpkg` and `apt-cache policy`: installed ≥ advisory's fix → already fixed; candidate ≥ fix → it is
+in the pending list; candidate < fix → **vendor lag**. Version ordering is dpkg's own, ported and
+checked against `dpkg --compare-versions` over 900 version pairs (0 mismatches) — a comparator that is
+wrong either way would manufacture a lag or hide one.
+
+Where an advisory carries a Workarounds section, the finding also shows the vendor's own temporary
+mitigation — quoted, never invented.
+
 ## Patching a remote server, from here
 
 The inventory is just `label=target` pairs, and the target is anything `ssh` understands — so a VPS is

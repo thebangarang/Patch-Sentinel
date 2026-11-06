@@ -86,8 +86,12 @@ function stateOf(entry) {
   const blind = Object.entries(outcomes).filter(([, v]) => v === 'unmeasured' || v === 'unreadable' || v === 'refused')
   const kernel = (entry.kernel || {}).verdict
   const pending = entry.pending_count || 0
+  const lag = (entry.vendor_lag || []).length
   if (blind.length) {
     return { level: 'red', why: blind.map(([k, v]) => k + ': ' + v).join(', ') }
+  }
+  if (lag) {
+    return { level: 'amber', why: lag + ' fix(es) exist upstream but not in this archive' }
   }
   if (pending > 0 || (kernel && kernel !== 'kernel-current' && kernel !== 'kernel-unknown')) {
     return { level: 'amber', why: pending + ' pending, kernel ' + (kernel || '?') }
@@ -184,7 +188,8 @@ function NowPanel({ status, onRefresh, busy }) {
         jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim, marginTop: '2px' } },
           'kernel ' + (kernel.running || '?') + ' → ' + (kernel.verdict || '?')),
         jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px' } },
-          (entry.pending_count || 0) + ' pending · ' + (entry.images || []).length + ' image(s) · ' + level.level),
+          (entry.pending_count || 0) + ' pending · ' + ((entry.vendor_lag || []).length)
+          + ' fix(es) waiting on the vendor · ' + (entry.images || []).length + ' image(s) · ' + level.level),
         (entry.pending || []).length
           ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.625rem', color: C.dim, marginTop: '3px' } },
               (entry.pending || []).slice(0, 3).map((row) => row.package + ' ' + (row.from || '?') + '→' + row.to).join(' · ') +
@@ -261,6 +266,25 @@ function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
           }, busy ? 'measuring…' : 'rescan')
         : null
     ]),
+    (entry && entry.vendor_lag || []).length
+      ? jsxs('div', {
+          style: {
+            borderLeft: '2px solid ' + C.danger, background: C.panel, padding: '6px 8px',
+            marginBottom: '6px', borderRadius: '3px'
+          }
+        }, [
+          jsx('div', { style: { fontSize: '0.6875rem', color: C.danger, fontWeight: 600 } },
+            entry.vendor_lag.length + ' fix(es) exist upstream but not in this archive yet'),
+          jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px', lineHeight: 1.4 } },
+            'The advisory names a fixed version the archive does not offer, so nothing on this host can '
+            + 'close it yet. Not the same as "nothing to do".'),
+          entry.vendor_lag.slice(0, 6).map((row, index) => jsx('div', {
+            key: index,
+            style: { fontFamily: MONO, fontSize: '0.625rem', color: C.text, marginTop: '3px' }
+          }, row.package + '  ' + row.installed + ' → ' + row.fixed_version
+             + '  (' + (row.notice || 'advisory') + ')'))
+        ])
+      : null,
     rows.length
       ? jsxs('div', {}, [
           jsx('input', {

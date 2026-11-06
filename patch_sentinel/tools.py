@@ -20,7 +20,8 @@ import re
 
 from . import apply as apply_mod
 from . import plan, schemas, store, verdict
-from .sources import cve_tracker, dispatch, languages, osv, usn
+from .sources import cve_tracker, dispatch, languages, osv, shell, usn
+from .sources import vendor as vendor_lag
 from .sources import hosts as inventory_module
 
 MAX_PENDING = 400             # the update list is a surface the operator reads, not a sample of one
@@ -149,6 +150,12 @@ def _summarise(host: dict) -> str:
         advisory_note = (", advisory ids not attributed on this distro (only Ubuntu's feed is "
                          "wired) — the pending list is measured either way")
     parts = [f"{host['label']}: {total} package update(s) installable" + advisory_note]
+    lag = host.get("vendor_lag") or []
+    if lag:
+        sample = ", ".join(f"{row['package']} (fixed {row['fixed_version']}, archive "
+                           f"{row.get('candidate') or 'nothing'})" for row in lag[:3])
+        parts.append(f"{len(lag)} package(s) have a fix the archive does not carry yet — {sample}"
+                     + (f" (+{len(lag) - 3} more)" if len(lag) > 3 else ""))
     kernel = host.get("kernel") or {}
     kernel_line = f"kernel {kernel.get('running')} → {kernel.get('verdict')}"
     if kernel.get("verdict") == "kernel-unknown":
@@ -235,6 +242,36 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
                        else "not-applicable" if result.get("images_outcome") == "not-applicable"
                        else "ok"),
         }
+        # ---- vendor lag: an advisory names a fix the archive does not carry yet -------------
+        # Only Ubuntu's feed names per-release fixed versions, so this runs where the feed applies:
+        # the host's own codename must match the release the notices were read for.
+        vendor_state = None
+        host_release = (result.get("os") or {}).get("codename")
+        if os_id == "ubuntu" and feed.get("ok") and host_release == release:
+            advisories: dict[str, dict] = {}
+            for notice in feed.get("notices") or []:
+                for item in usn.fixed_versions(notice, release):
+                    if item["is_source"]:
+                        continue        # apt knows binary package names, not source names
+                    current = advisories.get(item["package"])
+                    if current and vendor_lag.compare(item["version"], current["version"]) <= 0:
+                        continue
+                    advisories[item["package"]] = {
+                        "version": item["version"], "notice": notice.get("id"),
+                        "cves": (notice.get("cves_ids") or [])[:4]}
+            if advisories:
+                code, out = shell.run(vendor_lag.probe_command(sorted(advisories)),
+                                      result.get("target"),
+                                      timeout=int(_settings.get("timeout") or 180),
+                                      path_prefix=shell.SYSTEM_PATH_PREFIX)
+                if out.strip():
+                    vendor_state = vendor_lag.classify(vendor_lag.parse(out), advisories)
+                    vendor_state["advisories_read"] = len(advisories)
+                else:
+                    blind.append({"host": label, "class": "vendor-lag",
+                                  "reason": f"dpkg/apt-cache answered nothing (rc={code})",
+                                  "detail": "the vendor-lag state is unmeasured, not empty"})
+
         if outcomes["kernel"] == "unmeasured":
             blind.append({"host": label, "class": "kernel",
                           "reason": result.get("kernel_reason") or "kernel state not measurable",
@@ -249,8 +286,9 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
                                     f"({unknown[0].get('answer', 'no reason given')[:80]})",
                           "detail": "a refused registry is not a clean image"})
 
-        if pending or rebuilt or result.get("kernel") in ("kernel-update-available",
-                                                          "kernel-reboot-needed"):
+        lag_rows = (vendor_state or {}).get("vendor_lag") or []
+        if pending or rebuilt or lag_rows or result.get("kernel") in ("kernel-update-available",
+                                                                      "kernel-reboot-needed"):
             findings += 1
         host_payload = {
             "label": label,
@@ -272,6 +310,11 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             "images": images,
             "images_outcome": result.get("images_outcome"),
             "outcomes": outcomes,
+            # what the vendor says is fixed but the archive does not offer yet — its own state,
+            # because "0 pending" and "no known vulnerability" are different sentences
+            "vendor_lag": (vendor_state or {}).get("vendor_lag", [])[:20],
+            "vendor_counts": (vendor_state or {}).get("counts"),
+            "vendor_advisories_read": (vendor_state or {}).get("advisories_read"),
         }
         host_payload["summary"] = _summarise(host_payload)
         hosts_payload[label] = host_payload
@@ -556,17 +599,16 @@ def cve_coverage(args: dict, **kwargs) -> str:
          "next": "name the project in chat and I will query OSV for its packages ('which of my "
                  "node/python dependencies have known CVEs in ~/projects/x?'). Reading lockfiles "
                  "automatically is a 0.2 item; today it is one question away."},
-        {"gap": "known CVEs that have no vendor fix yet", "state": "not measured",
+        {"gap": "vendor lag on non-Ubuntu hosts", "state": "not measured",
          "hosts": "every", "kind": "limit",
-         "why": "this scan reports what the archive ships. When an advisory names a fix version the "
-                "archive does not carry yet (the upstream patch exists, the distro has not shipped "
-                "it), the host shows '0 pending' — which is true, and is not the same sentence as "
-                "'no known vulnerability'",
-         "consequence": "an operator can read a clean row while a known CVE is still waiting on the "
-                        "distro, and nothing on screen says so",
-         "next": "the state is buildable and is the next feature, not a setting: compare the fixed "
-                 "version an advisory names with the best candidate the archive offers, and report "
-                 "'vendor lag' as its own outcome instead of folding it into 'nothing to do'."},
+         "why": "the vendor-lag comparison needs an advisory source that names a fixed version per "
+                "release. Only Ubuntu's notice feed is wired, so a Fedora, Debian, Arch or openSUSE "
+                "host reports a fix the archive does not carry as '0 pending'. Its bundled "
+                "libraries are still read by cve_libraries.",
+         "consequence": "on a non-Ubuntu host, 'nothing to do' can still mean 'the vendor has not "
+                        "shipped it yet'",
+         "next": "one feed per distro would close it (Fedora's Bodhi, Debian's tracker API). Until "
+                 "then the gap is named here rather than implied by a green row."},
         {"gap": "operating systems without an adapter", "state": "not measured",
          "hosts": "every", "kind": "limit",
          "why": f"adapters exist for: {', '.join(implemented)}; every other OS answers "
