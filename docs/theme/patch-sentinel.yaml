@@ -1,0 +1,38 @@
+# Patch Sentinel — holographic cyan on near-black. The palette the plugin's pane uses, applied to
+# the whole app (CLI, TUI and desktop GUI read this one file).
+#
+# Pick it in Settings → Appearance, or:  hermes config set display.skin patch-sentinel
+# Missing keys inherit the default skin, so this file stays small on purpose.
+name: patch-sentinel
+description: Holographic cyan on near-black — the Patch Sentinel / HUD palette
+
+colors:
+  background: "#0a0a0f"      # the pane's canvas
+  ui_accent: "#35d6d6"       # HUD cyan: buttons, focus rings, primary
+  banner_accent: "#35d6d6"
+  banner_title: "#e6f7f7"    # headings
+  banner_text: "#e6f7f7"     # body
+  ui_text: "#e6f7f7"
+  banner_dim: "#8fb6b8"      # secondary text
+  banner_border: "#1b3a3d"   # thin wireframe strokes
+  ui_border: "#1b3a3d"
+  ui_ok: "#3ddc97"
+  ui_warn: "#ffb020"
+  ui_error: "#ff5f5f"
+  prompt: "#e6f7f7"
+  input_rule: "#35d6d6"
+  response_border: "#35d6d6"
+  status_bar_bg: "#0a0a0f"
+  status_bar_text: "#e6f7f7"
+  status_bar_good: "#3ddc97"
+  status_bar_warn: "#ffb020"
+  status_bar_critical: "#ff5f5f"
+  session_label: "#35d6d6"
+  session_border: "#1b3a3d"
+
+branding:
+  agent_name: Hermes Agent
+  prompt_symbol: "❯"
+  help_header: "(^_^)? Commands"
+
+tool_prefix: "┊"

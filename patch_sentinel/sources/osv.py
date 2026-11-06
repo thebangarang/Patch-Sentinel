@@ -15,6 +15,7 @@ Nothing here runs at import; every call is made from a tool handler.
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 
@@ -75,8 +76,17 @@ def vuln(vuln_id: str, timeout: int = 20) -> dict | None:
         return None
 
 
+_VERSION_RE = re.compile(r"^\d+(\.\d+)+")   # at least one dot: a bare hash has none
+
+
 def fixed_versions(record: dict, ecosystem: str, package: str) -> list[str]:
-    """The versions that close this advisory for one package, from the record's own ranges."""
+    """The versions that close this advisory for one package, from the record's own ranges.
+
+    OSV allows a ``fixed`` event to be a **git commit** instead of a version (measured on
+    urllib3 1.24.1: eleven of the twenty-six matches listed commit hashes). A commit is not a
+    version an operator can install, so the payload keeps the version-shaped ones only — the
+    alternative is a field that looks like advice and cannot be acted on.
+    """
     out: list[str] = []
     for affected in record.get("affected") or []:
         name = ((affected.get("package") or {}).get("name") or "")
@@ -88,7 +98,7 @@ def fixed_versions(record: dict, ecosystem: str, package: str) -> list[str]:
         for rng in affected.get("ranges") or []:
             for event in rng.get("events") or []:
                 fixed = event.get("fixed")
-                if fixed and fixed not in out:
+                if fixed and _VERSION_RE.match(str(fixed)) and fixed not in out:
                     out.append(fixed)
     return out
 

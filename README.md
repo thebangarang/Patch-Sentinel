@@ -65,6 +65,20 @@ not a shell block) before it is a real claim.
 
 `docs/lab.md` has the lab recipe and every number above.
 
+## Check that it works
+
+```bash
+python3 scripts/selfcheck.py                    # every surface, one table, exit 2 if one was blind
+python3 scripts/selfcheck.py --host fedora-lab  # a declared host, plus its plan
+```
+
+`docs/verify.md` has the recipes: a throwaway venv holding a deliberately vulnerable Jinja2 (the
+language check returns 38 advisories across 2 packages), a fresh VM for the update proposal (109
+pending → three ordered steps with their reversals), and the refusal (an unreachable host exits 2).
+
+The pane's palette is also a skin: `docs/theme/patch-sentinel.yaml` → copy it to
+`~/.hermes/skins/`, then pick **patch-sentinel** in Settings → Appearance.
+
 ## Install and try it
 
 ```bash

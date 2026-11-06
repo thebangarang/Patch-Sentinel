@@ -84,6 +84,24 @@ class OsvAnswers(unittest.TestCase):
         self.assertEqual(answer["results"], [])
 
 
+class FixVersions(unittest.TestCase):
+    """`fixed` must hold versions an operator can install — nothing else."""
+
+    def test_a_git_commit_is_not_a_fix_version(self):
+        # measured on urllib3 1.24.1: eleven of twenty-six matches carried commit hashes here
+        record = {"affected": [{
+            "package": {"name": "urllib3", "ecosystem": "PyPI"},
+            "ranges": [{"events": [{"introduced": "0"},
+                                   {"fixed": "01220354d389cd05474713f8c982d05c9b17aafb"},
+                                   {"fixed": "2.0.6"}]}],
+        }]}
+        self.assertEqual(osv.fixed_versions(record, "PyPI", "urllib3"), ["2.0.6"])
+
+    def test_a_real_record_keeps_its_version(self):
+        record = json.loads((FIXTURES / "osv_vuln_lodash.json").read_text())
+        self.assertIn("4.17.21", osv.fixed_versions(record, "npm", "lodash"))
+
+
 class LibrariesTool(unittest.TestCase):
     """The handler, with the network and the shell replaced by their captured answers."""
 
