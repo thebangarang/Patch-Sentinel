@@ -12,6 +12,7 @@ Two contracts this file exists to keep:
 from __future__ import annotations
 
 import datetime as dt
+import difflib
 import functools
 import json
 import os
@@ -45,6 +46,18 @@ def configure(settings: dict) -> None:
 
 def _json(payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
+
+
+def _not_in_inventory(requested: str) -> dict:
+    """Refuse an unknown host by naming the ones that exist — "not in the inventory" alone leaves
+    the operator guessing which string the gate wants them to type."""
+    labels = _labels()
+    close = difflib.get_close_matches(requested, labels, n=1, cutoff=0.6) if labels else []
+    hint = f" — did you mean {close[0]!r}?" if close else ""
+    listed = ", ".join(labels) if labels else "none (the inventory is empty)"
+    return _refusal(f"there is no host called {requested!r} in this inventory{hint} "
+                    f"the hosts are: {listed}", nearest=labels,
+                    expected=close[0] if close else (labels[0] if labels else None))
 
 
 def _refusal(reason: str, nearest: list | None = None, answer=None, **extra) -> dict:
@@ -268,11 +281,8 @@ def cve_scan(args: dict, **kwargs) -> str:
     if requested:
         known = {label.lower() for label in _labels()}
         if requested.lower() not in known:
-            return _json({"tool": "cve_scan",
-                          **_refusal(f"host {requested!r} is not in the inventory — nothing was "
-                                     "measured for it",
-                                     nearest=_labels(),
-                                     measured_hosts=[])})
+            return _json({"tool": "cve_scan", "measured_hosts": [],
+                          **_not_in_inventory(requested)})
         return _json(_scan_payload([requested]))
     return _json(_scan_payload())
 
@@ -282,7 +292,7 @@ def cve_plan(args: dict, **kwargs) -> str:
     requested = str(args.get("host") or "").strip() or _local_label()
     if requested.lower() not in {label.lower() for label in _labels()}:
         return _json({"tool": "cve_plan",
-                      **_refusal(f"host {requested!r} is not in the inventory", nearest=_labels())})
+                      **_not_in_inventory(requested)})
 
     stored = store.load_scan()
     age = store.scan_age_seconds(stored)
@@ -324,7 +334,7 @@ def cve_apply(args: dict, **kwargs) -> str:
     host = next((h for h in _inventory() if h["label"].lower() == requested.lower()), None)
     if host is None:
         return _json({"tool": "cve_apply", "applied": False,
-                      **_refusal(f"host {requested!r} is not in the inventory", nearest=_labels())})
+                      **_not_in_inventory(requested)})
 
     confirm = str(args.get("confirm") or "")
     dry_run = args.get("dry_run")
@@ -583,7 +593,7 @@ def cve_libraries(args: dict, **kwargs) -> str:
     host = next((h for h in _inventory() if h["label"].lower() == requested.lower()), None)
     if host is None:
         return _json({"tool": "cve_libraries",
-                      **_refusal(f"host {requested!r} is not in the inventory", nearest=_labels())})
+                      **_not_in_inventory(requested)})
 
     collected = languages.collect(host["target"])
     components = collected["components"]

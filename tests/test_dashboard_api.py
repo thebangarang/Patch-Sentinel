@@ -81,7 +81,9 @@ class DashboardRoutes(unittest.TestCase):
         body = self.client.post(self.base + "/apply",
                                 json={"host": "no-such-host", "confirm": "no-such-host"}).json()
         self.assertFalse(body["applied"])
-        self.assertIn("not in the inventory", body["reason"])
+        # the operator typed a name from an older session; the refusal must say which names exist
+        self.assertIn("there is no host called", body["reason"])
+        self.assertIn("the hosts are:", body["reason"])
         self.assertTrue(body["nearest"], "a refusal must say what the choices are")
 
     def test_the_route_defaults_to_a_dry_run(self):

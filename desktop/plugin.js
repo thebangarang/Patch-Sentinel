@@ -219,7 +219,8 @@ function NowPanel({ status, onRefresh, busy }) {
       (status && status.note) || 'no measurement yet'),
     blind.length
       ? jsx('div', { style: { marginTop: '6px', fontSize: '0.6875rem', color: C.danger } },
-          blind.length + ' check(s) could not look — see GAPS')
+          blind.length + ' check(s) could not look — '
+          + blind.map((b) => b.host || 'this machine').join(', ') + ' · see GAPS')
       : null
   ])
 }
@@ -233,7 +234,7 @@ function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
   const total = (entry && entry.pending_count) || 0
   const needle = query.trim().toLowerCase()
   const filtered = needle ? rows.filter((r) => (r.package || '').toLowerCase().includes(needle)) : rows
-  const LIMIT = 60
+  const LIMIT = 50
   const shown = filtered.slice(0, LIMIT)
   const text = filtered.map((r) => r.package + '  ' + (r.from || '?') + ' → ' + r.to).join('\n')
 
@@ -272,18 +273,19 @@ function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
               border: '1px solid ' + C.border, borderRadius: '3px'
             }
           }),
-          shown.map((row, index) => jsxs('div', {
-            key: index,
-            style: {
-              display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px',
-              fontFamily: MONO, fontSize: '0.625rem', padding: '2px 0',
-              borderTop: '1px solid ' + C.border
-            }
-          }, [
-            jsx('span', { style: { color: C.text, wordBreak: 'break-all' } }, row.package),
-            jsx('span', { style: { color: C.dim, textAlign: 'right' } },
-              (row.from || '?') + ' → ' + row.to)
-          ])),
+          jsx('div', { style: { maxHeight: '240px', overflowY: 'auto', paddingRight: '2px' } },
+            shown.map((row, index) => jsxs('div', {
+              key: index,
+              style: {
+                display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px',
+                fontFamily: MONO, fontSize: '0.625rem', padding: '2px 0',
+                borderTop: '1px solid ' + C.border
+              }
+            }, [
+              jsx('span', { style: { color: C.text, wordBreak: 'break-all' } }, row.package),
+              jsx('span', { style: { color: C.dim, textAlign: 'right' } },
+                (row.from || '?') + ' → ' + row.to)
+            ]))),
           filtered.length > LIMIT
             ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '4px' } },
                 'showing ' + LIMIT + ' of ' + filtered.length + ' — filter to narrow it, or copy the list')
@@ -397,7 +399,8 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
               }
             }, onlyFindings ? 'showing findings' : 'only findings')
           ]),
-          rows.slice(0, 80).map((row, index) => {
+          jsx('div', { style: { maxHeight: '240px', overflowY: 'auto', paddingRight: '2px' } },
+           rows.slice(0, 50).map((row, index) => {
             const found = hit.has(keyOf(row)) ? foundByPackage[keyOf(row)] : null
             const fix = found && found.fixes.length ? newestVersion(found.fixes) : null
             return jsxs('div', {
@@ -417,14 +420,14 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                     + (fix ? ' · fix ' + fix : ' · no fix listed')
                   : 'clean')
             ])
-          }),
+          })),
           !rows.length
             ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint } },
                 onlyFindings ? 'no findings in what was read' : 'nothing matches the filter')
             : null,
-          rows.length > 80
+          rows.length > 50
             ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '3px' } },
-                'showing 80 of ' + rows.length + ' — filter to narrow it')
+                'showing 50 of ' + rows.length + ' — the box scrolls, the filter narrows')
             : null
         ])
       : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, padding: '6px 0' } },
@@ -623,8 +626,16 @@ function ApplyGate({ hostLabel, entry }) {
         ? 'The scan found no updates on ' + hostLabel + ', so both buttons would be pointless — that is not a refusal, there is simply nothing to do.'
         : 'This is the step that actually pushes the update list above onto ' + (hostLabel || 'the host') +
           '. “Stage” downloads and prints the command and changes nothing; “Apply” runs it, then re-measures the host and writes a receipt with the versions before and after. It is the same action as asking me in chat.'),
-    nothingToDo ? null : jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '6px' } },
-      'Type ' + (hostLabel || 'the host name') + ' exactly to unlock it — the lock exists so a stray click cannot patch a machine.'),
+    nothingToDo ? null : jsxs('div', { style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '6px' } }, [
+      'Type ',
+      jsx('code', {
+        style: {
+          fontFamily: MONO, color: C.accent, background: C.panel,
+          padding: '0 5px', borderRadius: '2px', border: '1px solid ' + C.border
+        }
+      }, hostLabel || 'the host name'),
+      ' exactly — that is the label selected at the top, not the machine\'s hostname. The lock exists so a stray click cannot patch a machine.'
+    ]),
     armed ? jsx('div', { style: { fontSize: '0.6875rem', color: C.accent, marginBottom: '6px' } },
       'unlocked — stage first, then apply') : null,
     jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
@@ -670,6 +681,10 @@ function ApplyGate({ hostLabel, entry }) {
               color: result.applied ? C.ok : (result.dry_run ? C.accent : C.warn)
             }
           }, (result.applied ? 'applied — ' : (result.dry_run ? 'staged, nothing changed — ' : 'refused — ')) + (result.reason || '')),
+          result.expected
+            ? jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px' } },
+                'the name this gate expects: ' + result.expected)
+            : null,
           steps.length
             ? jsx('div', { style: { marginTop: '4px' } }, steps.map((step, index) =>
                 jsx('div', {
@@ -773,8 +788,35 @@ export function PatchSentinel({ compact }) {
       maxWidth: compact ? 'none' : '900px'
     }
   }, [
+    jsx('style', {}, `
+      .ps-title {
+        font-family: ${MONO}; font-size: 1.0625rem; font-weight: 700; letter-spacing: 0.22em;
+        text-transform: uppercase; color: #35d6d6; position: relative; display: inline-block;
+        text-shadow: 0 0 14px rgba(53, 214, 214, 0.35);
+      }
+      .ps-title::before, .ps-title::after {
+        content: attr(data-text); position: absolute; inset: 0; overflow: hidden;
+        pointer-events: none;
+      }
+      .ps-title::before { color: #ff2d6f; opacity: 0.55; animation: ps-glitch-a 4.2s infinite; }
+      .ps-title::after  { color: #9affe8; opacity: 0.45; animation: ps-glitch-b 3.1s infinite; }
+      @keyframes ps-glitch-a {
+        0%, 88%, 100% { clip-path: inset(0 0 100% 0); transform: translateX(0); }
+        89% { clip-path: inset(8% 0 62% 0); transform: translateX(-2px); }
+        92% { clip-path: inset(52% 0 18% 0); transform: translateX(2px); }
+        95% { clip-path: inset(80% 0 2% 0);  transform: translateX(-1px); }
+      }
+      @keyframes ps-glitch-b {
+        0%, 84%, 100% { clip-path: inset(100% 0 0 0); transform: translateX(0); }
+        86% { clip-path: inset(30% 0 44% 0); transform: translateX(1px); }
+        90% { clip-path: inset(64% 0 10% 0); transform: translateX(-2px); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .ps-title::before, .ps-title::after { animation: none; opacity: 0; }
+      }
+    `),
     jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', marginBottom: '10px' } }, [
-      label('patch sentinel', { color: C.accent }),
+      jsx('span', { className: 'ps-title', 'data-text': 'Patch Sentinel' }, 'Patch Sentinel'),
       jsx('span', { style: { flex: 1 } }),
       labels.length
         ? jsx('select', {
