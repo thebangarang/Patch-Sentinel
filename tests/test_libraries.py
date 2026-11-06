@@ -132,15 +132,19 @@ class MoreRuntimes(unittest.TestCase):
         self.assertEqual(len({(r["package"], r["version"]) for r in rows}), len(rows), "no duplicates")
 
     def test_go_binary_build_info(self):
-        text = ("golang.org/x/tools/cmd/stringer\t(devel)\n"
-                "\tpath\tgolang.org/x/tools/cmd/stringer\n"
-                "\tmod\tgolang.org/x/tools\tv0.1.0\th1:abc=\n"
-                "\tdep\tgolang.org/x/mod\tv0.4.2\th1:def=\n"
-                "\tdep\tgolang.org/x/sys\tv0.0.0-20210510120138-977fb7262007\th1:ghi=\n")
-        self.assertEqual(languages.parse_go_modules(text),
-                         [{"package": "golang.org/x/mod", "version": "v0.4.2"},
-                          {"package": "golang.org/x/sys",
-                           "version": "v0.0.0-20210510120138-977fb7262007"}])
+        # real `go version -m` output: stringer built from golang.org/x/tools v0.1.0 in golang:alpine
+        rows = languages.parse_go_modules((FIXTURES / "go_version_m_stringer.txt").read_text())
+        self.assertEqual(rows, [
+            {"package": "golang.org/x/mod", "version": "v0.3.0"},
+            {"package": "golang.org/x/sys", "version": "v0.0.0-20210119212857-b64e53b001e4"},
+            {"package": "golang.org/x/xerrors", "version": "v0.0.0-20200804184101-5ec99f83aff1"},
+        ])
+
+    def test_the_module_itself_is_not_a_dependency(self):
+        # the `mod` line is the binary's own module, not something it depends on: listing it would
+        # report the tool as its own finding
+        rows = languages.parse_go_modules((FIXTURES / "go_version_m_stringer.txt").read_text())
+        self.assertNotIn("golang.org/x/tools", [r["package"] for r in rows])
 
     def test_the_advisorys_own_workaround_is_quoted(self):
         # GHSA-qw6h-vgh9-j6wx (express, real record): "users are encouraged to upgrade … but

@@ -61,10 +61,10 @@ same database osv.dev serves) for advisories naming those exact versions:
 | PyPI | `pip list --format=json` (first pip on PATH) | proven (real machine) |
 | Packagist | `composer global show --format=json` | proven (container capture) |
 | RubyGems | `gem list --local` | proven (container capture) |
-| crates.io | `cargo install --list` | parser proven; no host with cargo yet |
-| NuGet | `dotnet tool list -g` | parser proven; no host with dotnet yet |
+| crates.io | `cargo install --list` | format only — no capture yet |
+| NuGet | `dotnet tool list -g` | format only — no capture yet |
 | Maven | every `*.pom` under `~/.m2/repository` | proven (container capture, 227 artifacts) |
-| Go | `go version -m` on each binary in `GOPATH/bin` | parser proven; no host with go yet |
+| Go | `go version -m` on each binary in `GOPATH/bin` | proven (container capture, golang:alpine) |
 
 A toolchain that is not installed reports **`missing`**, never "zero findings". Project-local
 dependency files (`package-lock.json`, `composer.json`, `Cargo.toml`, `go.mod`, `*.csproj`) are
