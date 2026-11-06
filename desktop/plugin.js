@@ -240,7 +240,7 @@ function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
 
   return jsxs('section', { style: { marginBottom: '18px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label('updates'),
+      label('system packages'),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { fontFamily: MONO, fontSize: '0.625rem', color: total ? C.warn : C.faint },
         hostLabel ? total + ' available' : '—'),
@@ -350,13 +350,29 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                     || String(a.package).localeCompare(String(b.package)))
   const hidden = matching.length - rows.length
 
+  /** The command that closes a finding, for the ecosystem the check actually read. */
+  const fixCommand = (row, found) => {
+    const fix = found && found.fixes.length ? newestVersion(found.fixes) : null
+    const eco = String(row.ecosystem || '').toLowerCase()
+    if (eco === 'npm') return 'npm install -g ' + row.package + '@' + (fix || 'latest')
+    if (eco === 'pypi') {
+      return 'python3 -m pip install -U '
+        + (fix ? "'" + row.package + '>=' + fix + "'" : row.package)
+    }
+    return '# ' + row.ecosystem + ': upgrade ' + row.package + (fix ? ' to >= ' + fix : '')
+  }
+  const fixLines = flagged.map((row) => fixCommand(row, foundByPackage[keyOf(row)]))
+
   return jsxs('section', { style: { marginBottom: '18px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label('languages'),
+      label('libs & runtimes'),
       jsx('span', { style: { flex: 1 } }),
       libraries
         ? jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: vulnerable.length ? C.danger : C.faint } },
             packages.length + ' package(s) · ' + vulnerable.length + ' finding(s)')
+        : null,
+      flagged && flagged.length
+        ? jsx(Copy, { text: fixLines.join('\n'), what: 'the upgrade commands' })
         : null,
       jsx('button', {
         type: 'button',
@@ -422,20 +438,31 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
             const fix = found && found.fixes.length ? newestVersion(found.fixes) : null
             return jsxs('div', {
               key: index,
-              style: {
-                display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px',
-                fontFamily: MONO, fontSize: '0.625rem', padding: '2px 0',
-                borderTop: '1px solid ' + C.border
-              }
+              style: { padding: '2px 0', borderTop: '1px solid ' + C.border }
             }, [
-              jsx('span', { style: { color: C.text, wordBreak: 'break-all' } },
-                row.package + '@' + row.version + '  ' + (row.ecosystem || '')),
-              jsx('span', { style: { color: found ? C.danger : C.faint, textAlign: 'right' } },
-                found
-                  ? found.count + ' advisor' + (found.count === 1 ? 'y' : 'ies')
-                    + (found.severity ? ' · ' + found.severity : '')
-                    + (fix ? ' · fix ' + fix : ' · no fix listed')
-                  : 'clean')
+              jsxs('div', {
+                style: {
+                  display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px',
+                  fontFamily: MONO, fontSize: '0.625rem'
+                }
+              }, [
+                jsx('span', { style: { color: C.text, wordBreak: 'break-all' } },
+                  row.package + '@' + row.version + '  ' + (row.ecosystem || '')),
+                jsx('span', { style: { color: found ? C.danger : C.faint, textAlign: 'right' } },
+                  found
+                    ? found.count + ' advisor' + (found.count === 1 ? 'y' : 'ies')
+                      + (found.severity ? ' · ' + found.severity : '')
+                      + (fix ? ' · fix ' + fix : ' · no fix listed')
+                    : 'clean')
+              ]),
+              found
+                ? jsx('div', {
+                    style: {
+                      fontFamily: MONO, fontSize: '0.5625rem', color: C.faint,
+                      marginTop: '1px', wordBreak: 'break-all'
+                    }
+                  }, '→ ' + fixCommand(row, found))
+                : null
             ])
           })),
           !rows.length
@@ -884,8 +911,10 @@ export function PatchSentinel({ compact }) {
       }
     }, [
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'now'), ' — one row per machine: what the scan measured, and when.'),
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'updates'), ' — every package this host would upgrade, searchable.'),
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'languages'), ' — the npm/pip packages on this machine, checked against OSV on demand.'),
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'system packages'),
+        ' — the distro\'s own update list (apt, dnf, pacman, zypper), every package it would upgrade.'),
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'libs & runtimes'),
+        ' — the language packages installed on this machine, checked against OSV: npm and pip today; PHP, Go, Rust and .NET are named gaps.'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'pending'), ' — this host\'s updates turned into ordered commands, each with a way back.'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'gaps'), ' — what this scan could not see. Red here is a fact about the scan, not the host.'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'apply'), ' — the only control that changes a machine, and it needs the host name typed.')
