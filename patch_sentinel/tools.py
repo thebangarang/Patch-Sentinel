@@ -500,8 +500,9 @@ def cve_coverage(args: dict, **kwargs) -> str:
                         "machine-level list is clean"},
         {"gap": "operating systems without an adapter", "state": "not measured",
          "why": f"adapters exist for: {', '.join(implemented)}; every other OS answers "
-                "'unsupported' with its own id (SUSE, Arch, Alpine, macOS and Windows are not "
-                "implemented yet)",
+                "'unsupported' with its own id. Not implemented: Alpine (the apk adapter is written "
+                "but has never read a real host), macOS, and Windows (which needs a PowerShell "
+                "transport, not a package-manager block)",
          "consequence": "such a host is a red gap in this list, never a green 'patched'"},
     ]
     if scan.get("release"):

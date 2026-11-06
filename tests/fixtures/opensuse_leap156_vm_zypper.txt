@@ -1,0 +1,17 @@
+@@FAMILY@@zypper
+6.4.0-150600.23.100-default
+RUN|kernel-default-base 6.4.0-150600.23.100.1.150600.12.46.2
+kernel-default-base 6.4.0-150600.23.100.1.150600.12.46.2
+@@K@@
+
+
+
+
+
+
+
+@@A@@
+@@I@@
+img|no-docker||
+@@R@@
+opensuse-leap 15.6

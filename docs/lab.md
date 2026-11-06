@@ -11,6 +11,9 @@ python3 scripts/lab_vm.py ssh fedora -- uname -r
 python3 scripts/lab_vm.py status | down fedora
 ```
 
+Also available: `arch` (~580 MB, Arch cloudimg), `opensuse` (~600 MB, Leap 15.6 Minimal-VM) and
+`alpine` — the last one is why the table below has a "not proven" row.
+
 Debian is the same with `debian` (~330 MB, Debian 12 genericcloud). Images, disks and the ssh key
 live under `tmp/vms/` (gitignored); the key is `~/.ssh/id_ed25519_patchlab` and is added to the
 operator's agent, so the plugin reaches the VMs without ever holding a credential.
@@ -73,6 +76,33 @@ exit_code 0 · findings 0 · blind 0
   `lab_vm.py up` clears that one loopback entry when it creates a fresh disk.
 - **`apt-get` leaked into a Fedora plan.** Caught by rendering the pane, not by a test: commands
   now come from the host's own adapter, and a test fails if `apt-get` appears in an rpm plan.
+
+## Five machines, four families, one call (2026-11-06, after the new adapters landed)
+
+```
+beelink      apt     ubuntu/resolute        0 pending  kernel 7.0.0-43-generic            current
+fedora-lab   dnf     fedora/45              0 pending  kernel 7.2.15-300.fc45             current
+debian-lab   apt     debian/bookworm        0 pending  kernel 6.1.0-54-cloud-amd64        current
+arch-lab     pacman  arch                   0 pending  kernel 7.2.11-arch1-1              current
+opensuse-lab zypper  opensuse-leap/15.6     0 pending  kernel 6.4.0-150600.23.100-default current
+exit_code 0 · findings 0 · blind 0
+```
+
+Three more traps the new machines produced, each now encoded:
+
+- **openSUSE's kernel is not `kernel-default`.** `rpm -q kernel-default` answers *"not installed"*
+  on a Leap box that is plainly running one: the running kernel belongs to `kernel-default-base`,
+  and its version-release (`6.4.0-150600.23.100.1.150600.12.46.2`) does not resemble the release
+  string (`6.4.0-150600.23.100-default`). The adapter now asks RPM which package *owns*
+  `/boot/vmlinuz-$(uname -r)` instead of guessing names, and the first version of it reported a
+  reboot as owed on a current host — the exact false alarm this project treats as a defect.
+- **Arch writes the same kernel two ways**: `uname -r` says `7.2.11-arch1-1`, the package says
+  `7.2.11.arch1-1`. The adapter converts between them and compares numerically, so `6.12.10` sorts
+  above `6.12.9` (string order gets that wrong, and the mis-sort reads as a boot owed).
+- **Alpine did not come up in the lab.** Neither the plain `alpine-*` nor the `nocloud_*` cloud
+  image processed the cloud-init seed — both booted to a login prompt with no user created. The
+  `apk` adapter exists in the tree, is **not registered**, and Alpine therefore answers
+  `unsupported`. A host we could not measure does not get a green row.
 
 ## Adding a distro
 

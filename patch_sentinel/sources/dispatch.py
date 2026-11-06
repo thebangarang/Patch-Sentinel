@@ -36,15 +36,19 @@ import datetime as dt
 
 from .. import verdict
 from . import hostprobe, registry, shell
+from .adapters import BY_FAMILY as EXTRA_ADAPTERS
 
 FAMILY_MARK = "@@FAMILY@@"
 
 # Which os-release `ID` each adapter claims. Anything else is `unsupported`, by name.
-FAMILY_BY_OS = {
+FAMILY_BY_OS: dict[str, tuple[str, ...]] = {
     "apt": ("ubuntu", "debian", "linuxmint", "pop", "raspbian", "kali", "elementary",
             "zorin", "mx", "proxmox", "devuan"),
     "dnf": ("fedora", "rhel", "rocky", "almalinux", "centos", "ol", "nobara", "amzn"),
 }
+# The families that live in their own module (adapters/), each with its own quirks.
+for _family, _module in EXTRA_ADAPTERS.items():
+    FAMILY_BY_OS[_family] = tuple(_module.OS_IDS)
 
 # The image half is shared by every family: a rebuilt tag is a rebuilt tag whatever the package
 # manager. `head -1` because a multi-line registry error would otherwise break the one-line record;
@@ -77,12 +81,23 @@ _APT_BLOCK = hostprobe.PROBE_CMD
 _UBUNTU_LIKE = "|".join(FAMILY_BY_OS["apt"])
 _RPM_LIKE = "|".join(FAMILY_BY_OS["dnf"])
 
+def _case_branches() -> str:
+    """One ``case`` branch per family, each announced with its own mark."""
+    branches = [
+        _UBUNTU_LIKE + ") echo " + FAMILY_MARK + "apt; " + _APT_BLOCK + " ;; ",
+        _RPM_LIKE + ") echo " + FAMILY_MARK + "dnf; " + _DNF_BLOCK + " ;; ",
+    ]
+    for family, module in EXTRA_ADAPTERS.items():
+        pattern = "|".join(module.OS_IDS)
+        branches.append(pattern + ") echo " + FAMILY_MARK + family + "; " + module.BLOCK + " ;; ")
+    return "".join(branches)
+
+
 PROBE_SCRIPT = (
     ". /etc/os-release 2>/dev/null; "
     "case ${ID:-unknown} in "
-    + _UBUNTU_LIKE + ") echo " + FAMILY_MARK + "apt; " + _APT_BLOCK + " ;; "
-    + _RPM_LIKE + ") echo " + FAMILY_MARK + "dnf; " + _DNF_BLOCK + " ;; "
-    "*) echo " + FAMILY_MARK + "none; echo 'unsupported|'${ID:-unknown} ;; "
+    + _case_branches()
+    + "*) echo " + FAMILY_MARK + "none; echo 'unsupported|'${ID:-unknown} ;; "
     "esac"
 )
 
@@ -235,6 +250,7 @@ def parse_dnf(out: str) -> dict:
 
 
 PARSERS = {"apt": hostprobe.parse, "dnf": parse_dnf}
+PARSERS.update({family: module.parse for family, module in EXTRA_ADAPTERS.items()})
 
 
 def probe(label: str, target: str | None = None,

@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
 
 from patch_sentinel import plan                       # noqa: E402
 from patch_sentinel.sources import dispatch          # noqa: E402
+from patch_sentinel.sources.adapters import pacman, zypper   # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -44,6 +45,14 @@ class FamilySelection(unittest.TestCase):
     def test_the_rpm_family(self):
         for os_id in ("fedora", "rhel", "rocky", "almalinux", "centos"):
             self.assertEqual(dispatch.family_for(os_id), "dnf", os_id)
+
+    def test_the_new_families_are_claimed(self):
+        self.assertEqual(dispatch.family_for("arch"), "pacman")
+        self.assertEqual(dispatch.family_for("opensuse-leap"), "zypper")
+
+    def test_an_unproven_adapter_does_not_claim_a_distro(self):
+        # apk is written but has never read a real Alpine host, so Alpine must answer unsupported
+        self.assertEqual(dispatch.family_for("alpine"), "none")
 
     def test_an_unclaimed_os_is_none_not_a_guess(self):
         for os_id in ("gentoo", "void", "windows", "darwin", "", None):
@@ -186,6 +195,66 @@ class PlanSpeaksTheHostsLanguage(unittest.TestCase):
             for step in plan.steps_for(self._host(fixture_name, adapter)):
                 self.assertTrue(step["verify"], step)
                 self.assertTrue(step["reversal"], step)
+
+
+class ArchAdapter(unittest.TestCase):
+    """A real Arch machine (QEMU, 127.0.0.1:2225). The version trap here is the opposite of
+    Fedora's: the package is `linux`, but it is written `7.2.11.arch1-1` while `uname -r` says
+    `7.2.11-arch1-1`."""
+
+    def setUp(self):
+        self.family, self.body = split_fixture("arch_vm_pacman.txt")
+        self.facts = dispatch.PARSERS["pacman"](self.body)
+
+    def test_the_package_name_maps_to_the_release(self):
+        self.assertEqual(self.facts["running"], "7.2.11-arch1-1")
+        self.assertEqual(pacman.running_as_package_version("7.2.11-arch1-1"), "7.2.11.arch1-1")
+        self.assertEqual(self.facts["newest_installed"], "7.2.11.arch1-1")
+
+    def test_a_current_arch_host_reads_current(self):
+        self.assertEqual(self.family, "pacman")
+        self.assertEqual(self.facts["kernel"], "kernel-current")
+        self.assertEqual(self.facts["pending"], [])
+        self.assertEqual(self.facts["os"]["id"], "arch")
+
+    def test_numeric_order_beats_string_order(self):
+        # "6.12.10" < "6.12.9" as strings, and that is a reboot wrongly reported as owed
+        self.assertTrue(pacman._newer("6.12.10-1", "6.12.9-1"))
+        self.assertFalse(pacman._newer("6.12.9-1", "6.12.10-1"))
+
+    def test_a_pending_row_in_pacmans_own_format(self):
+        rows = pacman._ROW_RE.findall("linux 7.2.11.arch1-1 -> 7.2.12.arch1-1")
+        self.assertEqual(rows, [("linux", "7.2.11.arch1-1", "7.2.12.arch1-1")])
+
+
+class SuseAdapter(unittest.TestCase):
+    """A real openSUSE Leap 15.6 machine (127.0.0.1:2226) — where `rpm -q kernel-default` answers
+    "not installed" on a box running a kernel, because the running one is kernel-default-base."""
+
+    def setUp(self):
+        self.family, self.body = split_fixture("opensuse_leap156_vm_zypper.txt")
+        self.facts = dispatch.PARSERS["zypper"](self.body)
+
+    def test_the_running_package_is_the_one_rpm_names(self):
+        self.assertEqual(self.facts["running"], "6.4.0-150600.23.100-default")
+        self.assertEqual(self.facts["newest_installed"],
+                         "6.4.0-150600.23.100.1.150600.12.46.2")
+        self.assertEqual(self.facts["kernel"], "kernel-current",
+                         "the running kernel IS the newest installed: no reboot is owed")
+
+    def test_os_is_identified(self):
+        self.assertEqual(self.family, "zypper")
+        self.assertEqual(self.facts["os"], {"id": "opensuse-leap", "codename": "15.6"})
+
+    def test_an_update_table_in_zyppers_own_shape(self):
+        table = ("Repository     | Name           | Current Version      | Available Version\n"
+                 "---------------+----------------+----------------------+-------------------\n"
+                 "Update repo    | curl           | 8.0.1-150600.9.1     | 8.0.1-150600.12.1\n"
+                 "Update repo    | kernel-default | 6.4.0-150600.23.100.1 | 6.4.0-150600.23.130.1\n")
+        rows = zypper.parse_updates(table)
+        self.assertEqual([row["package"] for row in rows], ["curl", "kernel-default"])
+        self.assertEqual(rows[0]["to"], "8.0.1-150600.12.1")
+        self.assertEqual(rows[1]["from"], "6.4.0-150600.23.100.1")
 
 
 class RpmNames(unittest.TestCase):

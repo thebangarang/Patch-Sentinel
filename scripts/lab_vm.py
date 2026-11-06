@@ -49,6 +49,28 @@ DISTROS = {
         "port": 2223,
         "label": "debian-lab",
     },
+    "alpine": {
+        # The `nocloud_` prefix is the variant that reads a NoCloud seed; the plain `alpine-*`
+        # cloudinit image booted straight to a login prompt with no user created (measured).
+        "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/cloud/"
+               "nocloud_alpine-3.22.2-x86_64-bios-cloudinit-r0.qcow2",
+        "user": "alpine",
+        "port": 2224,
+        "label": "alpine-lab",
+    },
+    "arch": {
+        "url": "https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2",
+        "user": "arch",
+        "port": 2225,
+        "label": "arch-lab",
+    },
+    "opensuse": {
+        "url": "https://download.opensuse.org/distribution/leap/15.6/appliances/"
+               "openSUSE-Leap-15.6-Minimal-VM.x86_64-Cloud.qcow2",
+        "user": "opensuse",
+        "port": 2226,
+        "label": "opensuse-lab",
+    },
 }
 
 
@@ -159,11 +181,13 @@ def up(name: str) -> None:
     if running(name):
         print(f"{name} is already running on port {spec['port']}")
         return
+    seed_argv = (["-cdrom", str(p["seed"])] if spec.get("seed_media") == "cdrom"
+                 else ["-drive", f"file={p['seed']},format=raw,if=virtio"])
     argv = [
         "qemu-system-x86_64",
         "-enable-kvm", "-cpu", "host", "-smp", "2", "-m", "2048",
         "-drive", f"file={p['disk']},if=virtio,cache=unsafe",
-        "-drive", f"file={p['seed']},format=raw,if=virtio",
+        *seed_argv,
         "-netdev", f"user,id=n0,hostfwd=tcp:127.0.0.1:{spec['port']}-:22",
         "-device", "virtio-net-pci,netdev=n0",
         "-display", "none",

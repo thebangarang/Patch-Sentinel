@@ -1,0 +1,9 @@
+@@FAMILY@@pacman
+7.2.11-arch1-1
+linux 7.2.11.arch1-1
+@@K@@
+@@A@@
+@@I@@
+img|no-docker||
+@@R@@
+arch unknown

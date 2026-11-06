@@ -45,6 +45,26 @@ its own verdict, not "patched". A registry that answered `429` is *unverified*, 
 | `cve_explain` | `cve_id` | the vendor record for one CVE, plus our measured state and any tracker/measurement disagreement |
 | `cve_coverage` | — | what answered and when, and the standing gaps. Never empty, never green |
 
+## Coverage — what is proven, and on which machine
+
+The adapter is chosen from the host's own `/etc/os-release`; every claim below was read off a real
+machine, not written from documentation.
+
+| family | covers | proven on |
+|---|---|---|
+| `apt` | Ubuntu, Debian, Mint, Pop, Proxmox, Kali… | this machine (Ubuntu 26.04) and a Debian 12 VM |
+| `dnf` | Fedora, RHEL, Rocky, Alma, CentOS, Amazon | a Fedora 45 VM (and a `fedora:latest` container) |
+| `pacman` | Arch, Manjaro, EndeavourOS, CachyOS | an Arch VM |
+| `zypper` | openSUSE Leap/Tumbleweed, SLES | an openSUSE Leap 15.6 VM |
+
+An OS with no adapter answers **`unsupported` with its own id** and lands in GAPS as a red gap — a
+Mac, a Windows box or an Alpine host never reads as "patched". Alpine is the honest example: the
+`apk` adapter is written, but its cloud images would not take a cloud-init seed, so it has never
+read a real Alpine host and is **not registered**. Windows needs a different transport (PowerShell,
+not a shell block) before it is a real claim.
+
+`docs/lab.md` has the lab recipe and every number above.
+
 ## Install and try it
 
 ```bash
