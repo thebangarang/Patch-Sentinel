@@ -98,6 +98,19 @@ function stateOf(entry) {
 
 const LEVEL_COLOUR = { green: C.ok, amber: C.warn, red: C.danger, grey: C.faint }
 
+/** The newest of a list of versions, by numeric segments (`2.10` sorts above `2.9`). */
+function newestVersion(list) {
+  const key = (v) => String(v).split(/[.\-+]/).map((part) => parseInt(part, 10) || 0)
+  return (list || []).slice().sort((a, b) => {
+    const left = key(a)
+    const right = key(b)
+    for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+      if ((left[i] || 0) !== (right[i] || 0)) return (left[i] || 0) - (right[i] || 0)
+    }
+    return 0
+  }).pop()
+}
+
 function dot(level) {
   return jsx('span', {
     'aria-hidden': 'true',
@@ -304,16 +317,27 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
     if (!seen.has(key)) { seen.add(key); fromFindings.push({ ecosystem: v.ecosystem, package: v.package, version: v.version }) }
   }
   const packages = answered.length ? answered : fromFindings
-  const hit = new Set(vulnerable.map((v) => (v.ecosystem || '') + '/' + v.package))
-  const worst = {}
+  const RANK = { critical: 4, high: 3, moderate: 2, low: 1 }
+  const foundByPackage = {}
   for (const v of vulnerable) {
     const key = (v.ecosystem || '') + '/' + v.package
-    if (!worst[key]) worst[key] = v
+    const severity = String(v.severity || '').split(' ')[0].toLowerCase()
+    const entry = foundByPackage[key]
+      || (foundByPackage[key] = { count: 0, severity: '', fixes: [], ids: [] })
+    entry.count += 1
+    if (!entry.severity || (RANK[severity] || 0) > (RANK[entry.severity] || 0)) entry.severity = severity
+    for (const fix of v.fixed || []) if (fix && !entry.fixes.includes(fix)) entry.fixes.push(fix)
+    if (v.id) entry.ids.push(v.id)
   }
+  const hit = new Set(Object.keys(foundByPackage))
   const needle = query.trim().toLowerCase()
+  const keyOf = (p) => (p.ecosystem || '') + '/' + p.package
   const rows = packages
     .filter((p) => !needle || (p.package || '').toLowerCase().includes(needle))
-    .filter((p) => !onlyFindings || hit.has((p.ecosystem || '') + '/' + p.package))
+    .filter((p) => !onlyFindings || hit.has(keyOf(p)))
+    // findings first: the rows that matter should not be buried under 400 clean ones
+    .sort((a, b) => (hit.has(keyOf(b)) ? 1 : 0) - (hit.has(keyOf(a)) ? 1 : 0)
+                    || String(a.package).localeCompare(String(b.package)))
 
   return jsxs('section', { style: { marginBottom: '18px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
@@ -341,6 +365,17 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
             (libraries.answer || '') + (libraries.details
               ? ' · ' + Object.entries(libraries.details).map(([k, v]) => k + ' via ' + v).join(', ')
               : '')),
+          vulnerable.length
+            ? jsx('div', { style: { fontSize: '0.6875rem', color: C.dim, marginBottom: '4px', lineHeight: 1.45 } },
+                'A finding is a published advisory that names this exact version — one package can carry many, '
+                + 'which is why ' + vulnerable.length + ' findings sit on ' + Object.keys(foundByPackage).length +
+                ' package(s). The fix column is the first version that closes it.')
+            : null,
+          !Array.isArray(libraries.packages)
+            ? jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, marginBottom: '4px' } },
+                'this answer carries no package list — the backend behind this pane is older than the pane. '
+                + 'Restart the app so both halves load the same build.')
+            : null,
           jsxs('div', { style: { display: 'flex', gap: '6px', marginBottom: '5px' } }, [
             jsx('input', {
               value: query,
@@ -363,8 +398,8 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
             }, onlyFindings ? 'showing findings' : 'only findings')
           ]),
           rows.slice(0, 80).map((row, index) => {
-            const key = (row.ecosystem || '') + '/' + row.package
-            const found = worst[key]
+            const found = hit.has(keyOf(row)) ? foundByPackage[keyOf(row)] : null
+            const fix = found && found.fixes.length ? newestVersion(found.fixes) : null
             return jsxs('div', {
               key: index,
               style: {
@@ -376,8 +411,11 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
               jsx('span', { style: { color: C.text, wordBreak: 'break-all' } },
                 row.package + '@' + row.version + '  ' + (row.ecosystem || '')),
               jsx('span', { style: { color: found ? C.danger : C.faint, textAlign: 'right' } },
-                found ? (found.id || '') + (found.fixed && found.fixed[0] ? ' → ' + found.fixed[0] : '')
-                      : 'clean')
+                found
+                  ? found.count + ' advisor' + (found.count === 1 ? 'y' : 'ies')
+                    + (found.severity ? ' · ' + found.severity : '')
+                    + (fix ? ' · fix ' + fix : ' · no fix listed')
+                  : 'clean')
             ])
           }),
           !rows.length
@@ -750,6 +788,12 @@ export function PatchSentinel({ compact }) {
           }, labels.map((name) => jsx('option', { key: name, value: name }, name)))
         : null
     ]),
+    health && Array.isArray(health.inventory) && health.inventory.length <= 1
+      ? jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, marginBottom: '10px' } },
+          'the backend loaded an inventory of ' + health.inventory.length + ' host(s)'
+          + (health.data_dir ? ' (data dir: ' + health.data_dir + ')' : '')
+          + ' — if you declared more, it is running without its settings: restart the app.')
+      : null,
     jsxs('div', {
       style: {
         fontSize: '0.6875rem', color: C.faint, lineHeight: 1.5, marginBottom: '14px',

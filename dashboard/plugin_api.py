@@ -166,4 +166,7 @@ def _ui_prints() -> dict:
 def health() -> dict:
     """Liveness for the pane, plus which build of the pane the app is actually serving."""
     return {"ok": True, "plugin": "patch-sentinel", "tools": sorted(tools.HANDLERS),
-            "ui": _ui_prints(), "api": _api_state()}
+            "ui": _ui_prints(), "api": _api_state(),
+            # what this *process* sees, so "why is only one host listed" has an answer in evidence
+            "inventory": [host.get("label") for host in tools._inventory()],
+            "data_dir": str(store.data_dir())}
