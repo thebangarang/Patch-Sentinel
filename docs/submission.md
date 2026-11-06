@@ -4,9 +4,9 @@
 
 | # | what | who can do it | status |
 |---|---|---|---|
-| 1 | a **PR to `NousResearch/hermes-agent`** adding `plugin-catalog/patch-sentinel.yaml` | anyone with the channel open; **pushing over SSH needs no token**, opening a PR against a repo we do not own needs a GitHub token or the web UI | not started |
-| 2 | a **demo video ≤ 90 s, posted on X, tagging @NousResearch** | **the operator only** (his account) | not started |
-| 3 | the **Typeform**: `form.typeform.com/to/FwJLvOln` with both links | the operator | not started |
+| 1 | a **PR to `NousResearch/hermes-agent`** adding `plugin-catalog/patch-sentinel.yaml` | anyone with the channel open; **pushing over SSH needs no token**, opening a PR against a repo we do not own needs a GitHub token or the web UI | **prepared** — `docs/catalog-entry.yaml` (pinned SHA), `docs/pr-body.md`; the PR itself needs a token or the web UI |
+| 2 | a **demo video ≤ 90 s, posted on X, tagging @NousResearch** | **the operator only** (his account) | **prepared** — `docs/demo-script.md` (6 shots, prompts, caption, credits, pre-record reset) |
+| 3 | the **Typeform**: `form.typeform.com/to/FwJLvOln` with both links | the operator | not started (needs 1 and 2) |
 
 Sendable as soon as the PR is open. Catalogue checks run when a maintainer starts them; entries are
 reviewed every few days — so **open the PR days before the deadline, not hours**.
