@@ -110,10 +110,13 @@ class MoreRuntimes(unittest.TestCase):
         self.assertFalse([r for r in rows if "default" in r["version"]])
 
     def test_cargo_install_list(self):
-        text = "ripgrep v13.0.0:\n    rg\ncargo-binstall v1.6.4:\n    cargo-binstall\n"
-        self.assertEqual(languages.parse_cargo(text),
-                         [{"package": "ripgrep", "version": "13.0.0"},
-                          {"package": "cargo-binstall", "version": "1.6.4"}])
+        # real output from rust:1-slim after `cargo install --path .` — the harder shape, because a
+        # crates.io install ("ripgrep v13.0.0:") is the same line without the parenthetical
+        rows = languages.parse_cargo(
+            (FIXTURES / "cargo_install_list.txt").read_text()
+            + "ripgrep v13.0.0:\n    rg\n")
+        self.assertEqual(rows, [{"package": "t", "version": "0.1.0"},
+                                {"package": "ripgrep", "version": "13.0.0"}])
 
     def test_dotnet_tool_list(self):
         # real output from mcr.microsoft.com/dotnet/sdk:8.0 after `dotnet tool install -g dotnetsay`

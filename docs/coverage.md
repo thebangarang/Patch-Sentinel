@@ -38,11 +38,16 @@ those exact versions.
 | RubyGems | `gem list --local` | container capture (`ruby:3-slim`), 88 real lines incl. `(default: 0.4.0)` |
 | Maven | every `*.pom` under `~/.m2/repository` | container capture (`maven:3-eclipse-temurin-21`), 227 artifacts |
 | Go | `go version -m` on each `GOPATH/bin` binary | container capture (`golang:alpine`) |
-| crates.io | `cargo install --list` | format only — capture in progress, not yet evidence |
+| crates.io | `cargo install --list` | container capture (`rust:1-slim`), path-install shape |
 | NuGet | `dotnet tool list -g` | container capture (`mcr.microsoft.com/dotnet/sdk:8.0`), dotnetsay 3.0.3 |
 
 Each capture is committed under `tests/fixtures/` and asserted in `tests/test_libraries.py`, so the
 parser cannot drift from the output it was written against without a test failing.
+
+Two captures taught a lesson worth repeating: `bash -lc` inside a container is a **login** shell, and
+it resets `PATH` — `cargo` and `go` were "not found" until the probes used `bash -c`/`sh -c`. And
+`golang:alpine` has no bash at all. A capture that comes back empty is a capture to debug, not a
+parser to trust.
 
 Ecosystem names were confirmed against the live API rather than assumed: `rack 2.2.0` → 36 advisories
 (RubyGems), `laravel/framework 6.0.0` → 16 (Packagist), `log4j-core 2.14.1` → advisories (Maven),
