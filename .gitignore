@@ -1,0 +1,67 @@
+# Project .gitignore — {{PROJECT_NAME}}
+# Copy to project root and customize as needed.
+
+# Secrets (NEVER COMMIT)
+.env
+.env.*
+!.env.example
+credentials.json
+credentials.*.json
+service-account.json
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+secrets/
+*.secret
+*.credentials
+
+# Dependencies
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+data/*.sqlite
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime
+logs/
+*.log
+tmp/
+temp/
+*.pid
+
+# Docker
+docker-compose.override.yml
+
+# Backups
+*.bak
+*.backup
+backups/
+
+# Environment
+.env.local
+.env.production
+.env.staging
