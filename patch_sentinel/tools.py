@@ -487,30 +487,45 @@ def cve_coverage(args: dict, **kwargs) -> str:
                     "url": scan.get("usn_url")})
 
     implemented = sorted(dispatch.FAMILY_BY_OS)
+    # Every gap carries a scope (`hosts`: "every" or the labels it concerns) and a `kind`:
+    #   "limit"   — a surface this version cannot see, by design. Nothing to clear; the honest
+    #               answer is a statement, not a button.
+    #   "blocked" — a check that ran and failed on a host (unreachable, tool missing). Fixable, and
+    #               the panel says what to fix.
     gaps: list[dict] = [
         {"gap": "CVEs inside container image layers", "state": "not measured",
+         "hosts": "every", "kind": "limit",
          "why": "needs an image scanner (trivy) and a vulnerability database; v0.2",
          "consequence": "a rebuilt image is reported as 'an update exists', never as "
-                        "'these CVEs are fixed'"},
+                        "'these CVEs are fixed'",
+         "next": "nothing to clear here, by design: 0.1.0 refuses to ship a second dependency "
+                 "tree. The image digest check still tells you a newer build exists."},
         {"gap": "language packages outside the global trees",
-         "state": "partly measured",
+         "state": "partly measured", "hosts": "every", "kind": "limit",
          "why": "cve_libraries reads npm's global tree and the pip environment on PATH; "
                 "per-project lockfiles, other virtualenvs and vendor/ directories are not read",
          "consequence": "a vulnerable dependency of one project can be invisible while the "
-                        "machine-level list is clean"},
+                        "machine-level list is clean",
+         "next": "ask in chat about a specific project ('which of my node or python dependencies "
+                 "have known CVEs?') — that reads the tree you name; the automatic scan does not."},
         {"gap": "operating systems without an adapter", "state": "not measured",
+         "hosts": "every", "kind": "limit",
          "why": f"adapters exist for: {', '.join(implemented)}; every other OS answers "
                 "'unsupported' with its own id. Not implemented: Alpine (the apk adapter is written "
                 "but has never read a real host), macOS, and Windows (which needs a PowerShell "
                 "transport, not a package-manager block)",
-         "consequence": "such a host is a red gap in this list, never a green 'patched'"},
+         "consequence": "such a host is a red gap in this list, never a green 'patched'",
+         "next": "nothing to clear: the host reports unsupported and that is the honest reading. "
+                 "Adding a family is a code change, not a setting."},
     ]
     # one entry per *fact*, not one per host: a 20-host inventory must not bury the real gaps
     without_advisory = sorted(label for label, host in hosts.items()
                               if (host.get("os") or {}).get("id") not in ("ubuntu", None))
     if scan.get("release") and without_advisory:
         gaps.append({"gap": "advisory attribution on non-Ubuntu hosts", "state": "not attributed",
-                     "hosts": without_advisory,
+                     "kind": "limit", "hosts": without_advisory,
+                     "next": "nothing here: a per-distro security feed is a 0.2 item. The update is "
+                             "still listed with its versions, only the CVE id is missing.",
                      "why": "only Ubuntu's security-notice feed is wired (read for release "
                             f"{scan.get('release')}), so on these hosts the pending list is measured "
                             "but the CVE id behind each update is not named: "
@@ -520,8 +535,13 @@ def cve_coverage(args: dict, **kwargs) -> str:
     for blind in stored.get("blind") or []:
         if blind.get("class") == "host":
             continue
-        gaps.append({"gap": f"{blind.get('class')} on {blind.get('host')}", "state": "unmeasured",
-                     "why": blind.get("reason"), "consequence": "reported as unknown, not clean"})
+        label = blind.get("host") or "this machine"
+        gaps.append({"gap": f"{blind.get('class')} check on {label}", "state": "unmeasured",
+                     "kind": "blocked", "hosts": [label],
+                     "why": blind.get("reason"),
+                     "consequence": "reported as unknown, not clean",
+                     "next": f"this one you can clear: make {label} answer (ssh key, host entry, or "
+                             "the missing tool) and press rescan — until then it stays unknown"})
 
     return _json({
         "tool": "cve_coverage",

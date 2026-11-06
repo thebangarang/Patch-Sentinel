@@ -161,8 +161,11 @@ function NowPanel({ status, onRefresh, busy }) {
       jsxs('div', {}, [
         jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline' } }, [
           jsx('span', { style: { fontWeight: 600, fontSize: '0.8125rem' } }, entry.label),
-          jsx('span', { style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.accent } },
-            (entry.adapter || '?') + ' · ' + ((entry.os && entry.os.id) || '?') + '/' + ((entry.os && entry.os.codename) || '?'))
+          jsx('span', { fontFamily: MONO, fontSize: '0.5625rem', color: C.accent },
+            (entry.adapter || '?') + ' · ' + ((entry.os && entry.os.id) || '?') + '/' + ((entry.os && entry.os.codename) || '?')),
+          // where the answer came from: this machine, or a host the operator declared
+          jsx('span', { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint },
+            entry.target && entry.target !== 'local' ? 'ssh ' + entry.target : 'this machine')
         ]),
         jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim, marginTop: '2px' } },
           'kernel ' + (kernel.running || '?') + ' → ' + (kernel.verdict || '?')),
@@ -283,26 +286,69 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning }) {
 
 // --------------------------------------------------------------------------- GAPS
 
-function GapsPanel({ coverage }) {
-  const gaps = (coverage && coverage.gaps) || []
+function gapRow(gap, index) {
+  const blocked = gap.kind === 'blocked'
+  return jsxs('div', {
+    key: index,
+    style: {
+      display: 'grid', gridTemplateColumns: '8px 1fr', gap: '8px', padding: '5px 0',
+      borderTop: '1px solid ' + C.border
+    }
+  }, [
+    dot(blocked ? 'red' : 'amber'),
+    jsxs('div', {}, [
+      jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline' } }, [
+        jsx('span', { style: { fontSize: '0.75rem', color: C.text } }, gap.gap),
+        jsx('span', { style: { fontSize: '0.5625rem', color: blocked ? C.danger : C.faint, fontFamily: MONO } },
+          blocked ? 'fixable' : 'by design')
+      ]),
+      jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px' } },
+        gap.state + ' — ' + (gap.why || '')),
+      gap.next
+        ? jsx('div', {
+            style: {
+              fontSize: '0.6875rem', marginTop: '3px',
+              color: blocked ? C.warn : C.dim, fontStyle: blocked ? 'normal' : 'italic'
+            }
+          }, (blocked ? 'to clear it: ' : 'what you can do: ') + gap.next)
+        : null
+    ])
+  ])
+}
+
+/**
+ * Gaps are scoped: `hosts` is "every" or the labels it concerns. With a host selected, the panel
+ * shows what applies to *that* host — the operator's complaint was a wall of other machines' gaps.
+ */
+function GapsPanel({ coverage, selected }) {
+  const all = (coverage && coverage.gaps) || []
+  const appliesTo = (gap) => gap.hosts === 'every' || !Array.isArray(gap.hosts)
+    ? true : gap.hosts.includes(selected)
+  const mine = all.filter(appliesTo)
+  const elsewhere = all.length - mine.length
+  const blocked = mine.filter((gap) => gap.kind === 'blocked')
+  const limits = mine.filter((gap) => gap.kind !== 'blocked')
+
   return jsxs('section', {}, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label('gaps'),
       jsx('span', { style: { flex: 1 } }),
-      jsx('span', { style: { fontSize: '0.625rem', color: C.faint } }, 'what this scan cannot see')
+      jsx('span', { style: { fontSize: '0.625rem', color: C.faint } },
+        selected ? 'what a scan of ' + selected + ' cannot see' : 'what this scan cannot see')
     ]),
-    gaps.map((gap, index) => jsxs('div', {
-      key: index,
-      style: { display: 'grid', gridTemplateColumns: '8px 1fr', gap: '8px', padding: '4px 0', borderTop: '1px solid ' + C.border }
-    }, [
-      dot(gap.state === 'not measured' ? 'red' : 'amber'),
-      jsxs('div', {}, [
-        jsx('div', { style: { fontSize: '0.75rem', color: C.text } }, gap.gap),
-        jsx('div', { style: { fontSize: '0.6875rem', color: C.faint } },
-          gap.state + ' — ' + (gap.why || '') + (gap.consequence ? ' (' + gap.consequence + ')' : ''))
-      ])
-    ])),
-    gaps.length ? null : jsx('div', { style: { fontSize: '0.6875rem', color: C.warn } },
+    blocked.length
+      ? jsxs('div', { style: { marginBottom: '4px' } }, [
+          jsx('div', { style: { fontSize: '0.625rem', color: C.danger, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '2px' } },
+            'fixable — these are why a row is not green'),
+          blocked.map(gapRow)
+        ])
+      : null,
+    limits.map(gapRow),
+    elsewhere
+      ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '6px' } },
+          elsewhere + ' more gap(s) concern other hosts — switch host at the top to read them')
+      : null,
+    all.length ? null : jsx('div', { style: { fontSize: '0.6875rem', color: C.warn } },
       'coverage has not been read yet — an empty gap list is not a claim that nothing is missed')
   ])
 }
@@ -487,7 +533,7 @@ export function PatchSentinel({ compact }) {
     ]),
     jsx(NowPanel, { status, onRefresh: rescan, busy }),
     jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning }),
-    jsx(GapsPanel, { coverage }),
+    jsx(GapsPanel, { coverage, selected }),
     jsx(ApplyGate, { hostLabel: selected })
   ])
 }
