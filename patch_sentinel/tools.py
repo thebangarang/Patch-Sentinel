@@ -60,6 +60,38 @@ def _not_in_inventory(requested: str) -> dict:
                     expected=close[0] if close else (labels[0] if labels else None))
 
 
+def _gap_advice(klass: str, label: str, reason: str) -> str:
+    """What to actually do about a failed check — said in terms of its cause.
+
+    "make the host answer (ssh key, host entry, or the missing tool)" was the same sentence for every
+    kind of failure, and on a *local* machine it is nonsense: nothing is unreachable, docker simply
+    would not talk. Advice that does not fit the cause reads as the product being confused.
+    """
+    reason = reason or ""
+    if klass == "host":
+        return (f"{label} did not answer. Check the inventory entry ({label}=user@host:port), the ssh "
+                "key it needs, and that the machine is up — then press rescan.")
+    if klass == "images" and "refused to list" in reason:
+        return ("docker is installed but this user cannot read its socket: for a root install, "
+                "`sudo usermod -aG docker $USER` (then log out and back in — a running process keeps "
+                "the groups it started with, which is often why the agent's pane and your shell "
+                "disagree); for rootless docker, point `DOCKER_HOST` at its socket. If this machine "
+                "runs no containers, nothing is wrong — this row is the scan admitting it could not "
+                "look.")
+    if klass == "images":
+        return ("the registry would not answer for one of these images (rate limit, private tag, or "
+                "no network). Nothing changed on the host; the digest simply could not be compared. "
+                "Make the tag pullable anonymously, then rescan.")
+    if klass == "kernel":
+        return ("no kernel package was found on this host — normal inside a container, where the "
+                "kernel belongs to the host. There is nothing to fix; the row stays unknown by design.")
+    if klass == "advisories":
+        return ("Ubuntu's notice feed did not answer, so the pending list is measured but no CVE id is "
+                "named. This usually clears on the next rescan.")
+    return (f"the {klass} check could not run on {label}. The reason is above; if it is a missing "
+            "tool, install it or ignore this row.")
+
+
 def _refusal(reason: str, nearest: list | None = None, answer=None, **extra) -> dict:
     """The refusal shape: ``{"match": "none", "answer": null, "reason": ..., "nearest": [...]}``."""
     return {"match": "none", "answer": answer, "reason": reason,
@@ -556,9 +588,8 @@ def cve_coverage(args: dict, **kwargs) -> str:
                      "kind": "blocked", "hosts": [label],
                      "why": blind.get("reason"),
                      "consequence": "reported as unknown, not clean",
-                     "next": f"this one you can clear yourself: make {label} answer — ssh key, host "
-                             "entry, or the missing tool — then press rescan. Until it does, that "
-                             "row stays unknown and never green."})
+                     "next": _gap_advice(blind.get("class") or "check", label,
+                                         blind.get("reason") or "")})
 
     return _json({
         "tool": "cve_coverage",

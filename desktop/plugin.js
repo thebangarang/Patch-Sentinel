@@ -234,8 +234,7 @@ function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
   const total = (entry && entry.pending_count) || 0
   const needle = query.trim().toLowerCase()
   const filtered = needle ? rows.filter((r) => (r.package || '').toLowerCase().includes(needle)) : rows
-  const LIMIT = 50
-  const shown = filtered.slice(0, LIMIT)
+  const shown = filtered
   const text = filtered.map((r) => r.package + '  ' + (r.from || '?') + ' → ' + r.to).join('\n')
 
   return jsxs('section', { style: { marginBottom: '18px' } }, [
@@ -273,8 +272,13 @@ function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
               border: '1px solid ' + C.border, borderRadius: '3px'
             }
           }),
-          jsx('div', { style: { maxHeight: '240px', overflowY: 'auto', paddingRight: '2px' } },
-            shown.map((row, index) => jsxs('div', {
+          jsx('div', {
+            style: {
+              maxHeight: '240px', overflowY: 'auto', overscrollBehavior: 'contain',
+              border: '1px solid ' + C.border, borderRadius: '3px', background: C.panel,
+              padding: '2px 6px'
+            }
+          }, shown.map((row, index) => jsxs('div', {
               key: index,
               style: {
                 display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px',
@@ -286,9 +290,9 @@ function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
               jsx('span', { style: { color: C.dim, textAlign: 'right' } },
                 (row.from || '?') + ' → ' + row.to)
             ]))),
-          filtered.length > LIMIT
+          filtered.length
             ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '4px' } },
-                'showing ' + LIMIT + ' of ' + filtered.length + ' — filter to narrow it, or copy the list')
+                filtered.length + ' row(s) in the box above — it scrolls; copy gets all of them')
             : null,
           entry && entry.pending_truncated
             ? jsx('div', { style: { fontSize: '0.625rem', color: C.warn, marginTop: '3px' } },
@@ -399,8 +403,13 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
               }
             }, onlyFindings ? 'showing findings' : 'only findings')
           ]),
-          jsx('div', { style: { maxHeight: '240px', overflowY: 'auto', paddingRight: '2px' } },
-           rows.slice(0, 50).map((row, index) => {
+          jsx('div', {
+            style: {
+              maxHeight: '240px', overflowY: 'auto', overscrollBehavior: 'contain',
+              border: '1px solid ' + C.border, borderRadius: '3px', background: C.panel,
+              padding: '2px 6px'
+            }
+          }, rows.map((row, index) => {
             const found = hit.has(keyOf(row)) ? foundByPackage[keyOf(row)] : null
             const fix = found && found.fixes.length ? newestVersion(found.fixes) : null
             return jsxs('div', {
@@ -425,9 +434,9 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
             ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint } },
                 onlyFindings ? 'no findings in what was read' : 'nothing matches the filter')
             : null,
-          rows.length > 50
+          rows.length
             ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '3px' } },
-                'showing 50 of ' + rows.length + ' — the box scrolls, the filter narrows')
+                rows.length + ' row(s) in the box above — it scrolls, the filter narrows')
             : null
         ])
       : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, padding: '6px 0' } },
