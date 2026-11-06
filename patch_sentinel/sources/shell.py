@@ -16,7 +16,16 @@ import subprocess
 DEFAULT_TIMEOUT = 180
 SSH_CONNECT_TIMEOUT = 12
 
-_PATH_PREFIX = "export PATH=/usr/sbin:/usr/bin:/sbin:/bin; "
+# The OS probe wants the system's own tools, and only those: `apt-get` and `dpkg-query` must be the
+# distribution's, never a user-installed stub earlier on the PATH.
+SYSTEM_PATH_PREFIX = "export PATH=/usr/sbin:/usr/bin:/sbin:/bin; "
+
+# Language tooling is the opposite case: npm, pip3 and version-manager shims live in the user's own
+# directories, so this prefix keeps whatever PATH the caller had and only adds the places a login
+# shell would have (measured here: pip3 sits in a Hermes tool dir that a system PATH never sees).
+USER_PATH_PREFIX = "export PATH=$HOME/.local/bin:$HOME/bin:$PATH:/usr/sbin:/usr/bin:/sbin:/bin; "
+
+_PATH_PREFIX = SYSTEM_PATH_PREFIX
 
 
 def split_target(target: str) -> tuple[str, str | None]:
@@ -31,7 +40,8 @@ def split_target(target: str) -> tuple[str, str | None]:
     return target, None
 
 
-def run(cmd: str, target: str | None = None, timeout: int = DEFAULT_TIMEOUT) -> tuple[int, str]:
+def run(cmd: str, target: str | None = None, timeout: int = DEFAULT_TIMEOUT,
+        path_prefix: str | None = None) -> tuple[int, str]:
     """Execute *cmd* locally (``target is None``) or over ssh; return ``(returncode, stdout)``.
 
     BatchMode=yes so an unkeyed host fails immediately instead of prompting into a void — a
@@ -42,9 +52,9 @@ def run(cmd: str, target: str | None = None, timeout: int = DEFAULT_TIMEOUT) -> 
         argv = ["ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={SSH_CONNECT_TIMEOUT}"]
         if port:
             argv += ["-p", port]
-        argv += [host, _PATH_PREFIX + cmd]
+        argv += [host, (path_prefix or _PATH_PREFIX) + cmd]
     else:
-        argv = ["/bin/bash", "-c", _PATH_PREFIX + cmd]
+        argv = ["/bin/bash", "-c", (path_prefix or _PATH_PREFIX) + cmd]
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:

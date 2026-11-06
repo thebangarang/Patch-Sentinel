@@ -108,4 +108,31 @@ CVE_COVERAGE = {
     "parameters": {"type": "object", "properties": {}, "required": []},
 }
 
-SCHEMAS = {schema["name"]: schema for schema in (CVE_SCAN, CVE_PLAN, CVE_EXPLAIN, CVE_COVERAGE)}
+CVE_LIBRARIES = {
+    "name": "cve_libraries",
+    "description": (
+        "Check the language and framework packages installed on a host against the OSV advisory "
+        "database — the half of the attack surface an OS package manager cannot see. Use it when the "
+        "question is about the app stack rather than the OS: 'is our node/php/python stack "
+        "vulnerable?', 'any scary library versions?', 'are we exposed to <library> CVE'? It lists "
+        "npm's global tree and the pip environment of the first python3 on PATH (the same adapter "
+        "shape covers crates.io, Packagist, NuGet, RubyGems and Go when those tools are present), "
+        "queries api.osv.dev in one batch, and returns each vulnerable package with its advisory id, "
+        "aliases (CVE ids among them), a severity band, the versions that fix it and the OSV link. "
+        "Every ecosystem reports an outcome (ok / missing / unreadable) so a tool that is not "
+        "installed is never read as clean. NOT covered, and say so when asked about completeness: "
+        "per-project lockfiles, virtualenvs other than that interpreter, vendor directories, and "
+        "anything inside a container image."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "host": {"type": "string",
+                     "description": "Host label. Omit for this machine."},
+        },
+        "required": [],
+    },
+}
+
+SCHEMAS = {schema["name"]: schema
+           for schema in (CVE_SCAN, CVE_PLAN, CVE_EXPLAIN, CVE_COVERAGE, CVE_LIBRARIES)}

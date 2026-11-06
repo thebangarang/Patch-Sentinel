@@ -1,0 +1,9 @@
+{
+  "name": "lib",
+  "dependencies": {
+    "npm": {
+      "version": "11.20.0",
+      "overridden": false
+    }
+  }
+}

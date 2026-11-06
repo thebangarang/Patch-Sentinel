@@ -18,7 +18,7 @@ import os
 import re
 
 from . import plan, schemas, store, verdict
-from .sources import cve_tracker, dispatch, usn
+from .sources import cve_tracker, dispatch, languages, osv, usn
 from .sources import hosts as inventory_module
 
 MAX_PENDING = 60              # a payload the model can read; the count is always the true one
@@ -492,14 +492,87 @@ def cve_coverage(args: dict, **kwargs) -> str:
     })
 
 
+LIBRARY_LIMITS = {
+    "measured": "npm global tree; the pip environment of the first python3 on PATH",
+    "not_measured": [
+        "per-project lockfiles (package.json, composer.json, Cargo.toml, go.mod, *.csproj)",
+        "virtualenvs other than the first python3 on PATH",
+        "vendor/ and node_modules/ directories inside projects",
+        "anything inside a container image",
+    ],
+    "advisory_source": "api.osv.dev (batched query, one detail fetch per advisory shown)",
+}
+MAX_ADVISORY_RECORDS = 40
+
+
+@_never_raises
+def cve_libraries(args: dict, **kwargs) -> str:
+    requested = str(args.get("host") or "").strip() or _local_label()
+    host = next((h for h in _inventory() if h["label"].lower() == requested.lower()), None)
+    if host is None:
+        return _json({"tool": "cve_libraries",
+                      **_refusal(f"host {requested!r} is not in the inventory", nearest=_labels())})
+
+    collected = languages.collect(host["target"])
+    components = collected["components"]
+    base = {"tool": "cve_libraries", "host": host["label"], "target": host["target"] or "local",
+            "measured_at": collected["measured_at"], "outcomes": collected["outcomes"],
+            "details": collected["details"], "by_ecosystem": collected["by_ecosystem"],
+            "components": len(components), "truncated": collected["truncated"]}
+
+    if not components:
+        return _json({**base, "vulnerable": [], "exit_code": 2,
+                      "reason": "no supported language package manager answered on this host — "
+                                "nothing was measured, which is not the same as clean",
+                      "limits": LIBRARY_LIMITS})
+
+    answer = osv.query(components)
+    if not answer.get("ok"):
+        return _json({**base, "vulnerable": [], "exit_code": 2,
+                      "reason": f"the advisory database could not be queried "
+                                f"({answer.get('why')}) — unmeasured, not clean",
+                      "limits": LIBRARY_LIMITS})
+
+    pairs = list(zip(components, answer["results"]))
+    wanted = sorted({vid for _, found in pairs for vid in found})
+    records = {vid: osv.vuln(vid) for vid in wanted[:MAX_ADVISORY_RECORDS]}
+
+    vulnerable = []
+    for component, found in pairs:
+        for vid in found:
+            record = records.get(vid)
+            if record:
+                item = osv.summarise(record, component["ecosystem"], component["package"])
+            else:
+                item = {"id": vid, "aliases": [], "summary": None, "severity": None,
+                        "fixed": [], "url": f"https://osv.dev/vulnerability/{vid}"}
+            vulnerable.append({"ecosystem": component["ecosystem"],
+                               "package": component["package"],
+                               "version": component["version"], **item})
+
+    unreadable = [eco for eco, state in collected["outcomes"].items() if state == "unreadable"]
+    exit_code = 2 if unreadable else (1 if vulnerable else 0)
+    answer_line = (f"{host['label']}: {len(vulnerable)} advisory match(es) across "
+                   f"{len({(v['ecosystem'], v['package']) for v in vulnerable})} package(s), "
+                   f"from {len(components)} installed language package(s) checked"
+                   if components else f"{host['label']}: nothing measurable")
+    return _json({**base, "answer": answer_line, "vulnerable": vulnerable[:MAX_PENDING],
+                  "vulnerable_count": len(vulnerable),
+                  "advisories_examined": len(records),
+                  "advisories_truncated": len(wanted) > MAX_ADVISORY_RECORDS,
+                  "exit_code": exit_code,
+                  "limits": LIBRARY_LIMITS})
+
+
 HANDLERS = {
     "cve_scan": cve_scan,
     "cve_plan": cve_plan,
     "cve_explain": cve_explain,
     "cve_coverage": cve_coverage,
+    "cve_libraries": cve_libraries,
 }
 
 __all__ = ["HANDLERS", "SCHEMAS", "configure", "cve_scan", "cve_plan", "cve_explain",
-           "cve_coverage"]
+           "cve_coverage", "cve_libraries"]
 
 SCHEMAS = schemas.SCHEMAS
