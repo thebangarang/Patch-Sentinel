@@ -113,7 +113,9 @@ def write_seed(name: str) -> None:
     # An optional local fragment lets the operator grant this lab host things the repository must
     # not ship (a NOPASSWD sudoers rule, for one). It lives under tmp/vms/, is gitignored, and its
     # absence simply means the host gets no extra policy — which is the default and the safe case.
-    extra = LAB / "seed-extra.yaml"
+    extra = Path(os.environ.get(
+        "PATCH_SENTINEL_LAB_SEED",
+        str(Path.home() / ".config" / "patch-sentinel-lab" / "seed-extra.yaml")))
     extra_text = extra.read_text(encoding="utf-8") if extra.exists() else ""
     p["userdata"].write_text(
         "#cloud-config\n"

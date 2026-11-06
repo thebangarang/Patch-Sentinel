@@ -14,9 +14,12 @@ description: >
   ecosystems) against the OSV advisory database, returning each vulnerable package with its fixed
   versions. Read-only in the scan: it installs nothing, reboots nothing. Every check has three
   outcomes — clean, finding, could-not-look — and an unreachable host, an unimplemented distro or a
-  rate-limited registry is reported as unknown with its reason, never as patched. Known blind spots,
-  stated in every coverage answer: CVEs inside image layers, and language dependencies outside the
-  global trees.
+  rate-limited registry is reported as unknown with its reason, never as patched. A sixth tool,
+  cve_apply, can apply the plan; it is the only one that changes a machine and it refuses unless the
+  operator types the host name, the user can sudo without a prompt there, and dry_run is explicitly
+  false — staging first, re-measuring afterwards, and writing a receipt. Known blind spots, stated in
+  every coverage answer: CVEs inside image layers, and language dependencies outside the global
+  trees.
 license: MIT
 author: Kevin L. (AITurn)
 homepage: https://github.com/thebangarang/Patch-Sentinel

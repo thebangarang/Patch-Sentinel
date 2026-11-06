@@ -19,6 +19,7 @@ from pathlib import Path
 
 _SCAN = "last_scan.json"
 _RECEIPTS = "receipts.jsonl"
+_SETTINGS = "settings.json"
 _settings: dict = {}
 
 
@@ -79,6 +80,30 @@ def scan_age_seconds(scan: dict | None = None) -> float | None:
     if taken.tzinfo is None:
         taken = taken.replace(tzinfo=dt.timezone.utc)
     return (dt.datetime.now(dt.timezone.utc) - taken).total_seconds()
+
+
+def save_settings(settings: dict) -> Path:
+    """Persist the settings ``register()`` resolved, so the pane runs the same configuration.
+
+    The agent side has ``ctx.get_config``; the dashboard router has no ``ctx`` at all. Rather than
+    reaching into a private Hermes config API from the router, the side that *does* have the config
+    writes it down here (mode 600), and the router reads it back. One source of truth, no coupling.
+    """
+    path = data_dir() / _SETTINGS
+    path.write_text(json.dumps(settings or {}, indent=1, sort_keys=True), encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return path
+
+
+def load_settings() -> dict:
+    try:
+        data = json.loads((data_dir() / _SETTINGS).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def append_receipt(row: dict) -> Path:

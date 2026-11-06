@@ -20,7 +20,7 @@ its own verdict, not "patched". A registry that answered `429` is *unverified*, 
 | "what about CVE-2026-98432?" | the vendor record for that CVE: the notices that name it, the versions it fixes, whether that fix is installable or already running here, and — where the tracker's status word disagrees with the measurement — which one the verdict follows |
 | "how do we close these?" | a numbered patch plan per host: command, risk, downtime, why, how to verify, how to reverse. Nothing is executed |
 | "what are you NOT checking?" | the coverage gaps, named: CVEs inside image layers, language dependencies, hosts it cannot reach, hosts that are not Ubuntu |
-| "do it" | **refused in 0.1.0.** Applying is not built; the plan is the deliverable (see *Honest limits*) |
+| "do it" + the host name typed | `cve_apply` runs the plan: stage → apply → re-measure → receipt. Dry run by default; a real apply needs the host name typed by you *and* `dry_run=false` |
 
 ## Why it can be trusted
 
@@ -61,10 +61,13 @@ plugin settings. The plugin stores no credential for them: it uses your own SSH 
 
 ## Honest limits (v0.1.0)
 
-- **Nothing is applied.** `cve_plan` produces commands; there is no apply tool, no typed-confirmation
-  gate wired to a real change, and no receipt of an applied action. The typed gate and the receipt
-  format exist in `docs/design.md` and `store.py`; the code path does not. Saying "it patches for you"
-  would be false.
+- **Applying exists, and it is deliberately awkward.** `cve_apply` refuses unless (a) you type the
+  host name, (b) the host's own package manager has commands this version knows, (c) the user can run
+  `sudo` without a prompt on that host, and (d) `dry_run=false`. The default is a dry run. It stages,
+  applies, re-measures the host, and writes a receipt with the versions before and after. What it
+  does **not** do: schedule itself, retry, roll back automatically (each step carries its documented
+  reversal instead), or reboot for you — after a kernel update it says `reboot_required: true` and
+  stops there.
 - **OS packages + kernel + container image digests.** Not CVEs *inside* image layers (that needs an
   image scanner), not language dependencies in your own code (that needs an SBOM + a dependency
   scanner). Both are stated in every `cve_coverage` answer, at the moment they matter.

@@ -60,3 +60,27 @@
   credential path at all).
 - **Next step:** task 3 — `dashboard/{manifest.json,plugin_api.py}` and `desktop/plugin.js` (NOW /
   PENDING / GAPS), then the demo script and the catalogue PR.
+
+## 2026-11-06 (night) — multi-distro, the language layer, the pane, and an apply that really applied
+
+- **Action:** adapter layer (`apt`, `dnf`) chosen from the host's own `/etc/os-release`; a QEMU lab
+  (`scripts/lab_vm.py`) with real Fedora 45 and Debian 12 machines; the language surface through
+  osv.dev (`cve_libraries`); the desktop pane (NOW / PENDING / GAPS + gate); and `cve_apply`, the
+  gated apply.
+- **Result, on real machines:**
+  - Fedora 45 VM, first boot: 109 pending updates, kernel 7.2.11 → 7.2.15 installable, exit 1.
+  - `cve_apply` on that VM, host name typed, `dry_run=false`: stage rc 100 (1.4 s), apply rc 0
+    (105.2 s, *3 installing / 107 upgrading*), then re-measured → kernel **installed** 7.2.15,
+    **running** 7.2.11 → `kernel-reboot-needed`, `reboot_required: true`, receipt written.
+  - Rebooted the VM: `uname -r` → `7.2.15-300.fc45.x86_64`. A scan of all three machines then read
+    `exit_code 0 · findings 0 · blind 0`, every host `kernel-current`.
+  - Language layer on this machine: npm 3 + pip 1 packages, one OSV batch, 0 advisories.
+- **Bugs the real machines caught** (each now a test): `rpm -q kernel` missing on Fedora's
+  kernel-core-only image, then a bogus `modules-core` version from `kernel-modules-core`;
+  `dnf check-upgrade` exiting 100 and being read as a failed stage; `apt-get` leaking into a Fedora
+  plan (caught by rendering the pane); a rebuilt VM's stale ssh host key blocking strict checking;
+  `jsx()`'s third argument being the key, which rendered the pane empty.
+- **Docs:** `docs/lab.md` (the VM lab and the end-to-end proof with these numbers),
+  `docs/preview/pane.html` (the pane rendered from a real scan).
+- **Next step:** README + catalogue entry + the 90-second demo script; the catalogue PR must pin a
+  SHA from a clean tree.

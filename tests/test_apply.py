@@ -92,7 +92,7 @@ class Gate(unittest.TestCase):
             result = apply_mod.apply(host_entry(), "fedora@127.0.0.1:2222", "fedora-lab",
                                      dry_run=False)
         self.assertFalse(result["applied"])
-        self.assertIn("NOPASSWD", result["reason"])
+        self.assertIn("no-prompt sudo", result["reason"])
         self.assertEqual(result["steps"], [])
 
     def test_a_real_apply_verifies_by_effect_and_records_it(self):
@@ -134,6 +134,30 @@ class Gate(unittest.TestCase):
         result = apply_mod.apply(host_entry(adapter="zypper"), "x", "fedora-lab", dry_run=False)
         self.assertFalse(result["applied"])
         self.assertIn("no apply commands", result["reason"])
+
+
+class SettingsHandoff(unittest.TestCase):
+    """register() has the config, the router does not: the file is how they agree."""
+
+    def test_settings_round_trip_and_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["PATCH_SENTINEL_DATA"] = tmp
+            try:
+                store.save_settings({"hosts": "a=local,b=vps", "release": "noble"})
+                self.assertEqual(store.load_settings(),
+                                 {"hosts": "a=local,b=vps", "release": "noble"})
+                mode = oct((Path(tmp) / "settings.json").stat().st_mode & 0o777)
+                self.assertEqual(mode, "0o600")
+            finally:
+                os.environ.pop("PATCH_SENTINEL_DATA", None)
+
+    def test_a_missing_file_is_empty_not_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["PATCH_SENTINEL_DATA"] = tmp
+            try:
+                self.assertEqual(store.load_settings(), {})
+            finally:
+                os.environ.pop("PATCH_SENTINEL_DATA", None)
 
 
 class Receipts(unittest.TestCase):

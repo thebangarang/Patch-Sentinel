@@ -23,10 +23,19 @@ DEFAULTS = {
 
 def register(ctx) -> None:
     """Register the four tools. Called by the plugin loader with a real ``PluginContext``."""
-    from .patch_sentinel import schemas, tools
+    from .patch_sentinel import schemas, store, tools
 
     settings = {key: ctx.get_config(key, default) for key, default in DEFAULTS.items()}
     tools.configure(settings)
+    # The dashboard half has no ctx: it reads these back so the pane and the agent cannot disagree
+    # about which hosts exist. Only a *non-default* configuration is persisted — the validate/doctor
+    # probes call register() with a stub ctx that answers every key with its default, and writing
+    # those would silently wipe a real host list from disk.
+    if any(settings.get(key) != default for key, default in DEFAULTS.items()):
+        try:
+            store.save_settings(settings)
+        except OSError:
+            pass
 
     for name, schema in schemas.SCHEMAS.items():
         ctx.register_tool(
