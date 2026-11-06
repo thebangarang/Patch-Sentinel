@@ -75,6 +75,26 @@ this check is for.
 environment, which is why the numbers move. Per-project lockfiles are read only when you ask about a
 specific project in chat (see the GAPS panel).
 
+## 1b. A runtime reader, checked against a real toolchain
+
+No host here has PHP or Ruby, so the readers were proven in containers — the same method the distro
+adapters used:
+
+```bash
+docker run --rm composer:latest bash -lc \
+  'export COMPOSER_HOME=/tmp/c;
+   composer global require monolog/monolog:2.0.0 --no-interaction --ignore-platform-reqs -q >/dev/null 2>&1;
+   composer global show --format=json' > tests/fixtures/composer_global_show.json
+
+docker run --rm ruby:3-slim bash -lc \
+  'gem install --no-document rack -v 2.2.0 >/dev/null 2>&1; gem list --local' > tests/fixtures/gem_list_local.txt
+```
+
+Both files are committed as fixtures and asserted in `tests/test_libraries.py`. Measured: `rack
+2.2.0` returns **36 advisories** from OSV, `nokogiri 1.11.0` **33**, `laravel/framework 6.0.0` **16**
+— so the ecosystem names (`RubyGems`, `Packagist`, `crates.io`, `NuGet`) are the ones OSV expects,
+not guesses.
+
 ## 2. The update proposal, on a host with something to install
 
 A plan is only meaningful when the host has pending updates. All five lab hosts are patched except

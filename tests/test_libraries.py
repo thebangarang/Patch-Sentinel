@@ -84,6 +84,50 @@ class OsvAnswers(unittest.TestCase):
         self.assertEqual(answer["results"], [])
 
 
+class MoreRuntimes(unittest.TestCase):
+    """PHP, Ruby, Rust and .NET — added because a machine's attack surface is not just npm and pip.
+
+    The composer and gem fixtures are real captures from containers (2026-11-06); cargo and dotnet
+    outputs are the tools' documented shapes, because no host here has those toolchains yet — a
+    parser that meets an unexpected shape returns no components, which reads as "empty", never as
+    clean.
+    """
+
+    def test_the_registry_and_the_parsers_agree(self):
+        # a new ecosystem without a parser would silently collect nothing
+        self.assertEqual(set(languages.INVENTORIES), set(languages.PARSERS))
+
+    def test_composer_global_show(self):
+        rows = languages.parse_composer((FIXTURES / "composer_global_show.json").read_text())
+        self.assertIn({"package": "monolog/monolog", "version": "2.0.0"}, rows)
+        self.assertIn({"package": "psr/log", "version": "1.1.4"}, rows)
+
+    def test_gem_list_local(self):
+        rows = languages.parse_gem((FIXTURES / "gem_list_local.txt").read_text())
+        self.assertIn({"package": "rack", "version": "2.2.0"}, rows)
+        # "benchmark (default: 0.4.0)" is a real line: OSV knows the version as 0.4.0
+        self.assertIn({"package": "benchmark", "version": "0.4.0"}, rows)
+        self.assertFalse([r for r in rows if "default" in r["version"]])
+
+    def test_cargo_install_list(self):
+        text = "ripgrep v13.0.0:\n    rg\ncargo-binstall v1.6.4:\n    cargo-binstall\n"
+        self.assertEqual(languages.parse_cargo(text),
+                         [{"package": "ripgrep", "version": "13.0.0"},
+                          {"package": "cargo-binstall", "version": "1.6.4"}])
+
+    def test_dotnet_tool_list(self):
+        text = ("Package Id      Version      Commands\n"
+                "----------------------------------------\n"
+                "dotnetsay       2.1.4        dotnetsay\n")
+        self.assertEqual(languages.parse_dotnet(text),
+                         [{"package": "dotnetsay", "version": "2.1.4"}])
+
+    def test_an_unexpected_shape_is_empty_not_clean(self):
+        self.assertEqual(languages.parse_cargo("error: no such command"), [])
+        self.assertEqual(languages.parse_gem("*** LOCAL GEMS ***"), [])
+        self.assertEqual(languages.parse_composer("<html>proxy error</html>"), [])
+
+
 class FixVersions(unittest.TestCase):
     """`fixed` must hold versions an operator can install — nothing else."""
 

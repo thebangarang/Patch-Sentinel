@@ -58,6 +58,34 @@ INVENTORIES: dict[str, dict] = {
     },
 }
 
+# The rest of the toolchains, added one reader at a time. Each is a local command whose output is
+# either JSON or a stable table — no binaries, no database, and a missing tool is an outcome.
+INVENTORIES["Packagist"] = {
+    "label": "composer (global packages)",
+    "candidates": [{"detect": "command -v composer",
+                    "command": "composer global show --format=json",
+                    "label": "composer's global vendor"}],
+    "missing_detail": "composer is not on PATH on this host",
+}
+INVENTORIES["RubyGems"] = {
+    "label": "gem (local gems)",
+    "candidates": [{"detect": "command -v gem", "command": "gem list --local",
+                    "label": "gem's local list"}],
+    "missing_detail": "ruby/gem is not on PATH on this host",
+}
+INVENTORIES["crates.io"] = {
+    "label": "cargo (installed binaries)",
+    "candidates": [{"detect": "command -v cargo", "command": "cargo install --list",
+                    "label": "cargo's installed binaries"}],
+    "missing_detail": "cargo is not on PATH on this host",
+}
+INVENTORIES["NuGet"] = {
+    "label": "dotnet (global tools)",
+    "candidates": [{"detect": "command -v dotnet", "command": "dotnet tool list -g",
+                    "label": "dotnet's global tools"}],
+    "missing_detail": "dotnet is not on PATH on this host",
+}
+
 MAX_COMPONENTS = 600          # bounds the OSV query and the payload
 
 
@@ -93,7 +121,77 @@ def parse_pip(text: str) -> list[dict]:
     return out
 
 
-PARSERS = {"npm": parse_npm, "PyPI": parse_pip}
+def parse_composer(text: str) -> list[dict]:
+    """``composer global show --format=json`` → components (``installed[]``, name + version)."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    items = data.get("installed") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return []
+    out = []
+    for item in items:
+        name, version = (item or {}).get("name"), (item or {}).get("version")
+        if name and version:
+            out.append({"package": str(name), "version": str(version)})
+    return out
+
+
+def parse_gem(text: str) -> list[dict]:
+    """``gem list --local`` → components. Ruby prints ``name (1.2.3, 1.2.4)`` and may print several
+    versions of one gem at once; each pair is a separate row because each is a separate answer from
+    OSV."""
+    out, seen = [], set()
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("*") or " (" not in line or not line.endswith(")"):
+            continue
+        name, _, rest = line.partition(" (")
+        for version in rest.rstrip(")").split(","):
+            version = version.strip()
+            # default gems are printed "name (default: 1.2.3)": the version OSV knows is 1.2.3
+            if version.startswith("default:"):
+                version = version[len("default:"):].strip()
+            if not name or not version or (name, version) in seen:
+                continue
+            seen.add((name, version))
+            out.append({"package": name.strip(), "version": version})
+    return out
+
+
+def parse_cargo(text: str) -> list[dict]:
+    """``cargo install --list`` → components. Lines are ``name v1.2.3:`` followed by the binaries."""
+    out = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.endswith(":") or " v" not in line:
+            continue
+        name, _, version = line.rstrip(":").partition(" v")
+        if name and version:
+            out.append({"package": name.strip(), "version": version.strip()})
+    return out
+
+
+def parse_dotnet(text: str) -> list[dict]:
+    """``dotnet tool list -g`` → components. A fixed-width table: Package Id / Version / Commands,
+    with a dashed separator. Header and separator are skipped by shape, not by name."""
+    out = []
+    for line in text.splitlines():
+        if "  " not in line or set(line.strip()) <= set("- "):
+            continue
+        cells = [cell for cell in line.split("  ") if cell.strip()]
+        if len(cells) < 2:
+            continue
+        name, version = cells[0].strip(), cells[1].strip()
+        if name.lower().startswith("package") or not version[:1].isdigit():
+            continue
+        out.append({"package": name, "version": version})
+    return out
+
+
+PARSERS = {"npm": parse_npm, "PyPI": parse_pip, "Packagist": parse_composer,
+           "RubyGems": parse_gem, "crates.io": parse_cargo, "NuGet": parse_dotnet}
 
 
 def collect(target: str | None = None, timeout: int = 90) -> dict:

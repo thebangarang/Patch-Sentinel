@@ -132,7 +132,7 @@ function label(text, extra) {
   }, text)
 }
 
-function Copy({ text, what }) {
+function Copy({ text, what, label }) {
   const [done, setDone] = useState(false)
   const onClick = useCallback(async () => {
     try {
@@ -153,7 +153,7 @@ function Copy({ text, what }) {
       color: done ? C.ok : C.dim, background: 'transparent',
       border: '1px solid ' + C.border, borderRadius: '3px'
     }
-  }, done ? 'copied' : 'copy')
+  }, done ? 'copied' : (label || 'copy'))
 }
 
 // --------------------------------------------------------------------------- NOW
@@ -372,7 +372,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
             packages.length + ' package(s) · ' + vulnerable.length + ' finding(s)')
         : null,
       flagged && flagged.length
-        ? jsx(Copy, { text: fixLines.join('\n'), what: 'the upgrade commands' })
+        ? jsx(Copy, { text: fixLines.join('\n'), label: 'copy fix commands' })
         : null,
       jsx('button', {
         type: 'button',
@@ -489,7 +489,7 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning }) {
   const refusals = (plan && plan.refusals) || []
   return jsxs('section', { style: { marginBottom: '18px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label('pending'),
+      label('plan'),
       jsx('span', { style: { flex: 1 } }),
       jsx('button', {
         type: 'button',
@@ -853,7 +853,10 @@ export function PatchSentinel({ compact }) {
     style: {
       padding: compact ? '10px 12px' : '18px 22px',
       color: C.text, fontSize: '0.8125rem',
-      maxWidth: compact ? 'none' : '900px'
+      maxWidth: compact ? 'none' : '900px',
+      // the app chrome turns selection off; a pane full of package names and commands is worthless
+      // if you cannot copy a line out of it
+      userSelect: 'text', WebkitUserSelect: 'text'
     }
   }, [
     jsx('style', {}, `
@@ -915,7 +918,8 @@ export function PatchSentinel({ compact }) {
         ' — the distro\'s own update list (apt, dnf, pacman, zypper), every package it would upgrade.'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'libs & runtimes'),
         ' — the language packages installed on this machine, checked against OSV: npm and pip today; PHP, Go, Rust and .NET are named gaps.'),
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'pending'), ' — this host\'s updates turned into ordered commands, each with a way back.'),
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'plan'),
+        ' — the system packages above turned into ordered commands (risk, downtime, how to verify, how to undo).'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'gaps'), ' — what this scan could not see. Red here is a fact about the scan, not the host.'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'apply'), ' — the only control that changes a machine, and it needs the host name typed.')
     ]),

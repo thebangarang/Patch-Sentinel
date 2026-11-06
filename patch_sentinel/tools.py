@@ -546,8 +546,11 @@ def cve_coverage(args: dict, **kwargs) -> str:
                  "digest check still tells you a newer build exists."},
         {"gap": "language packages outside the global trees",
          "state": "partly measured", "hosts": "every", "kind": "limit",
-         "why": "cve_libraries reads npm's global tree and the pip environment on PATH; "
-                "per-project lockfiles, other virtualenvs and vendor/ directories are not read",
+         "why": "cve_libraries reads the machine-wide installs it can list: npm's global tree, the "
+                "first pip on PATH, composer's global vendor, local gems, cargo's installed "
+                "binaries, dotnet's global tools. Per-project lockfiles (composer.json, Cargo.toml, "
+                "go.mod, *.csproj), other virtualenvs and vendor/ directories are not read. Go and "
+                "Maven have no machine-wide list to read at all.",
          "consequence": "a vulnerable dependency of one project can be invisible while the "
                         "machine-level list is clean",
          "next": "name the project in chat and I will query OSV for its packages ('which of my "
@@ -606,7 +609,10 @@ def cve_coverage(args: dict, **kwargs) -> str:
 
 
 LIBRARY_LIMITS = {
-    "measured": "npm global tree; the pip environment of the first python3 on PATH",
+    "measured": ("npm's global tree, the pip environment of the first python3 on PATH, composer's "
+                 "global vendor, local gems, cargo's installed binaries, and dotnet's global tools"),
+    "missing_toolchains": ("a toolchain that is not installed here is reported as 'missing', never "
+                           "as zero findings"),
     "not_measured": [
         "per-project lockfiles (package.json, composer.json, Cargo.toml, go.mod, *.csproj)",
         "virtualenvs other than the first python3 on PATH",

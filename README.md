@@ -50,6 +50,24 @@ its own verdict, not "patched". A registry that answered `429` is *unverified*, 
 The adapter is chosen from the host's own `/etc/os-release`; every claim below was read off a real
 machine, not written from documentation.
 
+### Language runtimes
+
+`cve_libraries` lists what each toolchain reports as installed **machine-wide**, then asks OSV (the
+same database osv.dev serves) for advisories naming those exact versions:
+
+| ecosystem | read from | status |
+|---|---|---|
+| npm | `npm ls -g --json` | proven (real machine) |
+| PyPI | `pip list --format=json` (first pip on PATH) | proven (real machine) |
+| Packagist | `composer global show --format=json` | proven (container capture) |
+| RubyGems | `gem list --local` | proven (container capture) |
+| crates.io | `cargo install --list` | parser proven; no host with cargo yet |
+| NuGet | `dotnet tool list -g` | parser proven; no host with dotnet yet |
+
+A toolchain that is not installed reports **`missing`**, never "zero findings". Project-local
+dependencies (a `composer.json`, `Cargo.toml`, `go.mod`, `*.csproj`) are **not** read — Go and Maven
+have no machine-wide list to read at all — and that is stated in `cve_coverage` on every run.
+
 | family | covers | proven on |
 |---|---|---|
 | `apt` | Ubuntu, Debian, Mint, Pop, Proxmox, Kali… | this machine (Ubuntu 26.04) and a Debian 12 VM |
