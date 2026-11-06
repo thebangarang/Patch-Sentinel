@@ -126,8 +126,38 @@ def _cvss_band(vector: str) -> str:
     return "moderate"
 
 
+_HEADING_RE = re.compile(r"^#{1,6}[^\n]*$", re.M)
+_WORKAROUND_RE = re.compile(r"^#{1,6}\s*(workarounds?|mitigations?|temporary (fix|mitigation)|"
+                            r"remediations?)\b", re.I | re.M)
+
+
+def workaround(record: dict) -> str | None:
+    """The advisory's own workaround section, when it has one.
+
+    "Waiting for the distro to ship a patch" is not the same as "nothing can be done": many advisories
+    carry a Workarounds section (disable a feature, set a flag, block a route). Those words are the
+    vendor's, not ours — this quotes them rather than inventing mitigations, which is the only way a
+    temporary fix can be trusted.
+    """
+    details = record.get("details") or ""
+    if not details:
+        return None
+    match = _WORKAROUND_RE.search(details)
+    if not match:
+        return None
+    rest = details[match.end():]
+    following = _HEADING_RE.search(rest)
+    section = (rest[:following.start()] if following else rest).strip()
+    section = " ".join(line.strip() for line in section.splitlines() if line.strip())
+    return section[:700] or None
+
+
 def summarise(record: dict, ecosystem: str, package: str) -> dict:
-    """The four things a person needs: what it is, how bad, what fixes it, what else it is called."""
+    """The four things a person needs: what it is, how bad, what fixes it, what else it is called.
+
+    Plus, when the advisory carries one, the vendor's own workaround — the temporary mitigation an
+    operator can apply while the patched version is not available yet.
+    """
     return {
         "id": record.get("id"),
         "aliases": [a for a in (record.get("aliases") or [])][:4],
@@ -135,5 +165,6 @@ def summarise(record: dict, ecosystem: str, package: str) -> dict:
         "severity": severity(record),
         "published": record.get("published"),
         "fixed": fixed_versions(record, ecosystem, package),
+        "workaround": workaround(record),
         "url": f"https://osv.dev/vulnerability/{record.get('id')}" if record.get("id") else None,
     }

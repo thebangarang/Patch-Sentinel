@@ -63,10 +63,16 @@ same database osv.dev serves) for advisories naming those exact versions:
 | RubyGems | `gem list --local` | proven (container capture) |
 | crates.io | `cargo install --list` | parser proven; no host with cargo yet |
 | NuGet | `dotnet tool list -g` | parser proven; no host with dotnet yet |
+| Maven | every `*.pom` under `~/.m2/repository` | proven (container capture, 227 artifacts) |
+| Go | `go version -m` on each binary in `GOPATH/bin` | parser proven; no host with go yet |
 
 A toolchain that is not installed reports **`missing`**, never "zero findings". Project-local
-dependencies (a `composer.json`, `Cargo.toml`, `go.mod`, `*.csproj`) are **not** read — Go and Maven
-have no machine-wide list to read at all — and that is stated in `cve_coverage` on every run.
+dependency files (`package-lock.json`, `composer.json`, `Cargo.toml`, `go.mod`, `*.csproj`) are
+**not** read, and that is stated in `cve_coverage` on every run.
+
+Where an advisory carries one, the finding also shows the **vendor's own workaround** — the temporary
+mitigation (disable a feature, validate input, set a flag) you can apply while the patched version is
+not installed yet. It is quoted from the advisory, never invented.
 
 | family | covers | proven on |
 |---|---|---|

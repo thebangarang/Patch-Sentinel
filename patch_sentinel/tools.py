@@ -548,9 +548,9 @@ def cve_coverage(args: dict, **kwargs) -> str:
          "state": "partly measured", "hosts": "every", "kind": "limit",
          "why": "cve_libraries reads the machine-wide installs it can list: npm's global tree, the "
                 "first pip on PATH, composer's global vendor, local gems, cargo's installed "
-                "binaries, dotnet's global tools. Per-project lockfiles (composer.json, Cargo.toml, "
-                "go.mod, *.csproj), other virtualenvs and vendor/ directories are not read. Go and "
-                "Maven have no machine-wide list to read at all.",
+                "binaries, dotnet's global tools, Maven's local repository, and Go's installed "
+                "binaries. Per-project dependency files (package-lock.json, composer.json, "
+                "Cargo.toml, go.mod, *.csproj) and other virtualenvs are not read.",
          "consequence": "a vulnerable dependency of one project can be invisible while the "
                         "machine-level list is clean",
          "next": "name the project in chat and I will query OSV for its packages ('which of my "
@@ -620,8 +620,9 @@ def cve_coverage(args: dict, **kwargs) -> str:
 
 
 LIBRARY_LIMITS = {
-    "measured": ("npm's global tree, the pip environment of the first python3 on PATH, composer's "
-                 "global vendor, local gems, cargo's installed binaries, and dotnet's global tools"),
+    "measured": ("npm's global tree, the first pip on PATH, composer's global vendor, local gems, "
+                 "cargo's installed binaries, dotnet's global tools, Maven's local repository and "
+                 "the modules behind Go's installed binaries"),
     "missing_toolchains": ("a toolchain that is not installed here is reported as 'missing', never "
                            "as zero findings"),
     "not_measured": [

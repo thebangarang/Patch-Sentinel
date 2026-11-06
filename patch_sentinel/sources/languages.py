@@ -79,6 +79,29 @@ INVENTORIES["crates.io"] = {
                     "label": "cargo's installed binaries"}],
     "missing_detail": "cargo is not on PATH on this host",
 }
+# Java has no global install list either — but Maven keeps every artifact it has ever resolved in
+# ~/.m2/repository, laid out as group/path/artifact/version/. That store IS machine-wide, and it is
+# what a build will reuse, so it is honest to read it: the coordinates OSV wants are group:artifact.
+INVENTORIES["Maven"] = {
+    "label": "maven (local repository)",
+    "candidates": [{"detect": "test -d \"$HOME/.m2/repository\"",
+                    "command": "find \"$HOME/.m2/repository\" -name '*.pom' 2>/dev/null "
+                               "| sed 's|.*/repository/||'",
+                    "label": "~/.m2/repository"}],
+    "missing_detail": "no ~/.m2/repository on this host",
+}
+# Go installs binaries, not a package store: `go version -m` on each binary in GOPATH/bin reports the
+# modules it was built from, which is the only machine-wide module list that exists.
+INVENTORIES["Go"] = {
+    "label": "go (installed binaries)",
+    "candidates": [{"detect": "command -v go",
+                    "command": "for b in \"$(go env GOPATH 2>/dev/null)/bin\"/*; do "
+                               "[ -x \"$b\" ] && go version -m \"$b\" 2>/dev/null; done "
+                               r"| sed -n 's/^[[:space:]]*dep[[:space:]]\{1,\}\([^[:space:]]\{1,\}\)"
+                               r"[[:space:]]\{1,\}\([^[:space:]]\{1,\}\).*/\1 \2/p'",
+                    "label": "GOPATH/bin binaries"}],
+    "missing_detail": "go is not on PATH on this host",
+}
 INVENTORIES["NuGet"] = {
     "label": "dotnet (global tools)",
     "candidates": [{"detect": "command -v dotnet", "command": "dotnet tool list -g",
@@ -190,8 +213,53 @@ def parse_dotnet(text: str) -> list[dict]:
     return out
 
 
+def parse_maven_poms(text: str) -> list[dict]:
+    """``find ~/.m2/repository -name '*.pom'`` → Maven coordinates as OSV wants them (group:artifact).
+
+    Path shape: ``org/apache/commons/commons-lang3/3.12.0/commons-lang3-3.12.0.pom`` — so the last
+    two segments before the file are version and artifact, everything before them is the group.
+    """
+    out, seen = [], set()
+    for line in text.splitlines():
+        parts = [part for part in line.strip().split("/") if part and not part.endswith(".pom")]
+        if len(parts) < 3:
+            continue
+        version, artifact, group = parts[-1], parts[-2], ".".join(parts[:-2])
+        if not group or not artifact or not version:
+            continue
+        coordinate = f"{group}:{artifact}"
+        if (coordinate, version) in seen:
+            continue
+        seen.add((coordinate, version))
+        out.append({"package": coordinate, "version": version})
+    return out
+
+
+def parse_go_modules(text: str) -> list[dict]:
+    """``go version -m <binary>`` dep lines → module + version (``golang.org/x/tools v0.1.0``)."""
+    out, seen = [], set()
+    for line in text.splitlines():
+        # accepts both the raw `go version -m` line ("\tdep\tmodule\tversion\th1:…") and the
+        # two-field form the probe's sed produces, so a quoting change cannot silently empty this
+        bits = line.replace("\t", " ").split()
+        if bits[:1] == ["dep"] and len(bits) >= 3:
+            module, version = bits[1], bits[2]
+        elif len(bits) == 2:
+            module, version = bits
+        else:
+            continue
+        if "/" not in module or not version.startswith("v"):
+            continue
+        if (module, version) in seen:
+            continue
+        seen.add((module, version))
+        out.append({"package": module, "version": version})
+    return out
+
+
 PARSERS = {"npm": parse_npm, "PyPI": parse_pip, "Packagist": parse_composer,
-           "RubyGems": parse_gem, "crates.io": parse_cargo, "NuGet": parse_dotnet}
+           "RubyGems": parse_gem, "crates.io": parse_cargo, "NuGet": parse_dotnet,
+           "Maven": parse_maven_poms, "Go": parse_go_modules}
 
 
 def collect(target: str | None = None, timeout: int = 90) -> dict:

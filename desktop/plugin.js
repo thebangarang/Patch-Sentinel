@@ -337,6 +337,9 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
     if (!entry.severity || (RANK[severity] || 0) > (RANK[entry.severity] || 0)) entry.severity = severity
     for (const fix of v.fixed || []) if (fix && !entry.fixes.includes(fix)) entry.fixes.push(fix)
     if (v.id) entry.ids.push(v.id)
+    // the vendor's own workaround, when the advisory carries one: what to do while the patch is not
+    // installed yet (disable a feature, validate input, set a flag)
+    if (!entry.workaround && v.workaround) entry.workaround = v.workaround
   }
   const hit = new Set(Object.keys(foundByPackage))
   const needle = query.trim().toLowerCase()
@@ -349,6 +352,10 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
     .sort((a, b) => (hit.has(keyOf(b)) ? 1 : 0) - (hit.has(keyOf(a)) ? 1 : 0)
                     || String(a.package).localeCompare(String(b.package)))
   const hidden = matching.length - rows.length
+  const readEcosystems = Object.entries((libraries && libraries.by_ecosystem) || {})
+    .filter(([, count]) => count > 0).map(([eco]) => eco)
+  const missingEcosystems = Object.entries((libraries && libraries.outcomes) || {})
+    .filter(([, outcome]) => outcome === 'missing').map(([eco]) => eco)
 
   /** The command that closes a finding, for the ecosystem the check actually read. */
   const fixCommand = (row, found) => {
@@ -389,9 +396,10 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
     libraries
       ? jsxs('div', {}, [
           jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '4px' } },
-            (libraries.answer || '') + (libraries.details
-              ? ' · ' + Object.entries(libraries.details).map(([k, v]) => k + ' via ' + v).join(', ')
-              : '')),
+            (libraries.answer || '')
+            + (readEcosystems.length ? ' · read: ' + readEcosystems.join(', ') : '')
+            + (missingEcosystems.length
+                ? ' · not installed here: ' + missingEcosystems.join(', ') : '')),
           vulnerable.length
             ? jsx('div', { style: { fontSize: '0.6875rem', color: C.dim, marginBottom: '4px', lineHeight: 1.45 } },
                 'A finding is a published advisory that names this exact version — one package can carry many, '
@@ -462,6 +470,12 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                       marginTop: '1px', wordBreak: 'break-all'
                     }
                   }, '→ ' + fixCommand(row, found))
+                : null,
+              found && found.workaround
+                ? jsx('div', {
+                    style: { fontSize: '0.5625rem', color: C.warn, marginTop: '2px', lineHeight: 1.4 }
+                  }, 'workaround, from the advisory: ' + found.workaround.slice(0, 260)
+                     + (found.workaround.length > 260 ? '…' : ''))
                 : null
             ])
           })),
@@ -917,7 +931,7 @@ export function PatchSentinel({ compact }) {
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'system packages'),
         ' — the distro\'s own update list (apt, dnf, pacman, zypper), every package it would upgrade.'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'libs & runtimes'),
-        ' — the language packages installed on this machine, checked against OSV: npm and pip today; PHP, Go, Rust and .NET are named gaps.'),
+        ' — what each language toolchain has installed machine-wide, checked against OSV: npm, pip, PHP, Ruby, Rust, .NET, Maven and Go.'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'plan'),
         ' — the system packages above turned into ordered commands (risk, downtime, how to verify, how to undo).'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'gaps'), ' — what this scan could not see. Red here is a fact about the scan, not the host.'),

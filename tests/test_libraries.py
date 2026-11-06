@@ -122,6 +122,40 @@ class MoreRuntimes(unittest.TestCase):
         self.assertEqual(languages.parse_dotnet(text),
                          [{"package": "dotnetsay", "version": "2.1.4"}])
 
+    def test_maven_local_repository(self):
+        # 227 real .pom paths from `mvn dependency:get` inside maven:3-eclipse-temurin-21
+        rows = languages.parse_maven_poms((FIXTURES / "m2_repository_poms.txt").read_text())
+        self.assertGreater(len(rows), 150)
+        self.assertIn({"package": "org.apache.logging.log4j:log4j-core", "version": "2.14.1"}, rows,
+                      "group:artifact is the coordinate OSV expects, rebuilt from the path")
+        self.assertIn({"package": "org.apache.commons:commons-lang3", "version": "3.12.0"}, rows)
+        self.assertEqual(len({(r["package"], r["version"]) for r in rows}), len(rows), "no duplicates")
+
+    def test_go_binary_build_info(self):
+        text = ("golang.org/x/tools/cmd/stringer\t(devel)\n"
+                "\tpath\tgolang.org/x/tools/cmd/stringer\n"
+                "\tmod\tgolang.org/x/tools\tv0.1.0\th1:abc=\n"
+                "\tdep\tgolang.org/x/mod\tv0.4.2\th1:def=\n"
+                "\tdep\tgolang.org/x/sys\tv0.0.0-20210510120138-977fb7262007\th1:ghi=\n")
+        self.assertEqual(languages.parse_go_modules(text),
+                         [{"package": "golang.org/x/mod", "version": "v0.4.2"},
+                          {"package": "golang.org/x/sys",
+                           "version": "v0.0.0-20210510120138-977fb7262007"}])
+
+    def test_the_advisorys_own_workaround_is_quoted(self):
+        # GHSA-qw6h-vgh9-j6wx (express, real record): "users are encouraged to upgrade … but
+        # otherwise can workaround this issue by …" — the vendor's words, not ours
+        record = json.loads((FIXTURES / "osv_vuln_express_workaround.json").read_text())
+        text = osv.workaround(record)
+        self.assertIsNotNone(text)
+        self.assertIn("workaround", text.lower())
+        self.assertNotIn("###", text, "the section must end at the next heading")
+        self.assertEqual(osv.summarise(record, "npm", "express")["workaround"], text)
+
+    def test_an_advisory_without_a_workaround_says_none(self):
+        record = json.loads((FIXTURES / "osv_vuln_lodash.json").read_text())
+        self.assertIsNone(osv.workaround(record))
+
     def test_an_unexpected_shape_is_empty_not_clean(self):
         self.assertEqual(languages.parse_cargo("error: no such command"), [])
         self.assertEqual(languages.parse_gem("*** LOCAL GEMS ***"), [])
