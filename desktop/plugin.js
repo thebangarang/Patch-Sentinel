@@ -310,7 +310,9 @@ function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
 /** What the language check actually read, and what it found. Nothing runs until you ask. */
 function LanguagesPanel({ libraries, onCheck, busy }) {
   const [query, setQuery] = useState('')
-  const [onlyFindings, setOnlyFindings] = useState(false)
+  // a list of 130 rows where 127 say "clean" buries the three that matter: findings first, the rest
+  // behind an explicit "show all" — the count of what was checked is still on screen either way
+  const [showAll, setShowAll] = useState(false)
   const answered = (libraries && libraries.packages) || []
   const vulnerable = (libraries && libraries.vulnerable) || []
   // if the payload carries findings but no inventory (an older backend, or a host that answered
@@ -338,12 +340,14 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   const hit = new Set(Object.keys(foundByPackage))
   const needle = query.trim().toLowerCase()
   const keyOf = (p) => (p.ecosystem || '') + '/' + p.package
-  const rows = packages
-    .filter((p) => !needle || (p.package || '').toLowerCase().includes(needle))
-    .filter((p) => !onlyFindings || hit.has(keyOf(p)))
-    // findings first: the rows that matter should not be buried under 400 clean ones
+  const matching = packages.filter((p) => !needle || (p.package || '').toLowerCase().includes(needle))
+  const flagged = matching.filter((p) => hit.has(keyOf(p)))
+  // nothing flagged? then the clean list IS the answer, so show it rather than an empty box
+  const rows = (showAll || !flagged.length ? matching : flagged)
+    .slice()
     .sort((a, b) => (hit.has(keyOf(b)) ? 1 : 0) - (hit.has(keyOf(a)) ? 1 : 0)
                     || String(a.package).localeCompare(String(b.package)))
+  const hidden = matching.length - rows.length
 
   return jsxs('section', { style: { marginBottom: '18px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
@@ -393,15 +397,18 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 borderRadius: '3px'
               }
             }),
-            jsx('button', {
-              type: 'button',
-              onClick: () => setOnlyFindings((current) => !current),
-              style: {
-                fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: 'pointer',
-                color: onlyFindings ? C.danger : C.dim, background: 'transparent',
-                border: '1px solid ' + (onlyFindings ? C.danger : C.border), borderRadius: '3px'
-              }
-            }, onlyFindings ? 'showing findings' : 'only findings')
+            flagged.length
+              ? jsx('button', {
+                  type: 'button',
+                  onClick: () => setShowAll((current) => !current),
+                  title: 'the packages with no advisory are still counted, just not listed',
+                  style: {
+                    fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: 'pointer',
+                    color: showAll ? C.accent : C.dim, background: 'transparent',
+                    border: '1px solid ' + (showAll ? C.accent : C.border), borderRadius: '3px'
+                  }
+                }, showAll ? 'findings only' : 'show all ' + matching.length)
+              : null
           ]),
           jsx('div', {
             style: {
@@ -432,12 +439,14 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
           })),
           !rows.length
             ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint } },
-                onlyFindings ? 'no findings in what was read' : 'nothing matches the filter')
+                needle ? 'nothing matches the filter' : 'nothing was read')
             : null,
-          rows.length
+          hidden > 0
             ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '3px' } },
+                hidden + ' more package(s) read and clean (no advisory names their version) — '
+                + '“show all ' + matching.length + '” lists them')
+            : jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '3px' } },
                 rows.length + ' row(s) in the box above — it scrolls, the filter narrows')
-            : null
         ])
       : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, padding: '6px 0' } },
           'not read yet — press check. It reads npm\'s global tree and the pip environment on PATH; '

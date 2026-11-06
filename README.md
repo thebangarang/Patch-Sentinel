@@ -65,6 +65,23 @@ not a shell block) before it is a real claim.
 
 `docs/lab.md` has the lab recipe and every number above.
 
+## Patching a remote server, from here
+
+The inventory is just `label=target` pairs, and the target is anything `ssh` understands — so a VPS is
+one entry, not a second product:
+
+```bash
+hermes config set plugins.entries.patch-sentinel.settings.hosts \
+  'beelink=local,webasix=webasix'          # or vps=deploy@203.0.113.10:2222
+```
+
+`webasix` is an `~/.ssh/config` alias; a `user@host:port` works the same way. The probe is a single
+round trip over `ssh -o BatchMode=yes`, so it never prompts for a password: the key must already work
+non-interactively. Scanning, planning and the gated apply then behave exactly as they do locally —
+`cve_apply` still needs the host label typed, still stages first, still re-measures and writes a
+receipt. **Applying to a production server is a real change**: read the plan and its reversal line
+first, and apply one host at a time.
+
 ## Check that it works
 
 ```bash
