@@ -137,6 +137,11 @@ class MoreRuntimes(unittest.TestCase):
         rows = languages.parse_uv_tools((FIXTURES / "uv_tool_list.txt").read_text())
         self.assertEqual(rows, [{"package": "ruff", "version": "0.17.4"}])
 
+    def test_dart_global_packages(self):
+        # real `dart pub global list` from dart:stable after `dart pub global activate args`
+        rows = languages.parse_pub_global((FIXTURES / "pub_global_list.txt").read_text())
+        self.assertEqual(rows, [{"package": "args", "version": "2.5.0"}])
+
     def test_gradle_cache_layout(self):
         # files-2.1/<group>/<artifact>/<version>/<sha1>/<artifact>-<version>.jar
         text = ("org/apache/logging/log4j/log4j-core/2.14.1/9d5a1a2b/log4j-core-2.14.1.jar\n"

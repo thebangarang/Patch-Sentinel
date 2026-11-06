@@ -44,6 +44,7 @@ those exact versions.
 | Maven | every `*.pom` under `~/.m2/repository`, plus `*.jar` under `~/.gradle/caches/modules-2/files-2.1` | container capture (`maven:3-eclipse-temurin-21`), 227 artifacts; Gradle layout from the tool's own directory scheme, no capture yet |
 | Go | `go version -m` on each `GOPATH/bin` binary | container capture (`golang:alpine`) |
 | crates.io | `cargo install --list` | container capture (`rust:1-slim`), path-install shape |
+| Pub (Dart) | `dart pub global list` | container capture (`dart:stable`), args 2.5.0 |
 | NuGet | `~/.nuget/packages` (ids read from each `.nuspec`), then `dotnet tool list -g` | container capture (`dotnet/sdk:8.0`), Newtonsoft.Json 12.0.1 + Serilog 2.10.0 |
 
 Each capture is committed under `tests/fixtures/` and asserted in `tests/test_libraries.py`, so the
@@ -65,6 +66,7 @@ Ecosystem names were confirmed against the live API rather than assumed: `rack 2
 | project lockfiles (`package-lock.json`, `composer.lock`, `Cargo.toml`, `go.mod`, `*.csproj`) | per-project, not machine-wide; guessing which project is meant is how a scanner lies. One chat question away. |
 | inside container images | needs an image scanner (trivy) and a vulnerability database; refused on purpose in 0.1.0. |
 | Hex/Elixir, CocoaPods, Swift | no machine-wide store — both resolve per project. |
+| `~/.gradle/caches` verification | the reader exists and its layout is documented, but no Gradle build has been captured yet — it is the one row here without a fixture. |
 | Conda, CPAN, CRAN, PECL | OSV does not carry these ecosystems, so a reader would produce findings nobody can look up. |
 | Windows (winget/choco) | needs a PowerShell transport, not a shell block. |
 

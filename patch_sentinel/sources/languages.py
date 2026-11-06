@@ -124,6 +124,14 @@ INVENTORIES["NuGet"] = {
     "missing_detail": "neither ~/.nuget/packages nor the dotnet CLI is on this host",
 }
 
+# Dart/Flutter keeps its global packages in PUB_CACHE, listed by the tool itself.
+INVENTORIES["Pub"] = {
+    "label": "dart (global packages)",
+    "candidates": [{"detect": "command -v dart", "command": "dart pub global list",
+                    "label": "dart pub global"}],
+    "missing_detail": "dart is not on PATH on this host",
+}
+
 INVENTORIES["PyPI"]["candidates"] += [
     {"detect": "command -v pipx", "command": "pipx list --short",
      "label": "pipx's venvs", "parser": "pipx"},
@@ -329,6 +337,16 @@ def parse_uv_tools(text: str) -> list[dict]:
     return out
 
 
+def parse_pub_global(text: str) -> list[dict]:
+    """``dart pub global list`` → components. One line per package: ``args 2.5.0``."""
+    out = []
+    for line in text.splitlines():
+        bits = line.split()
+        if len(bits) >= 2 and bits[1][:1].isdigit():
+            out.append({"package": bits[0], "version": bits[1]})
+    return out
+
+
 def parse_gradle(text: str) -> list[dict]:
     """``files-2.1/<group>/<artifact>/<version>/<sha1>/<artifact>-<version>.jar`` → coordinates."""
     out, seen = [], set()
@@ -349,7 +367,7 @@ PARSERS = {"npm": parse_npm, "PyPI": parse_pip, "Packagist": parse_composer,
            "RubyGems": parse_gem, "crates.io": parse_cargo, "NuGet": parse_dotnet,
            "Maven": parse_maven_poms, "Go": parse_go_modules,
            "nuget_store": parse_nuget_store, "pipx": parse_pipx, "uv": parse_uv_tools,
-           "gradle": parse_gradle}
+           "gradle": parse_gradle, "Pub": parse_pub_global}
 
 
 def collect(target: str | None = None, timeout: int = 90) -> dict:

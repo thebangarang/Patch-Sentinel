@@ -58,7 +58,8 @@ same database osv.dev serves) for advisories naming those exact versions:
 | ecosystem | read from | status |
 |---|---|---|
 | npm | `npm ls -g --json` | proven (real machine) |
-| PyPI | `pip list --format=json` (first pip on PATH) | proven (real machine) |
+| PyPI | `pip list`, `pipx list --short`, `uv tool list` | proven (real machine + container) |
+| Pub (Dart) | `dart pub global list` | proven (container capture) |
 | Packagist | `composer global show --format=json` | proven (container capture) |
 | RubyGems | `gem list --local` | proven (container capture) |
 | crates.io | `cargo install --list` | proven (container capture, rust:1-slim) |
