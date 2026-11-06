@@ -40,12 +40,21 @@ class DashboardRoutes(unittest.TestCase):
         app.include_router(module.router, prefix="/api/plugins/patch-sentinel")
         cls.client = TestClient(app)
         cls.base = "/api/plugins/patch-sentinel"
+        cls.module = module
 
     def test_health_names_the_tools(self):
         body = self.client.get(self.base + "/health").json()
         self.assertTrue(body["ok"])
+        # pinned on purpose: a tool that quietly disappears from the pane's health is a pane that
+        # silently loses a surface. cve_apply is the gate — it must be here.
         self.assertEqual(sorted(body["tools"]),
-                         ["cve_coverage", "cve_explain", "cve_libraries", "cve_plan", "cve_scan"])
+                         ["cve_apply", "cve_coverage", "cve_explain", "cve_libraries",
+                          "cve_plan", "cve_scan"])
+
+    def test_health_reports_which_build_of_the_pane_is_served(self):
+        body = self.client.get(self.base + "/health").json()
+        self.assertIn("sha", body["ui"]["repo"])
+        self.assertIn("in_sync", body["ui"])
 
     def test_status_never_scans(self):
         body = self.client.get(self.base + "/status").json()
@@ -68,16 +77,21 @@ class DashboardRoutes(unittest.TestCase):
         self.assertFalse(body["applied"])
         self.assertIn("exactly", body["reason"])
 
-    def test_apply_is_refused_in_this_version_even_when_armed(self):
-        status = self.client.get(self.base + "/status").json()
-        labels = list((status.get("hosts") or {}).keys())
-        if not labels:
-            self.skipTest("no stored measurement to arm the gate against")
+    def test_an_unknown_host_is_refused_and_the_inventory_is_named(self):
         body = self.client.post(self.base + "/apply",
-                                json={"host": labels[0], "confirm": labels[0]}).json()
+                                json={"host": "no-such-host", "confirm": "no-such-host"}).json()
         self.assertFalse(body["applied"])
-        self.assertIn("not enabled", body["reason"])
-        self.assertIn("would_run", body)
+        self.assertIn("not in the inventory", body["reason"])
+        self.assertTrue(body["nearest"], "a refusal must say what the choices are")
+
+    def test_the_route_defaults_to_a_dry_run(self):
+        """Omitted `dry_run` must mean "change nothing", whatever the operator typed."""
+        from unittest import mock
+        with mock.patch.object(self.module.tools, "cve_apply", return_value="{}") as spy:
+            self.client.post(self.base + "/apply", json={"host": "beelink", "confirm": "beelink"})
+        args = spy.call_args[0][0]
+        self.assertTrue(args["dry_run"], "a missing dry_run flag must never authorise a change")
+        self.assertEqual(args["confirm"], "beelink")
 
     @unittest.skipUnless(os.environ.get("PATCH_SENTINEL_TEST_SCAN") == "1",
                          "set PATCH_SENTINEL_TEST_SCAN=1 to run a real scan")

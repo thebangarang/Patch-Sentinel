@@ -25,6 +25,17 @@ Real output, 2026-11-06, five machines declared:
 [ok] advisory feed            https://ubuntu.com/security/notices.json?release=resolute&limit=20
 ```
 
+## 0. The test suite, in the environment that runs all of it
+
+```bash
+python3 -m unittest discover -s tests -t .   # 110 tests — the full run
+.venv/bin/python -m unittest discover -s tests -t .   # 110 tests, 8 skipped
+```
+
+The project's own venv has no FastAPI (the plugin declares no Python dependency), so the six
+dashboard-route tests **skip** there. They run under the Hermes interpreter, which is what the pane
+actually uses — run the suite with `python3`, not with the venv, or those six never execute.
+
 ## 1. The language check, against something known to be vulnerable
 
 A clean machine proves nothing — "0 vulnerable" is also what a broken query returns. So point it at
