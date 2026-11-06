@@ -127,6 +127,30 @@ class MoreRuntimes(unittest.TestCase):
         rows = languages.parse_dotnet((FIXTURES / "dotnet_tool_list.txt").read_text())
         self.assertEqual(rows, [{"package": "dotnetsay", "version": "3.0.3"}])
 
+    def test_pipx_venvs(self):
+        # real `pipx list --short` from python:3-slim after `pipx install pycowsay`
+        rows = languages.parse_pipx((FIXTURES / "pipx_list_short.txt").read_text())
+        self.assertEqual(rows, [{"package": "pycowsay", "version": "0.0.0.2"}])
+
+    def test_uv_tool_store(self):
+        # real `uv tool list` — the tool line, then its indented binary list
+        rows = languages.parse_uv_tools((FIXTURES / "uv_tool_list.txt").read_text())
+        self.assertEqual(rows, [{"package": "ruff", "version": "0.17.4"}])
+
+    def test_gradle_cache_layout(self):
+        # files-2.1/<group>/<artifact>/<version>/<sha1>/<artifact>-<version>.jar
+        text = ("org/apache/logging/log4j/log4j-core/2.14.1/9d5a1a2b/log4j-core-2.14.1.jar\n"
+                "org/apache/logging/log4j/log4j-core/2.14.1/aaaa/log4j-core-2.14.1-sources.jar\n")
+        rows = languages.parse_gradle(text)
+        self.assertIn({"package": "org.apache.logging.log4j:log4j-core", "version": "2.14.1"}, rows)
+
+    def test_a_store_that_answers_does_not_hide_the_next_one(self):
+        # pip sees the interpreter, pipx its venvs, uv its tools: all three must contribute
+        spec = languages.INVENTORIES["PyPI"]
+        labels = [candidate["label"] for candidate in spec["candidates"]]
+        self.assertIn("pipx's venvs", labels)
+        self.assertIn("uv's tool store", labels)
+
     def test_nuget_package_store_keeps_the_real_casing(self):
         # captured in dotnet/sdk:8.0 after `dotnet add package Newtonsoft.Json --version 12.0.1`.
         # The folder is "newtonsoft.json"; querying OSV under that lowercased id returns nothing,

@@ -45,7 +45,7 @@ INVENTORIES: dict[str, dict] = {
         "missing_detail": "npm is not on PATH on this host",
     },
     "PyPI": {
-        "label": "pip (the interpreter on PATH)",
+        "label": "pip, pipx and uv (the python stores on PATH)",
         # python3 carrying its own pip, then a standalone pip3: measured here, the first python3
         # on PATH can be a uv-managed interpreter with no pip module, while pip3 works.
         "candidates": [
@@ -54,7 +54,9 @@ INVENTORIES: dict[str, dict] = {
             {"detect": "pip3 --version", "command": "pip3 list --format=json",
              "label": "pip3"},
         ],
-        "missing_detail": "no python interpreter with pip is on PATH on this host",
+        # pipx and uv keep their own environments: a tool installed by either is invisible to
+        # `pip list`, so all three answer and the results are merged (see below).
+        "missing_detail": "no python interpreter with pip, pipx or uv is on PATH on this host",
     },
 }
 
@@ -121,6 +123,22 @@ INVENTORIES["NuGet"] = {
     ],
     "missing_detail": "neither ~/.nuget/packages nor the dotnet CLI is on this host",
 }
+
+INVENTORIES["PyPI"]["candidates"] += [
+    {"detect": "command -v pipx", "command": "pipx list --short",
+     "label": "pipx's venvs", "parser": "pipx"},
+    {"detect": "command -v uv", "command": "uv tool list",
+     "label": "uv's tool store", "parser": "uv"},
+]
+
+# Gradle keeps the same kind of machine-wide artifact cache as Maven, one directory deeper:
+# files-2.1/<group>/<artifact>/<version>/<sha1>/<artifact>-<version>.jar
+INVENTORIES["Maven"]["candidates"].append({
+    "detect": "test -d \"$HOME/.gradle/caches/modules-2/files-2.1\"",
+    "command": "find \"$HOME/.gradle/caches/modules-2/files-2.1\" -name '*.jar' "
+               "-not -name '*-sources.jar' -not -name '*-javadoc.jar' 2>/dev/null "
+               "| sed 's|.*/files-2.1/||'",
+    "label": "~/.gradle/caches", "parser": "gradle"})
 
 MAX_COMPONENTS = 600          # bounds the OSV query and the payload
 
@@ -289,10 +307,49 @@ def parse_nuget_store(text: str) -> list[dict]:
     return out
 
 
+def parse_pipx(text: str) -> list[dict]:
+    """``pipx list --short`` → components. One line per venv: ``pycowsay 0.0.0.2``."""
+    out = []
+    for line in text.splitlines():
+        bits = line.split()
+        if len(bits) == 2 and bits[1][:1].isdigit():
+            out.append({"package": bits[0], "version": bits[1]})
+    return out
+
+
+def parse_uv_tools(text: str) -> list[dict]:
+    """``uv tool list`` → components. ``ruff v0.17.4`` followed by an indented ``- ruff`` line."""
+    out = []
+    for line in text.splitlines():
+        if not line or line[0].isspace() or line.startswith("-"):
+            continue
+        bits = line.split()
+        if len(bits) >= 2 and bits[1].startswith("v"):
+            out.append({"package": bits[0], "version": bits[1].lstrip("v")})
+    return out
+
+
+def parse_gradle(text: str) -> list[dict]:
+    """``files-2.1/<group>/<artifact>/<version>/<sha1>/<artifact>-<version>.jar`` → coordinates."""
+    out, seen = [], set()
+    for line in text.splitlines():
+        parts = [part for part in line.strip().split("/") if part]
+        if len(parts) < 5:
+            continue
+        group, artifact, version = ".".join(parts[:-4]), parts[-4], parts[-3]
+        coordinate = f"{group}:{artifact}"
+        if (coordinate, version) in seen:
+            continue
+        seen.add((coordinate, version))
+        out.append({"package": coordinate, "version": version})
+    return out
+
+
 PARSERS = {"npm": parse_npm, "PyPI": parse_pip, "Packagist": parse_composer,
            "RubyGems": parse_gem, "crates.io": parse_cargo, "NuGet": parse_dotnet,
            "Maven": parse_maven_poms, "Go": parse_go_modules,
-           "nuget_store": parse_nuget_store}
+           "nuget_store": parse_nuget_store, "pipx": parse_pipx, "uv": parse_uv_tools,
+           "gradle": parse_gradle}
 
 
 def collect(target: str | None = None, timeout: int = 90) -> dict:
@@ -305,8 +362,13 @@ def collect(target: str | None = None, timeout: int = 90) -> dict:
     components: list[dict] = []
     outcomes: dict[str, str] = {}
     details: dict[str, str] = {}
+    seen: set[tuple[str, str, str]] = set()
     for ecosystem, spec in INVENTORIES.items():
-        outcome, detail, parsed = "missing", spec["missing_detail"], []
+        # Every candidate that answers contributes. They are not fallbacks of each other: pip sees
+        # the interpreter's environment, pipx its own venvs, uv its tool store, and a machine can
+        # have all three. Duplicates are dropped afterwards.
+        answered: list[str] = []
+        failure: tuple[str, str] | None = None
         for candidate in spec["candidates"]:
             command = (TOOL_PATH + f"if {candidate['detect']} >/dev/null 2>&1; "
                        f"then {candidate['command']} 2>/dev/null; else echo {MISSING}; fi")
@@ -314,23 +376,30 @@ def collect(target: str | None = None, timeout: int = 90) -> dict:
             if MISSING in out or code == 127:
                 continue
             if code != 0 and not out:
-                outcome, detail = "unreadable", f"{candidate['label']} refused (rc={code})"
+                failure = failure or ("unreadable", f"{candidate['label']} refused (rc={code})")
                 continue
             # a candidate may answer in a different shape than its ecosystem's default parser
             parser = PARSERS[candidate.get("parser", ecosystem)]
             parsed = parser(out)
             if parsed:
-                outcome, detail = "ok", candidate["label"]
-                break
-            outcome = "empty" if out.strip() in ("", "{}", "[]") else "unreadable"
-            detail = (f"{candidate['label']} reported no packages" if outcome == "empty"
-                      else f"{candidate['label']} answered something unparseable")
-        outcomes[ecosystem] = outcome
-        details[ecosystem] = detail
-        if outcome != "ok":
-            continue
-        for item in parsed:
-            components.append({**item, "ecosystem": ecosystem})
+                answered.append(candidate["label"])
+                for item in parsed:
+                    key = (ecosystem, str(item["package"]), str(item["version"]))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    components.append({**item, "ecosystem": ecosystem})
+                continue
+            empty = out.strip() in ("", "{}", "[]")
+            failure = failure or (("empty" if empty else "unreadable"),
+                                  f"{candidate['label']} reported no packages" if empty
+                                  else f"{candidate['label']} answered something unparseable")
+        if answered:
+            outcomes[ecosystem], details[ecosystem] = "ok", "; ".join(answered)
+        elif failure:
+            outcomes[ecosystem], details[ecosystem] = failure
+        else:
+            outcomes[ecosystem], details[ecosystem] = "missing", spec["missing_detail"]
     truncated = len(components) > MAX_COMPONENTS
     if truncated:
         components = components[:MAX_COMPONENTS]

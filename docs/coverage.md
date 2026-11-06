@@ -5,6 +5,11 @@ which command reads the machine, and exactly how far the proof goes. If a row sa
 capture of that tool's output exists in this repository and the reader has never been exercised
 against a real toolchain.
 
+One structural point: several stores can hold *different* packages in the same ecosystem — `pip` sees
+the interpreter's environment, `pipx` its own venvs, `uv` its tool store; `dotnet tool list` knows
+global tools while `~/.nuget/packages` knows every restored package. Every store that answers
+contributes and duplicates are dropped, rather than the first one winning and hiding the rest.
+
 Two rules decide inclusion:
 
 1. **Machine-wide only.** A reader lists what is installed for the machine's user, not what one
@@ -33,10 +38,10 @@ those exact versions.
 | ecosystem | command | proof |
 |---|---|---|
 | npm | `npm ls -g --json` | real machine |
-| PyPI | `pip list --format=json` (first pip on PATH) | real machine |
+| PyPI | `pip list --format=json`, `pipx list --short`, `uv tool list` | real machine (pip); container capture (pipx, uv) |
 | Packagist | `composer global show --format=json` | container capture (`composer:latest`) |
 | RubyGems | `gem list --local` | container capture (`ruby:3-slim`), 88 real lines incl. `(default: 0.4.0)` |
-| Maven | every `*.pom` under `~/.m2/repository` | container capture (`maven:3-eclipse-temurin-21`), 227 artifacts |
+| Maven | every `*.pom` under `~/.m2/repository`, plus `*.jar` under `~/.gradle/caches/modules-2/files-2.1` | container capture (`maven:3-eclipse-temurin-21`), 227 artifacts; Gradle layout from the tool's own directory scheme, no capture yet |
 | Go | `go version -m` on each `GOPATH/bin` binary | container capture (`golang:alpine`) |
 | crates.io | `cargo install --list` | container capture (`rust:1-slim`), path-install shape |
 | NuGet | `~/.nuget/packages` (ids read from each `.nuspec`), then `dotnet tool list -g` | container capture (`dotnet/sdk:8.0`), Newtonsoft.Json 12.0.1 + Serilog 2.10.0 |
@@ -58,7 +63,6 @@ Ecosystem names were confirmed against the live API rather than assumed: `rack 2
 | not covered | why |
 |---|---|
 | project lockfiles (`package-lock.json`, `composer.lock`, `Cargo.toml`, `go.mod`, `*.csproj`) | per-project, not machine-wide; guessing which project is meant is how a scanner lies. One chat question away. |
-| `~/.gradle/caches` | same shape as `~/.m2` but the layout differs per Gradle version; not yet captured. |
 | inside container images | needs an image scanner (trivy) and a vulnerability database; refused on purpose in 0.1.0. |
 | Hex/Elixir, CocoaPods, Swift | no machine-wide store — both resolve per project. |
 | Conda, CPAN, CRAN, PECL | OSV does not carry these ecosystems, so a reader would produce findings nobody can look up. |
