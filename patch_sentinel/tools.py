@@ -692,9 +692,15 @@ def cve_libraries(args: dict, **kwargs) -> str:
             "measured_at": collected["measured_at"], "outcomes": collected["outcomes"],
             "details": collected["details"], "by_ecosystem": collected["by_ecosystem"],
             "components": len(components), "truncated": collected["truncated"],
+            # how each store is upgraded on this host, with the absolute path of the binary the scan
+            # used: an advisory the user cannot act on is half an answer
+            "installers": collected.get("installers") or {},
             # the installed list itself, so a pane can show what was checked instead of a count
             "packages": [{"ecosystem": c.get("ecosystem"), "package": c.get("package"),
-                          "version": c.get("version")} for c in components[:MAX_PENDING]]}
+                          "version": c.get("version"), "source": c.get("source"),
+                          "manager": collected.get("installers", {}).get(c.get("ecosystem"), {})
+                          .get(c.get("source"))}
+                         for c in components[:MAX_PENDING]]}
 
     if not components:
         return _json({**base, "vulnerable": [], "exit_code": 2,

@@ -115,6 +115,35 @@ function newestVersion(list) {
   }).pop()
 }
 
+/**
+ * The command that closes a finding — built from the store the package was actually read out of,
+ * with the absolute path of the binary that answered. "python3 -m pip install -U x" was the old
+ * advice and it was wrong twice: on a host whose system python has no pip it fails outright, and the
+ * package usually lives in a venv or a toolchain, not in that python at all. pipx and uv tools cannot
+ * be upgraded by pip in any case. When the backend says there is no machine-wide command, this says
+ * so instead of inventing one. Exported because a string a user will paste deserves its own tests.
+ */
+function buildFixCommand(row, found) {
+  const fix = found && found.fixes && found.fixes.length ? newestVersion(found.fixes) : null
+  const eco = String(row.ecosystem || '').toLowerCase()
+  const manager = row.manager || null
+  const spec = eco === 'npm'
+    ? row.package + '@' + (fix || 'latest')
+    : (fix ? "'" + row.package + '>=' + fix + "'" : row.package)
+  if (!manager) {
+    return '# ' + row.package + ': upgrade it to ' + (fix || 'the fixed version')
+      + ' where it is pinned — this scan did not find the store that owns it'
+  }
+  if (!manager.upgrade) {
+    return '# ' + row.package + ': ' + (manager.why || 'no machine-wide command upgrades it')
+  }
+  return String(manager.upgrade)
+    .split('{tool}').join(manager.path || manager.tool)
+    .split('{spec}').join(spec)
+    .split('{pkg}').join(row.package)
+    .split('{ver}').join(fix || 'latest')
+}
+
 function dot(level) {
   return jsx('span', {
     'aria-hidden': 'true',
@@ -162,10 +191,10 @@ function Copy({ text, what, label }) {
 
 // --------------------------------------------------------------------------- HOSTS
 
-/** Add or remove a machine from the inventory. Addresses only — never a credential. */
-function HostsPanel({ onChanged }) {
+/** Add or remove a server. Addresses only — never a credential. */
+function HostsPanel({ onChanged, startOpen }) {
   const [hosts, setHosts] = useState(null)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(!!startOpen)
   const [newLabel, setNewLabel] = useState('')
   const [newTarget, setNewTarget] = useState('')
   const [test, setTest] = useState(null)
@@ -236,10 +265,10 @@ function HostsPanel({ onChanged }) {
 
   return jsxs('section', { style: { marginBottom: '16px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label('hosts'),
+      label('servers'),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: C.faint } },
-        hosts ? hosts.length + ' in the inventory' : '…'),
+        hosts ? hosts.length + ' server(s)' : '…'),
       jsx('button', {
         type: 'button',
         onClick: () => { setOpen((v) => !v); setTest(null) },
@@ -248,7 +277,7 @@ function HostsPanel({ onChanged }) {
           color: open ? C.accent : C.dim, background: 'transparent',
           border: '1px solid ' + (open ? C.accent : C.border), borderRadius: '3px'
         }
-      }, open ? 'close' : 'add a host')
+      }, open ? 'close' : 'add a server')
     ]),
     (hosts || []).map((host) => jsxs('div', {
       key: host.label,
@@ -304,8 +333,8 @@ function HostsPanel({ onChanged }) {
       ? jsxs('div', { style: { marginTop: '8px', padding: '8px', border: '1px solid ' + C.border, borderRadius: '3px', background: C.panel } }, [
           jsxs('div', { style: { display: 'flex', gap: '6px', marginBottom: '5px' } }, [
             jsx('input', {
-              value: label, onChange: (e) => { setLabel(e.target.value); setTest(null) },
-              placeholder: 'label (e.g. vps)',
+              value: newLabel, onChange: (e) => { setNewLabel(e.target.value); setTest(null) },
+              placeholder: 'name it (e.g. vps)', 
               style: {
                 flex: '0 0 30%', fontFamily: MONO, fontSize: '0.625rem', padding: '3px 6px',
                 background: 'transparent', color: C.text, border: '1px solid ' + C.border,
@@ -313,7 +342,7 @@ function HostsPanel({ onChanged }) {
               }
             }),
             jsx('input', {
-              value: target, onChange: (e) => { setTarget(e.target.value); setTest(null) },
+              value: newTarget, onChange: (e) => { setNewTarget(e.target.value); setTest(null) },
               placeholder: 'user@host:port, an ssh alias, or local',
               style: {
                 flex: 1, fontFamily: MONO, fontSize: '0.625rem', padding: '3px 6px',
@@ -580,18 +609,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   const missingEcosystems = Object.entries((libraries && libraries.outcomes) || {})
     .filter(([, outcome]) => outcome === 'missing').map(([eco]) => eco)
 
-  /** The command that closes a finding, for the ecosystem the check actually read. */
-  const fixCommand = (row, found) => {
-    const fix = found && found.fixes.length ? newestVersion(found.fixes) : null
-    const eco = String(row.ecosystem || '').toLowerCase()
-    if (eco === 'npm') return 'npm install -g ' + row.package + '@' + (fix || 'latest')
-    if (eco === 'pypi') {
-      return 'python3 -m pip install -U '
-        + (fix ? "'" + row.package + '>=' + fix + "'" : row.package)
-    }
-    return '# ' + row.ecosystem + ': upgrade ' + row.package + (fix ? ' to >= ' + fix : '')
-  }
-  const fixLines = flagged.map((row) => fixCommand(row, foundByPackage[keyOf(row)]))
+  const fixLines = flagged.map((row) => buildFixCommand(row, foundByPackage[keyOf(row)]))
 
   return jsxs('section', { style: { marginBottom: '18px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
@@ -1008,7 +1026,7 @@ function ApplyGate({ hostLabel, entry, onRescan, rescannning }) {
 
 // --------------------------------------------------------------------------- root
 
-export { HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate }
+export { HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate, buildFixCommand }
 
 export function PatchSentinel({ compact }) {
   const [status, setStatus] = useState(null)
@@ -1159,8 +1177,8 @@ export function PatchSentinel({ compact }) {
         ' — the system packages above turned into ordered commands (risk, downtime, how to verify, how to undo).'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'gaps'), ' — what this scan could not see. Red here is a fact about the scan, not the host.'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'apply'), ' — the only control that changes a machine, and it needs the host name typed.'),
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'hosts'),
-        ' — the machines this pane answers for. A host is added only after a probe of it succeeds; addresses only, never a key.')
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'servers'),
+        ' — the machines this pane answers for (this one included). A server is added only after a probe of it succeeds; addresses only, never a key.')
     ]),
     jsx(HostsPanel, { onChanged: load }),
     jsx(NowPanel, { status, onRefresh: rescan, busy }),

@@ -18,6 +18,7 @@ A missing tool is an outcome (``missing``), never an empty list read as clean.
 from __future__ import annotations
 
 import datetime as dt
+import sys
 import json
 
 from . import shell
@@ -147,6 +148,34 @@ INVENTORIES["Maven"]["candidates"].append({
                "-not -name '*-sources.jar' -not -name '*-javadoc.jar' 2>/dev/null "
                "| sed 's|.*/files-2.1/||'",
     "label": "~/.gradle/caches", "parser": "gradle"})
+
+# How each store is upgraded, keyed by (ecosystem, candidate label). This exists because the advice
+# has to be runnable on the machine that holds the package: "python3 -m pip install -U x" is wrong on
+# a host whose system python has no pip while the package lives in a venv, and it is plain wrong for a
+# pipx or uv tool, which pip cannot upgrade at all. ``{tool}`` is replaced by the absolute path of the
+# binary the scan actually used, so the command cannot land in a different environment than the one
+# that was measured. ``None`` means "no command on this host can fix it" — said, not guessed.
+UPGRADE: dict[tuple[str, str], tuple[str, str] | None] = {
+    ("npm", "npm's global tree"): ("npm", "{tool} install -g {spec}"),
+    ("PyPI", "python3 -m pip"): ("python3", "{tool} -m pip install -U {spec}"),
+    ("PyPI", "pip3"): ("pip3", "{tool} install -U {spec}"),
+    ("PyPI", "pipx's venvs"): ("pipx", "{tool} upgrade {pkg}"),
+    ("PyPI", "uv's tool store"): ("uv", "{tool} tool upgrade {pkg}"),
+    ("Packagist", "composer's global vendor"): ("composer", "{tool} global require {spec}"),
+    ("RubyGems", "gem's local list"): ("gem", "{tool} update {pkg}"),
+    ("crates.io", "cargo's installed binaries"): ("cargo", "{tool} install {pkg}"),
+    ("Pub", "dart pub global"): ("dart", "{tool} pub global activate {pkg} {ver}"),
+    ("NuGet", "dotnet's global tools"): ("dotnet", "{tool} tool update -g {pkg}"),
+    # a maven/gradle artifact and a nuget package-store entry are build dependencies: the fix is in
+    # the project's own pom/build file, not a machine-wide command
+    ("Maven", "~/.m2/repository"): None,
+    ("Maven", "~/.gradle/caches"): None,
+    ("NuGet", "~/.nuget/packages (ids read from each .nuspec)"): None,
+    # a Go entry is a module a binary was *built from*: `go install <module>@latest` only works for a
+    # main package, and the module name is not one. Rebuilding is the owner's call, so this refuses
+    # rather than printing a command that would fail.
+    ("Go", "GOPATH/bin binaries"): None,
+}
 
 MAX_COMPONENTS = 600          # bounds the OSV query and the payload
 
@@ -370,6 +399,29 @@ PARSERS = {"npm": parse_npm, "PyPI": parse_pip, "Packagist": parse_composer,
            "gradle": parse_gradle, "Pub": parse_pub_global}
 
 
+def _resolve_upgrade(ecosystem: str, label: str, target: str | None, timeout: int) -> dict:
+    """The absolute path of the tool behind a store, plus its upgrade template (or a refusal)."""
+    spec = UPGRADE.get((ecosystem, label), "unknown")
+    if spec is None:
+        return {"upgrade": None, "why": "a build dependency: the fix belongs in the project's own "
+                                        "manifest, not a machine-wide command"}
+    tool, template = spec
+    code, path = shell.run(f"command -v {tool} 2>/dev/null", target, timeout=timeout,
+                           path_prefix=TOOL_PATH)
+    resolved = (path or "").strip().splitlines()[0] if path and path.strip() else ""
+    resolved = resolved or tool
+    # Is this Hermes's own environment? Then the advice is not "pip install" — these packages ship
+    # with the agent, and upgrading one by hand is how an agent stops starting. Measured: a user was
+    # told `python3 -m pip install -U 'filelock>=4.2.1'` for packages living in the agent's venv,
+    # which has no pip at all.
+    if target is None and resolved.startswith(sys.prefix.rstrip("/") + "/"):
+        return {"tool": tool, "path": resolved, "upgrade": None,
+                "why": "part of Hermes's own environment — it ships with the agent, so it is upgraded "
+                       "by `hermes update`, not by pip. Overriding it by hand is how an agent stops "
+                       "starting."}
+    return {"tool": tool, "path": resolved, "upgrade": template}
+
+
 def collect(target: str | None = None, timeout: int = 90) -> dict:
     """List the installed packages of every ecosystem whose tool exists on *host*.
 
@@ -381,12 +433,14 @@ def collect(target: str | None = None, timeout: int = 90) -> dict:
     outcomes: dict[str, str] = {}
     details: dict[str, str] = {}
     seen: set[tuple[str, str, str]] = set()
+    installers_by_ecosystem: dict[str, dict] = {}
     for ecosystem, spec in INVENTORIES.items():
         # Every candidate that answers contributes. They are not fallbacks of each other: pip sees
         # the interpreter's environment, pipx its own venvs, uv its tool store, and a machine can
         # have all three. Duplicates are dropped afterwards.
         answered: list[str] = []
         failure: tuple[str, str] | None = None
+        installers = installers_by_ecosystem.setdefault(ecosystem, {})
         for candidate in spec["candidates"]:
             command = (TOOL_PATH + f"if {candidate['detect']} >/dev/null 2>&1; "
                        f"then {candidate['command']} 2>/dev/null; else echo {MISSING}; fi")
@@ -401,12 +455,17 @@ def collect(target: str | None = None, timeout: int = 90) -> dict:
             parsed = parser(out)
             if parsed:
                 answered.append(candidate["label"])
+                # resolve the binary this store lives behind, once, so the fix command cannot land
+                # in a different environment than the one that was measured
+                installers[candidate["label"]] = _resolve_upgrade(
+                    ecosystem, candidate["label"], target, timeout)
                 for item in parsed:
                     key = (ecosystem, str(item["package"]), str(item["version"]))
                     if key in seen:
                         continue
                     seen.add(key)
-                    components.append({**item, "ecosystem": ecosystem})
+                    components.append({**item, "ecosystem": ecosystem,
+                                       "source": candidate["label"]})
                 continue
             empty = out.strip() in ("", "{}", "[]")
             failure = failure or (("empty" if empty else "unreadable"),
@@ -422,6 +481,7 @@ def collect(target: str | None = None, timeout: int = 90) -> dict:
     if truncated:
         components = components[:MAX_COMPONENTS]
     return {"components": components, "outcomes": outcomes, "details": details,
+            "installers": installers_by_ecosystem,
             "measured_at": measured_at, "truncated": truncated,
             "by_ecosystem": {eco: sum(1 for c in components if c["ecosystem"] == eco)
                              for eco in INVENTORIES}}
