@@ -167,7 +167,12 @@ function NowPanel({ status, onRefresh, busy }) {
         jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim, marginTop: '2px' } },
           'kernel ' + (kernel.running || '?') + ' → ' + (kernel.verdict || '?')),
         jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px' } },
-          (entry.pending_count || 0) + ' pending · ' + (entry.images || []).length + ' image(s) · ' + level.level)
+          (entry.pending_count || 0) + ' pending · ' + (entry.images || []).length + ' image(s) · ' + level.level),
+        (entry.pending || []).length
+          ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.625rem', color: C.dim, marginTop: '3px' } },
+              (entry.pending || []).slice(0, 3).map((row) => row.package + ' ' + (row.from || '?') + '→' + row.to).join(' · ') +
+              (entry.pending_count > 3 ? ' · +' + (entry.pending_count - 3) + ' more' : ''))
+          : null
       ]),
       jsxs('div', { style: { textAlign: 'right' } }, [
         jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim } },
@@ -205,7 +210,7 @@ function NowPanel({ status, onRefresh, busy }) {
 
 // --------------------------------------------------------------------------- PENDING
 
-function PendingPanel({ hostLabel, plan, onPlan, limited }) {
+function PendingPanel({ hostLabel, plan, onPlan, limited, planning }) {
   const steps = (plan && plan.steps) || []
   const refusals = (plan && plan.refusals) || []
   return jsxs('section', { style: { marginBottom: '18px' } }, [
@@ -215,11 +220,16 @@ function PendingPanel({ hostLabel, plan, onPlan, limited }) {
       jsx('button', {
         type: 'button',
         onClick: () => onPlan(hostLabel),
+        disabled: planning || !hostLabel,
+        title: planning ? 'measuring the host and turning it into commands'
+                        : 'turns this host\'s pending updates into ordered commands, each with a way back',
         style: {
-          fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: 'pointer',
-          color: C.dim, background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
+          fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
+          cursor: planning || !hostLabel ? 'default' : 'pointer',
+          color: planning ? C.accent : C.dim, background: 'transparent',
+          border: '1px solid ' + C.border, borderRadius: '3px'
         }
-      }, steps.length ? 're-plan' : 'plan for ' + (hostLabel || 'this machine'))
+      }, planning ? 'planning…' : steps.length ? 're-plan' : 'plan for ' + (hostLabel || 'this machine'))
     ]),
     steps.length
       ? steps.map((step, index) => jsxs('div', {
@@ -249,10 +259,24 @@ function PendingPanel({ hostLabel, plan, onPlan, limited }) {
           ])
         ]))
       : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, padding: '6px 0' } },
-          limited ? 'planning needs a host — pick one in NOW first' : 'no plan loaded'),
+          planning ? 'measuring the host — this can take a few seconds over ssh'
+          : limited ? 'planning needs a host — pick one in NOW first'
+          : plan ? 'the plan came back empty'
+          : 'no plan yet — press “plan for …” to turn this host into commands'),
     refusals.length
-      ? jsx('div', { style: { fontSize: '0.6875rem', color: C.warn } },
-          refusals.map((r) => r.reason).join(' · '))
+      ? jsxs('div', {
+          style: {
+            marginTop: '6px', padding: '7px 9px', borderLeft: '2px solid ' + C.warn,
+            background: C.panel, borderRadius: '3px'
+          }
+        }, [
+          jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, fontWeight: 600 } },
+            'no steps — ' + refusals.map((r) => r.reason).join(' · ')),
+          refusals.some((r) => r.detail)
+            ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '3px' } },
+                refusals.map((r) => r.detail).filter(Boolean).join(' · '))
+            : null
+        ])
       : null
   ])
 }
@@ -265,7 +289,7 @@ function GapsPanel({ coverage }) {
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label('gaps'),
       jsx('span', { style: { flex: 1 } }),
-      jsx('span', { style: { fontSize: '0.625rem', color: C.faint } }, 'never green, never empty')
+      jsx('span', { style: { fontSize: '0.625rem', color: C.faint } }, 'what this scan cannot see')
     ]),
     gaps.map((gap, index) => jsxs('div', {
       key: index,
@@ -312,7 +336,10 @@ function ApplyGate({ hostLabel }) {
   return jsxs('section', { style: { borderTop: '1px solid ' + C.border, paddingTop: '10px', marginTop: '6px' } }, [
     label('apply', { marginBottom: '6px' }),
     jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginBottom: '6px' } },
-      'Type the host name (' + (hostLabel || '—') + ') to arm the gate. A dry run stages and prints; applying changes the host and writes a receipt.'),
+      'This is the only control that changes a machine. Type ' + (hostLabel || 'the host name') +
+      ' exactly to unlock it. “Stage” downloads and prints the command, changes nothing. “Apply” runs it and writes a receipt with the versions before and after.'),
+    jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '6px' } },
+      armed ? 'unlocked — stage first, then apply' : 'locked — the two buttons stay dead until the name matches'),
     jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
       jsx('input', {
         value: typed,
@@ -334,7 +361,7 @@ function ApplyGate({ hostLabel }) {
           color: armed ? C.accent : C.faint, background: 'transparent',
           border: '1px solid ' + (armed ? C.accent : C.border), borderRadius: '3px'
         }
-      }, busy ? '…' : 'dry run'),
+      }, busy ? '…' : 'stage (no change)'),
       jsx('button', {
         type: 'button',
         onClick: () => run(false),
@@ -346,7 +373,7 @@ function ApplyGate({ hostLabel }) {
           color: armed ? C.danger : C.faint, background: 'transparent',
           border: '1px solid ' + (armed ? C.danger : C.border), borderRadius: '3px'
         }
-      }, armed ? 'apply' : 'locked')
+      }, armed ? 'apply for real' : 'apply — locked')
     ]),
     result
       ? jsxs('div', { style: { marginTop: '8px', borderTop: '1px dashed ' + C.border, paddingTop: '6px' } }, [
@@ -355,7 +382,7 @@ function ApplyGate({ hostLabel }) {
               fontFamily: MONO, fontSize: '0.6875rem',
               color: result.applied ? C.ok : (result.dry_run ? C.accent : C.warn)
             }
-          }, (result.applied ? 'applied — ' : (result.dry_run ? 'dry run — ' : 'refused — ')) + (result.reason || '')),
+          }, (result.applied ? 'applied — ' : (result.dry_run ? 'staged, nothing changed — ' : 'refused — ')) + (result.reason || '')),
           steps.length
             ? jsx('div', { style: { marginTop: '4px' } }, steps.map((step, index) =>
                 jsx('div', {
@@ -382,6 +409,7 @@ export function PatchSentinel({ compact }) {
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState(null)
   const [plan, setPlan] = useState(null)
+  const [planning, setPlanning] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -407,10 +435,14 @@ export function PatchSentinel({ compact }) {
 
   const doPlan = useCallback(async (label) => {
     if (!label) return
+    setPlanning(true)
+    setPlan(null)
     try {
       setPlan(await call('/plan', { method: 'POST', body: { host: label } }))
     } catch (err) {
-      setPlan({ steps: [], refusals: [{ reason: String(err) }] })
+      setPlan({ steps: [], refusals: [{ reason: String(err && err.message ? err.message : err) }] })
+    } finally {
+      setPlanning(false)
     }
   }, [])
 
@@ -442,8 +474,19 @@ export function PatchSentinel({ compact }) {
           }, labels.map((name) => jsx('option', { key: name, value: name }, name)))
         : null
     ]),
+    jsxs('div', {
+      style: {
+        fontSize: '0.6875rem', color: C.faint, lineHeight: 1.5, marginBottom: '14px',
+        borderLeft: '2px solid ' + C.border, paddingLeft: '9px'
+      }
+    }, [
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'now'), ' — one row per machine: what the scan measured, and when.'),
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'pending'), ' — this host\'s updates turned into ordered commands, each with a way back.'),
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'gaps'), ' — what this scan could not see. Red here is a fact about the scan, not the host.'),
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'apply'), ' — the only control that changes a machine, and it needs the host name typed.')
+    ]),
     jsx(NowPanel, { status, onRefresh: rescan, busy }),
-    jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected }),
+    jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning }),
     jsx(GapsPanel, { coverage }),
     jsx(ApplyGate, { hostLabel: selected })
   ])

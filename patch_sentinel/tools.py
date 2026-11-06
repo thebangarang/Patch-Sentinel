@@ -312,8 +312,8 @@ def cve_plan(args: dict, **kwargs) -> str:
         "steps": planned["steps"],
         "refusals": planned["refusals"],
         "proposal_text": planned["proposal_text"],
-        "not_in_this_version": "applying — the plan is the deliverable; an apply step needs the "
-                               "operator to type the host name and is not enabled in 0.1.0",
+        "not_in_this_version": "nothing else: the plan is what this tool returns. Acting on it is "
+                               "cve_apply, which needs the host name typed and dry_run=false",
     })
 
 
@@ -487,7 +487,7 @@ def cve_coverage(args: dict, **kwargs) -> str:
                     "url": scan.get("usn_url")})
 
     implemented = sorted(dispatch.FAMILY_BY_OS)
-    gaps = [
+    gaps: list[dict] = [
         {"gap": "CVEs inside container image layers", "state": "not measured",
          "why": "needs an image scanner (trivy) and a vulnerability database; v0.2",
          "consequence": "a rebuilt image is reported as 'an update exists', never as "
@@ -505,11 +505,16 @@ def cve_coverage(args: dict, **kwargs) -> str:
                 "transport, not a package-manager block)",
          "consequence": "such a host is a red gap in this list, never a green 'patched'"},
     ]
-    if scan.get("release"):
+    # one entry per *fact*, not one per host: a 20-host inventory must not bury the real gaps
+    without_advisory = sorted(label for label, host in hosts.items()
+                              if (host.get("os") or {}).get("id") not in ("ubuntu", None))
+    if scan.get("release") and without_advisory:
         gaps.append({"gap": "advisory attribution on non-Ubuntu hosts", "state": "not attributed",
-                     "why": "the notice feed read here is Ubuntu's (release = "
-                            f"{scan.get('release')}); other distros' pending lists are measured "
-                            "but the advisory id is not named",
+                     "hosts": without_advisory,
+                     "why": "only Ubuntu's security-notice feed is wired (read for release "
+                            f"{scan.get('release')}), so on these hosts the pending list is measured "
+                            "but the CVE id behind each update is not named: "
+                            + ", ".join(without_advisory),
                      "consequence": "the update is still listed, the CVE behind it is not"})
     unreachable = [b for b in (stored.get("blind") or []) if b.get("class") == "host"]
     for blind in stored.get("blind") or []:
@@ -517,12 +522,6 @@ def cve_coverage(args: dict, **kwargs) -> str:
             continue
         gaps.append({"gap": f"{blind.get('class')} on {blind.get('host')}", "state": "unmeasured",
                      "why": blind.get("reason"), "consequence": "reported as unknown, not clean"})
-    for label, host in hosts.items():
-        if (host.get("os") or {}).get("id") not in ("ubuntu", None):
-            gaps.append({"gap": f"advisory coverage for {label}",
-                         "state": "partial",
-                         "why": f"os id is {(host.get('os') or {}).get('id')}, not ubuntu",
-                         "consequence": "package facts are read, advisory ids are not"})
 
     return _json({
         "tool": "cve_coverage",
