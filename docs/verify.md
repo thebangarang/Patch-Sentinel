@@ -32,9 +32,10 @@ a throwaway environment that *is* vulnerable. This writes only inside `tmp/`, an
 
 ```bash
 cd ~/projects/patch-sentinel
-python3 -m venv tmp/vulnvenv
-tmp/vulnvenv/bin/pip install -q 'jinja2==2.10' 'urllib3==1.24.1'
-PATH="$PWD/tmp/vulnvenv/bin:$PATH" .venv/bin/python -c "
+V=$(mktemp -d)/vulnvenv          # OUTSIDE the repo: see the note below
+python3 -m venv "$V"
+"$V/bin/pip" install -q 'jinja2==2.10' 'urllib3==1.24.1'
+PATH="$V/bin:$PATH" .venv/bin/python -c "
 import json,sys; sys.path.insert(0,'.')
 from patch_sentinel import tools
 print(json.loads(tools.cve_libraries({}))['answer'])
@@ -53,6 +54,11 @@ hermes-SER: 38 advisory match(es) across 2 package(s), from 7 installed language
 Jinja2 2.10 returns **12** advisories, urllib3 1.24.1 **26**, each with the versions that close it.
 If those numbers come back zero with the venv on `PATH`, the query is broken — that is exactly what
 this check is for.
+
+> **Keep the throwaway venv out of the repo.** `hermes plugins validate .` runs a security scan over
+> the whole working tree; a venv inside it fails the run with `binary_file`, `exec_string` and
+> `symlink_escape` (measured — a `.so`, pip's bundled `.exe` launchers and its `python3` symlinks).
+> That is the scanner doing its job, not a plugin defect, which is why this recipe uses `mktemp -d`.
 
 **What it reads:** npm's global tree and the pip environment on `PATH` — the venv above *is* the pip
 environment, which is why the numbers move. Per-project lockfiles are read only when you ask about a
