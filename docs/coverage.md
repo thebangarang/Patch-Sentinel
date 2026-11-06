@@ -29,6 +29,8 @@ Two rules decide inclusion:
 
 Alpine (`apk`) is registered; its cloud image needed the `nocloud_` variant before it would take a
 cloud-init seed (the plain one booted to a login prompt with no user), and once it did, `apk` answered.
+The VM was recreated later and its `authorized_keys` no longer holds this machine's lab key, so the
+*inventory* reading is proven and the *vendor-lag* reading is not.
 
 ## Vendor lag: "fixed upstream, not in this archive yet"
 
@@ -38,7 +40,7 @@ This comparison needs a feed that names a fixed version **per release**. Which f
 |---|---|---|---|
 | Ubuntu | `ubuntu.com/security/notices.json` | `release_packages` per release, binary package names | proven live (beelink, 26.04) |
 | Debian | OSV `Debian:<major>` | `affected[].ranges[].events[].fixed`, source package names | proven live (Debian 12 VM) |
-| Alpine | OSV `Alpine:v<major.minor>` | same shape, source names | proven live (Alpine VM) |
+| Alpine | OSV `Alpine:v<major.minor>` | same shape, source names | **adapter tested against captured payloads**; the lab VM's key was rejected at scan time, so the lag path has not run on a live Alpine host |
 | Rocky / AlmaLinux / RHEL | OSV `Rocky Linux:<major>`, `AlmaLinux:<major>`, `Red Hat:<major>` | same shape | adapter tested against captured payloads; no RHEL host in the lab yet |
 | Arch | `security.archlinux.org/all.json` | `fixed` per AVG, binary names, resolved advisories skipped | proven live (Arch VM) |
 | Fedora | — (Bodhi holds CVE→build per update) | not read | **named gap**: the host says the lag is unmeasured |
