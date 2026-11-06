@@ -498,16 +498,19 @@ def cve_coverage(args: dict, **kwargs) -> str:
          "why": "needs an image scanner (trivy) and a vulnerability database; v0.2",
          "consequence": "a rebuilt image is reported as 'an update exists', never as "
                         "'these CVEs are fixed'",
-         "next": "nothing to clear here, by design: 0.1.0 refuses to ship a second dependency "
-                 "tree. The image digest check still tells you a newer build exists."},
+         "next": "the real fix is outside this pane: rebuild the image on a schedule, because a "
+                 "base-image CVE is only fixed by a newer base. Scanning inside layers needs an "
+                 "image scanner (trivy), which 0.1.0 deliberately does not ship. Until then the "
+                 "digest check still tells you a newer build exists."},
         {"gap": "language packages outside the global trees",
          "state": "partly measured", "hosts": "every", "kind": "limit",
          "why": "cve_libraries reads npm's global tree and the pip environment on PATH; "
                 "per-project lockfiles, other virtualenvs and vendor/ directories are not read",
          "consequence": "a vulnerable dependency of one project can be invisible while the "
                         "machine-level list is clean",
-         "next": "ask in chat about a specific project ('which of my node or python dependencies "
-                 "have known CVEs?') — that reads the tree you name; the automatic scan does not."},
+         "next": "name the project in chat and I will query OSV for its packages ('which of my "
+                 "node/python dependencies have known CVEs in ~/projects/x?'). Reading lockfiles "
+                 "automatically is a 0.2 item; today it is one question away."},
         {"gap": "operating systems without an adapter", "state": "not measured",
          "hosts": "every", "kind": "limit",
          "why": f"adapters exist for: {', '.join(implemented)}; every other OS answers "
@@ -515,8 +518,10 @@ def cve_coverage(args: dict, **kwargs) -> str:
                 "but has never read a real host), macOS, and Windows (which needs a PowerShell "
                 "transport, not a package-manager block)",
          "consequence": "such a host is a red gap in this list, never a green 'patched'",
-         "next": "nothing to clear: the host reports unsupported and that is the honest reading. "
-                 "Adding a family is a code change, not a setting."},
+         "next": "nothing to switch on here: that host answers 'unsupported' on purpose, because "
+                 "reporting it as patched would be a guess. Measuring it means adding an adapter — "
+                 "a code change, not a setting. Until then use the distro's own updater, and open "
+                 "an issue with the distro id from cve_coverage."},
     ]
     # one entry per *fact*, not one per host: a 20-host inventory must not bury the real gaps
     without_advisory = sorted(label for label, host in hosts.items()
@@ -524,8 +529,9 @@ def cve_coverage(args: dict, **kwargs) -> str:
     if scan.get("release") and without_advisory:
         gaps.append({"gap": "advisory attribution on non-Ubuntu hosts", "state": "not attributed",
                      "kind": "limit", "hosts": without_advisory,
-                     "next": "nothing here: a per-distro security feed is a 0.2 item. The update is "
-                             "still listed with its versions, only the CVE id is missing.",
+                     "next": "the update is still listed with both versions — you can act on it "
+                             "without the CVE id. A per-distro security feed is a 0.2 item; on "
+                             "Ubuntu hosts the notice feed already names the advisory.",
                      "why": "only Ubuntu's security-notice feed is wired (read for release "
                             f"{scan.get('release')}), so on these hosts the pending list is measured "
                             "but the CVE id behind each update is not named: "
@@ -540,8 +546,9 @@ def cve_coverage(args: dict, **kwargs) -> str:
                      "kind": "blocked", "hosts": [label],
                      "why": blind.get("reason"),
                      "consequence": "reported as unknown, not clean",
-                     "next": f"this one you can clear: make {label} answer (ssh key, host entry, or "
-                             "the missing tool) and press rescan — until then it stays unknown"})
+                     "next": f"this one you can clear yourself: make {label} answer — ssh key, host "
+                             "entry, or the missing tool — then press rescan. Until it does, that "
+                             "row stays unknown and never green."})
 
     return _json({
         "tool": "cve_coverage",

@@ -299,8 +299,13 @@ function gapRow(gap, index) {
     jsxs('div', {}, [
       jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline' } }, [
         jsx('span', { style: { fontSize: '0.75rem', color: C.text } }, gap.gap),
-        jsx('span', { style: { fontSize: '0.5625rem', color: blocked ? C.danger : C.faint, fontFamily: MONO } },
-          blocked ? 'fixable' : 'by design')
+        jsx('span', {
+          style: {
+            fontSize: '0.5625rem', fontFamily: MONO, padding: '1px 5px', borderRadius: '2px',
+            color: blocked ? C.danger : C.faint,
+            border: '1px solid ' + (blocked ? C.danger : C.border)
+          }
+        }, blocked ? 'fixable — do this' : 'cannot be cleared here')
       ]),
       jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px' } },
         gap.state + ' — ' + (gap.why || '')),
@@ -336,6 +341,9 @@ function GapsPanel({ coverage, selected }) {
       jsx('span', { style: { fontSize: '0.625rem', color: C.faint } },
         selected ? 'what a scan of ' + selected + ' cannot see' : 'what this scan cannot see')
     ]),
+    jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, lineHeight: 1.45, marginBottom: '4px' } },
+      'A gap is something this scan did not look at — not a fault on the host. None of these can be '
+      + 'switched on from this pane; each says what would actually fix it.'),
     blocked.length
       ? jsxs('div', { style: { marginBottom: '4px' } }, [
           jsx('div', { style: { fontSize: '0.625rem', color: C.danger, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '2px' } },
@@ -456,12 +464,16 @@ export function PatchSentinel({ compact }) {
   const [selected, setSelected] = useState(null)
   const [plan, setPlan] = useState(null)
   const [planning, setPlanning] = useState(false)
+  const [health, setHealth] = useState(null)
 
   const load = useCallback(async () => {
     try {
-      const [nextStatus, nextCoverage] = await Promise.all([call('/status'), call('/coverage')])
+      const [nextStatus, nextCoverage, nextHealth] = await Promise.all([
+        call('/status'), call('/coverage'), call('/health').catch(() => null)
+      ])
       setStatus(nextStatus)
       setCoverage(nextCoverage)
+      setHealth(nextHealth)
       const labels = Object.keys((nextStatus && nextStatus.hosts) || {})
       setSelected((current) => current || labels[0] || null)
     } catch (err) {
@@ -496,7 +508,15 @@ export function PatchSentinel({ compact }) {
     load()
   }, [load])
 
-  const labels = useMemo(() => Object.keys((status && status.hosts) || {}), [status])
+  // this machine first, then the declared hosts alphabetically: the local row is the one you act on
+  const labels = useMemo(() => {
+    const hosts = (status && status.hosts) || {}
+    return Object.keys(hosts).sort((a, b) => {
+      const localA = hosts[a] && hosts[a].target === 'local' ? 0 : 1
+      const localB = hosts[b] && hosts[b].target === 'local' ? 0 : 1
+      return localA - localB || a.localeCompare(b)
+    })
+  }, [status])
 
   return jsxs('div', {
     style: {
@@ -534,7 +554,19 @@ export function PatchSentinel({ compact }) {
     jsx(NowPanel, { status, onRefresh: rescan, busy }),
     jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning }),
     jsx(GapsPanel, { coverage, selected }),
-    jsx(ApplyGate, { hostLabel: selected })
+    jsx(ApplyGate, { hostLabel: selected }),
+    jsx('div', {
+      style: {
+        marginTop: '12px', paddingTop: '8px', borderTop: '1px solid ' + C.border,
+        fontFamily: MONO, fontSize: '0.5625rem',
+        color: health && health.ui && health.ui.in_sync === false ? C.warn : C.faint
+      }
+    }, health && health.ui && health.ui.served
+        ? 'pane build ' + health.ui.served.sha +
+          (health.ui.in_sync === false
+            ? ' — the app is still serving the previous build, reload it'
+            : ' · matches the repo')
+        : 'pane build unknown — /health did not answer')
   ])
 }
 

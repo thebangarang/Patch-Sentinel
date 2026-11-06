@@ -6,18 +6,21 @@ the agent must never disagree about what was measured. Two consequences worth st
 * ``GET /status`` never scans. It reads the stored measurement and says how old it is, because a
   pane that quietly re-measures every time it is opened is a pane that contradicts the answer the
   model gave a minute ago. ``POST /scan`` is the explicit refresh.
-* Every route is read-only in this version. ``/apply`` is deliberately absent: applying needs an
-  operator-typed host name and a receipt, and shipping a route that half-does that is worse than
-  shipping none (see ``docs/design.md`` *Apply gate*, decision D6).
+* Every route is read-only except ``POST /apply``, which passes straight through to ``cve_apply``:
+  the operator's typed host name is the gate, and the pane must not have a shorter route to
+  changing a machine than the agent has (see ``docs/design.md`` *Apply gate*, decision D6).
 
 The engine is loaded with ``importlib.util.spec_from_file_location`` — never by putting the plugin
 directory on ``sys.path`` — so the module identity here is the same one the tool layer uses.
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
+import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -112,7 +115,35 @@ def apply(body: dict | None = None) -> dict:
     return _payload(tools.cve_apply, args)
 
 
+def _ui_prints() -> dict:
+    """Which build of the pane is where.
+
+    The desktop app copies ``desktop/plugin.js`` into ``$HERMES_HOME/desktop-plugins/<name>/`` and
+    serves that copy. After an edit the two can differ — the classic "I don't see any change" — so
+    both fingerprints are reported and the pane compares them out loud.
+    """
+    root = Path(__file__).resolve().parent.parent
+    home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
+    prints = {}
+    for key, path in (("repo", root / "desktop" / "plugin.js"),
+                      ("served", home / "desktop-plugins" / "patch-sentinel" / "plugin.js")):
+        try:
+            data = path.read_bytes()
+            prints[key] = {
+                "sha": hashlib.sha1(data).hexdigest()[:8],
+                "bytes": len(data),
+                "mtime": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+                                 .isoformat(timespec="seconds"),
+            }
+        except OSError:
+            prints[key] = None
+    prints["in_sync"] = bool(prints["repo"] and prints["served"]
+                             and prints["repo"]["sha"] == prints["served"]["sha"])
+    return prints
+
+
 @router.get("/health")
 def health() -> dict:
-    """Cheap liveness for the pane: the router is mounted and the engine imports."""
-    return {"ok": True, "plugin": "patch-sentinel", "tools": sorted(tools.HANDLERS)}
+    """Liveness for the pane, plus which build of the pane the app is actually serving."""
+    return {"ok": True, "plugin": "patch-sentinel", "tools": sorted(tools.HANDLERS),
+            "ui": _ui_prints()}
