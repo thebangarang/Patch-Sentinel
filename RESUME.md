@@ -86,10 +86,9 @@ empty — that panel is the product's argument.
 - **Repo**: `github.com/thebangarang/Patch-Sentinel`, public, MIT (`LICENSE` in the tree).
 - **Name**: Patch Sentinel — `patch-sentinel` id, `patch_sentinel` Python package (D1, closed).
 
-## Still his to decide
+## Still his to do
 
-1. **Unattended auto-apply in scope?** The typed-confirmation version is built either way (D6).
-2. **He posts the video and the form** — his X account and the Typeform. Write the script, the credits
+1. **He posts the video and the form** — his X account and the Typeform. Write the script, the credits
    line and the caption; never post them yourself.
 
 ## Definition of done for v0.1 (the demo lines, live)

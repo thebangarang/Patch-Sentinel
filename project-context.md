@@ -76,9 +76,12 @@ in-image CVE scanning; SCAP/OVAL compliance; any SaaS backend.
 
 Repository: **github.com/thebangarang/Patch-Sentinel** (public; empty until the first push).
 
+### Decided
+
+- **Auto-apply is out of the demo** (operator, 2026-11-06): the typed-confirmation gate is built, and
+  unattended patching is not. Do not re-ask.
+
 ### Still open
 
-1. **Auto-apply in the demo?** The gated "type the host name" version is built either way; unattended
-   patching is a larger promise than a 90-second demo needs.
-2. **Who posts the video and the form** — both need the operator's own X account and the Typeform. The
-   agent writes the script, the credits line and the caption; it never posts them.
+- **Who posts the video and the form** — both need the operator's own X account and the Typeform. The
+  agent writes the script, the credits line and the caption; it never posts them.
