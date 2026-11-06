@@ -14,10 +14,12 @@ a system, or reports it as safe when it is not. Both are worse than an outage.
 |---|---|---|---|
 | Host inventory (kernel, package versions, findings) | Internal | last 90 scan runs in `data/` | at rest: filesystem; local only |
 | Scan receipts / apply receipts | Internal | permanent (audit) | local only |
-| Credentials (registry token, optional API key) | Restricted | never stored by the plugin — read via `agent.secret_scope` | n/a |
+| Credentials | none in v0.1 | the plugin reads no secret at all | n/a |
 
-No customer data, no PII. **No secrets are written to disk by this plugin** — that is a rule, not a
-convention: a token read is used in-process and dropped.
+No customer data, no PII. **No secrets are written, read or forwarded by this plugin** — not by
+convention but by construction: there is no credential path in the code (see *Secrets*). Registry
+reads are anonymous; the operator's SSH agent is used by `ssh` itself, and the plugin never sees the
+key.
 
 ## Threat Model
 
@@ -35,20 +37,21 @@ convention: a token read is used in-process and dropped.
 
 ## Secrets
 
-| Secret | Stored in | Scope | Rotation |
-|---|---|---|---|
-| Docker Hub read-only token (optional, for image digests/pulls) | the operator's vault; read via `agent.secret_scope` at call time | `repo:read` only | 12 months |
-| SSH key for remote hosts | the operator's own `~/.ssh` (never the plugin) | host-scoped | operator's policy |
-
-The plugin declares these in `plugin.yaml` (`requires_env` / `optional_env`) and **never** reads
-`.env`, `auth.json` or another tool's credential file.
+**v0.1.0 handles no credential.** `plugin.yaml` declares no `requires_env` and no `optional_env`,
+because there is nothing to declare: registry lookups are anonymous (a rate limit is reported as
+`unknown`, with the reason), and remote hosts are reached through the operator's own SSH agent, which
+`ssh` reads itself. If a registry token is ever added it must arrive through
+`agent.secret_scope.get_secret()` at call time; the plugin never reads `.env`, `auth.json` or another
+tool's credential file, and it must never place a secret in a subprocess environment.
 
 ## Privileged operations
 
 - Everything the scan does is unprivileged: `apt-get -s dist-upgrade`, `uname -r`, `docker ps`,
   `docker buildx imagetools inspect`, `ssh <host>` (read-only commands).
-- Anything privileged (real apt, service restarts, reboots) is an **apply**, gated, logged, reversible
-  per `docs/design.md`, and never reachable from the scheduler.
+- **Nothing privileged is implemented in v0.1.0.** The plan's commands are strings for a human; the
+  test suite asserts that no apply path exists. When an apply is added it must be gated (host name
+  typed by the operator), recorded (a receipt line), reversible (documented per action) and never
+  reachable from the scheduler — the design for that is in `docs/design.md` *Apply gate*.
 
 ## Tier checklist (High) — status
 
@@ -56,9 +59,9 @@ The plugin declares these in `plugin.yaml` (`requires_env` / `optional_env`) and
 - [ ] Dependency CVE audit — n/a in v0.1 (stdlib only); re-check if a dependency is added
 - [ ] Least-privilege review — before the first public release
 - [x] Agent instructions reviewed for injection (this file + `AGENTS.md`)
-- [ ] Secrets scan before each public commit (`hermes-admin/scripts/install-secret-hooks.sh` shape)
-- [ ] Disclosure block in the README (network calls, subprocesses, credential handling) — before the
-      catalogue PR
+- [x] Secrets scan before each public commit — none read, none written, none in the tree
+- [x] Disclosure block in the README (network calls, subprocesses, credential handling)
+- [x] Admission gates green: `hermes plugins validate .` and `hermes plugins doctor . --ci`
 
 ## Incident Response
 
@@ -75,3 +78,4 @@ The plugin declares these in `plugin.yaml` (`requires_env` / `optional_env`) and
 | Date | Activity | Result | By |
 |---|---|---|---|
 | 2026-11-06 | Initial design + threat model, from the CVE-2026-98432 incident | tier High set; three false-all-clear classes named | Hermes |
+| 2026-11-06 | First code: the four read-only tools + the measurement layer | no credential path, no apply path; both admission gates green; 43 tests | Hermes |

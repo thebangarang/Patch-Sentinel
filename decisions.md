@@ -90,3 +90,36 @@ three-outcome honesty layer already is.
 binary, a database and a licence review); unattended auto-apply (deferred: Tier 1 gates).
 **Consequence:** the demo has a fixed beat sheet — a finding, a refusal, a proof — see
 `docs/design.md` *v0.1 acceptance*.
+
+## D10 — No credential path at all in v0.1 (2026-11-06) — decided
+
+**Decision:** the plugin reads no secret, declares no `requires_env`/`optional_env`, and passes no
+credential to any subprocess. Registry lookups are anonymous; a rate limit is `unknown` with the reason.
+Remote hosts are reached through the operator's own SSH agent (`BatchMode=yes`), which `ssh` reads
+itself.
+**Reason:** a token path means a credential a plugin holds, a place to store it, a way to hand it to
+`docker`, and a rotation story — for one improvement (400 vs 200 pulls/6h) on a machine that pulls a
+handful of tags a day. The catalogue's credential rule is easiest to satisfy by having nothing to
+satisfy.
+**Alternatives:** `optional_env: DOCKER_HUB_TOKEN` + `docker login` at call time (rejected for v0.1:
+a secret in a subprocess environment, and a rotation duty nobody would own); reading the operator's
+`~/.docker/config.json` (rejected: reading another tool's credential store, explicitly forbidden).
+**Consequence:** `.env.example` no longer advertises a registry token, `SECURITY.md` says so plainly, and
+a rate-limited registry is a named gap rather than a configuration burden.
+
+## D11 — The CVE tracker is read, but only to show where it is wrong (2026-11-06) — decided
+
+**Decision:** `cve_explain` reads Ubuntu's CVE tracker record for the CVE it was asked about, labels it
+`context_only`, and then compares the version the tracker itself names with what the host is measurably
+running. Where the tracker's status is still open and that exact version is installed and running, the
+answer says so (`disagreements[]`, with the measurement as its evidence). The tracker never sets a
+verdict on its own.
+**Reason:** on 2026-11-06 the tracker for CVE-2026-98432 read `pending` / "7.0.0-43.43" while
+7.0.0-43.43 was installed and 7.0.0-43-generic was running here. That single fact is the product's whole
+argument, and it is reproducible from a pinned fixture (`tests/fixtures/cve-2026-98432_resolute.json`).
+**Alternatives:** tracker read for narrative only, no comparison (rejected: leaves the user with two
+contradicting statements and no verdict); tracker as a verdict input (rejected: D3, measured to lag).
+**Consequence:** the comparison is restricted to kernels the host could actually run — the flavour-less
+`linux` source package and the package matching the running kernel's own flavour; other flavours go to
+`not_compared[]`, because another flavour's fix is not a statement about this host.
+

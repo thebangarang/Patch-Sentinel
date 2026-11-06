@@ -31,7 +31,7 @@ Each of those is now a rule in `docs/design.md`. That is the differentiator — 
 
 | asset | what it does | how it is reused |
 |---|---|---|
-| `~/hermes-admin/scripts/cve-watch.py` | the standing routine: USN feed + apt simulation + registry digests + kernel currency, per host, with a 19-assertion selftest | **the logic core** — port the pure functions (`parse_inst`, `usn_index`, `kernel_verdict`, `image_state`) and their fixtures |
+| `~/hermes-admin/scripts/cve-watch.py` | the standing routine: USN feed + apt simulation + registry digests + kernel currency, per host, with a 23-assertion selftest | **the logic core** — port the pure functions (`parse_inst`, `usn_index`, `kernel_verdict`, `image_state`) and their fixtures |
 | `~/hermes-admin/scripts/pull-pending-images.sh` | 429-aware pull retry; downloads only, never restarts | the "stage, never apply" pattern |
 | `~/hermes-admin/scripts/install-cve-2026-98432-controls.sh` | interim mitigations when no patch exists (idempotent, `--revert`) | the *interim controls* feature (v0.2) |
 | `~/hermes-admin/scripts/notify.py` | the one alert channel, dedup by key, `--dry-run` | notification path, unchanged |

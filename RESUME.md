@@ -1,8 +1,12 @@
 # RESUME — start here in a fresh session
 
 You are picking up **patch-sentinel**, a Hermes plugin (hackathon entry): patch-posture scanning for the
-local machine and remote hosts, with a dashboard pane and a gated apply. Today it is **design + reuse
-analysis only — no plugin code exists yet**. Do not assume otherwise.
+local machine and remote hosts, with a dashboard pane and a gated apply.
+
+**State at 2026-11-06 evening:** tasks 1 and 2 below are **done and pushed** — the pure core is ported
+and tested, and the four tools are registered, validated and answering through `hermes chat`. The
+dashboard half, the demo script and the catalogue PR are **not built**. There is **no apply path**:
+`cve_plan` proposes, nothing executes.
 
 ## The clock — this decides everything else
 
@@ -35,20 +39,25 @@ Then: `decisions.md` (D1–D7, closed decisions — do not reopen them silently)
 
 | | |
 |---|---|
-| scaffolded | `~/projects/patch_sentinel/` — git repo, `.venv`, tier High, docs complete |
-| built | **nothing** — no `plugin.yaml`, no `__init__.py`, no code |
-| proven elsewhere | the logic this plugin ports runs daily already: `~/hermes-admin/scripts/cve-watch.py` |
-| blocked by | 4 operator questions (`project-context.md` end) — none are technical |
+| scaffolded | `~/projects/patch-sentinel/` — git repo, `.venv`, tier High, docs complete |
+| built | `plugin.yaml`, `__init__.py`, `patch_sentinel/{verdict,plan,store,tools,schemas}.py`, `sources/` (shell, hostprobe, usn, registry, cve_tracker, hosts), 43 tests, 3 fixtures |
+| gates | `hermes plugins validate .` passed · `hermes plugins doctor . --ci` OK (4 tools) · `hermes chat -q "are we patched?"` calls `cve_scan` |
+| not built | `dashboard/`, `desktop/plugin.js`, the bundled skill, the cron/notification path, any apply |
+| proven elsewhere | the logic this plugin ports runs daily already: `~/hermes-admin/scripts/cve-watch.py` (untouched) |
+| blocked by | nothing technical; the video and the form are the operator's |
 
 ## First three tasks, in order
 
-**1. Port the pure logic (do this first — it has fixtures already).**
-Copy, from `~/hermes-admin/scripts/cve-watch.py` into `patch_sentinel/verdict.py`, these functions *and*
-their selftest cases: `abi`, `parse_inst`, `usn_index`, `explain`, `kernel_verdict`, `image_state`,
-`proposal`. Rename the module's selftest into `tests/test_verdict.py` (stdlib `unittest`). The
-19 assertions there are the plugin's first tests; keep them passing unchanged, they encode the rules.
+**1. Port the pure logic — DONE (2026-11-06).**
+`patch_sentinel/verdict.py` carries `abi`, `parse_inst`, `usn_index`, `explain`, `kernel_verdict`,
+`image_state`, `proposal`; `tests/test_verdict.py` is the routine's selftest as stdlib unittest. The
+**23** assert statements (the routine's `--selftest` prints "17 cases asserted" while asserting 23;
+the docs' "19" was neither) pass unchanged, and a differential run of 770 comparisons against
+`~/hermes-admin/scripts/cve-watch.py` is identical. One addition, defaulted to the old behaviour:
+`usn_index(..., release=)` because a plugin runs on hosts that are not 26.04.
 
-**2. The plugin shell.**
+**2. The plugin shell — DONE (2026-11-06).** Both gates below were run in a fresh process, and the
+`hermes chat` line was read, not assumed.
 ```
 plugin.yaml      name: patch-sentinel, version: 0.1.0, provides_tools: [cve_scan, cve_plan, cve_explain, cve_coverage]
 __init__.py      register(ctx) — import the tools module *inside* register (never at module level)
