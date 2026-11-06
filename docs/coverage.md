@@ -39,7 +39,7 @@ those exact versions.
 | Maven | every `*.pom` under `~/.m2/repository` | container capture (`maven:3-eclipse-temurin-21`), 227 artifacts |
 | Go | `go version -m` on each `GOPATH/bin` binary | container capture (`golang:alpine`) |
 | crates.io | `cargo install --list` | container capture (`rust:1-slim`), path-install shape |
-| NuGet | `dotnet tool list -g` | container capture (`mcr.microsoft.com/dotnet/sdk:8.0`), dotnetsay 3.0.3 |
+| NuGet | `~/.nuget/packages` (ids read from each `.nuspec`), then `dotnet tool list -g` | container capture (`dotnet/sdk:8.0`), Newtonsoft.Json 12.0.1 + Serilog 2.10.0 |
 
 Each capture is committed under `tests/fixtures/` and asserted in `tests/test_libraries.py`, so the
 parser cannot drift from the output it was written against without a test failing.
@@ -58,7 +58,6 @@ Ecosystem names were confirmed against the live API rather than assumed: `rack 2
 | not covered | why |
 |---|---|
 | project lockfiles (`package-lock.json`, `composer.lock`, `Cargo.toml`, `go.mod`, `*.csproj`) | per-project, not machine-wide; guessing which project is meant is how a scanner lies. One chat question away. |
-| `~/.nuget/packages` | the folder names are lowercased package ids; querying OSV under the wrong casing risks a **false clean**, which is worse than a stated gap. Reading the `.nuspec` for the real id is the fix. |
 | `~/.gradle/caches` | same shape as `~/.m2` but the layout differs per Gradle version; not yet captured. |
 | inside container images | needs an image scanner (trivy) and a vulnerability database; refused on purpose in 0.1.0. |
 | Hex/Elixir, CocoaPods, Swift | no machine-wide store — both resolve per project. |
@@ -70,6 +69,12 @@ Ecosystem names were confirmed against the live API rather than assumed: `rack 2
 An advisory (OSV/GHSA record) that names the exact installed version. One package can carry many —
 `Jinja2 2.10` carries 12 — which is why findings are grouped per package with a count, the worst
 severity, and the first version that closes it.
+
+The `~/.nuget/packages` case is worth keeping as a lesson even though it is now covered: the folder
+names are lowercased package ids, and querying OSV under the wrong casing returns **zero** advisories
+— a false clean, which is worse than a stated gap. The reader takes the id from each package's own
+`.nuspec` (`Newtonsoft.Json`, not `newtonsoft.json`), verified against a real restore in the .NET 8
+SDK container.
 
 Where the advisory carries its own **Workarounds** section, that text is shown with the finding: the
 vendor's temporary mitigation, quoted rather than invented.

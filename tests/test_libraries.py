@@ -93,9 +93,13 @@ class MoreRuntimes(unittest.TestCase):
     clean.
     """
 
-    def test_the_registry_and_the_parsers_agree(self):
-        # a new ecosystem without a parser would silently collect nothing
-        self.assertEqual(set(languages.INVENTORIES), set(languages.PARSERS))
+    def test_every_ecosystem_and_every_candidate_has_a_parser(self):
+        # a reader without a parser would silently collect nothing
+        for ecosystem, spec in languages.INVENTORIES.items():
+            self.assertIn(ecosystem, languages.PARSERS, ecosystem)
+            for candidate in spec["candidates"]:
+                self.assertIn(candidate.get("parser", ecosystem), languages.PARSERS,
+                              candidate["label"])
 
     def test_composer_global_show(self):
         rows = languages.parse_composer((FIXTURES / "composer_global_show.json").read_text())
@@ -122,6 +126,20 @@ class MoreRuntimes(unittest.TestCase):
         # real output from mcr.microsoft.com/dotnet/sdk:8.0 after `dotnet tool install -g dotnetsay`
         rows = languages.parse_dotnet((FIXTURES / "dotnet_tool_list.txt").read_text())
         self.assertEqual(rows, [{"package": "dotnetsay", "version": "3.0.3"}])
+
+    def test_nuget_package_store_keeps_the_real_casing(self):
+        # captured in dotnet/sdk:8.0 after `dotnet add package Newtonsoft.Json --version 12.0.1`.
+        # The folder is "newtonsoft.json"; querying OSV under that lowercased id returns nothing,
+        # which is a false clean — so the id comes from the .nuspec.
+        rows = languages.parse_nuget_store((FIXTURES / "nuget_package_store.txt").read_text())
+        self.assertEqual(rows, [{"package": "Newtonsoft.Json", "version": "12.0.1"},
+                                {"package": "Serilog", "version": "2.10.0"}])
+
+    def test_the_store_is_asked_before_the_tool_list(self):
+        # the store is the dependency surface; `dotnet tool list -g` only knows global tools
+        candidates = languages.INVENTORIES["NuGet"]["candidates"]
+        self.assertEqual(candidates[0].get("parser"), "nuget_store")
+        self.assertIn("nuget/packages", candidates[0]["command"])
 
     def test_dotnets_empty_table_is_not_a_package(self):
         # a machine with no global tools prints only the header and the dashed rule

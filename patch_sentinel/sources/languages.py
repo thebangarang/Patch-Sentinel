@@ -102,11 +102,24 @@ INVENTORIES["Go"] = {
                     "label": "GOPATH/bin binaries"}],
     "missing_detail": "go is not on PATH on this host",
 }
+# NuGet has two machine-wide stores and they answer different questions: `dotnet tool list -g` lists
+# the global *tools*, while ~/.nuget/packages holds every package a restore has ever extracted — the
+# real dependency surface. The store's directory names are lowercased ids, which OSV would miss, so
+# the id is read back from each package's own .nuspec: measured, that is what keeps "Newtonsoft.Json"
+# from being queried as "newtonsoft.json" and coming back falsely clean.
 INVENTORIES["NuGet"] = {
-    "label": "dotnet (global tools)",
-    "candidates": [{"detect": "command -v dotnet", "command": "dotnet tool list -g",
-                    "label": "dotnet's global tools"}],
-    "missing_detail": "dotnet is not on PATH on this host",
+    "label": "nuget (global tools and the package store)",
+    "candidates": [
+        {"detect": "test -d \"$HOME/.nuget/packages\"",
+         "command": "for f in \"$HOME/.nuget/packages\"/*/*/*.nuspec; do "
+                    "id=$(sed -n 's:.*<id>\\(.*\\)</id>.*:\\1:p' \"$f\" | head -1); "
+                    "v=$(basename \"$(dirname \"$f\")\"); "
+                    "[ -n \"$id\" ] && echo \"$id|$v\"; done",
+         "label": "~/.nuget/packages (ids read from each .nuspec)", "parser": "nuget_store"},
+        {"detect": "command -v dotnet", "command": "dotnet tool list -g",
+         "label": "dotnet's global tools"},
+    ],
+    "missing_detail": "neither ~/.nuget/packages nor the dotnet CLI is on this host",
 }
 
 MAX_COMPONENTS = 600          # bounds the OSV query and the payload
@@ -264,9 +277,22 @@ def parse_go_modules(text: str) -> list[dict]:
     return out
 
 
+def parse_nuget_store(text: str) -> list[dict]:
+    """``id|version`` pairs from a walk of ``~/.nuget/packages`` → components (original casing)."""
+    out, seen = [], set()
+    for line in text.splitlines():
+        name, _, version = line.strip().partition("|")
+        if not name or not version or (name, version) in seen:
+            continue
+        seen.add((name, version))
+        out.append({"package": name, "version": version})
+    return out
+
+
 PARSERS = {"npm": parse_npm, "PyPI": parse_pip, "Packagist": parse_composer,
            "RubyGems": parse_gem, "crates.io": parse_cargo, "NuGet": parse_dotnet,
-           "Maven": parse_maven_poms, "Go": parse_go_modules}
+           "Maven": parse_maven_poms, "Go": parse_go_modules,
+           "nuget_store": parse_nuget_store}
 
 
 def collect(target: str | None = None, timeout: int = 90) -> dict:
@@ -290,7 +316,9 @@ def collect(target: str | None = None, timeout: int = 90) -> dict:
             if code != 0 and not out:
                 outcome, detail = "unreadable", f"{candidate['label']} refused (rc={code})"
                 continue
-            parsed = PARSERS[ecosystem](out)
+            # a candidate may answer in a different shape than its ecosystem's default parser
+            parser = PARSERS[candidate.get("parser", ecosystem)]
+            parsed = parser(out)
             if parsed:
                 outcome, detail = "ok", candidate["label"]
                 break

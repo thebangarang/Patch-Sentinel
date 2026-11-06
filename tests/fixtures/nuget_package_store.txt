@@ -1,0 +1,2 @@
+Newtonsoft.Json|12.0.1
+Serilog|2.10.0
