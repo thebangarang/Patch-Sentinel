@@ -55,6 +55,11 @@ DISTROS = {
         "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/cloud/"
                "nocloud_alpine-3.22.2-x86_64-bios-cloudinit-r0.qcow2",
         "user": "alpine",
+        # Alpine has no bash: a seed that asks for /bin/bash leaves cloud-init's user module with a
+        # shell that does not exist, and the console comes up at a login prompt with no user created
+        # (measured from the boot log). ash is what the image ships.
+        "shell": "/bin/ash",
+        "needs_manual_user": True,
         "port": 2224,
         "label": "alpine-lab",
     },
@@ -139,6 +144,25 @@ def write_seed(name: str) -> None:
         "PATCH_SENTINEL_LAB_SEED",
         str(Path.home() / ".config" / "patch-sentinel-lab" / "seed-extra.yaml")))
     extra_text = extra.read_text(encoding="utf-8") if extra.exists() else ""
+    # Alpine's cloud-init image runs the datasource but does not apply `users:`. Three attempts on
+    # fresh overlays: /bin/bash (no such file), /bin/ash, then runcmd plus a fixed home mode — each one
+    # wrote the key to ~/.ssh/authorized_keys ("adduser: user 'alpine' in use" in the console log) and
+    # sshd still answered "Permission denied (publickey)". Not solved. Lab only; Alpine's lag path stays
+    # adapter-tested rather than live-proven, and docs/coverage.md says so.
+    manual = ""
+    if spec.get("needs_manual_user"):
+        manual = ("runcmd:\n"
+                  "  - [ sh, -c, \"adduser -D -s /bin/ash " + spec["user"] + " || true; "
+                  "mkdir -p /home/" + spec["user"] + "/.ssh; "
+                  # sshd's StrictModes refuses a key in a home that is group/world-writable, and the
+                  # image's home is 777: the key was written and still rejected (measured).
+                  "chown " + spec["user"] + ":" + spec["user"] + " /home/" + spec["user"] + "; "
+                  "chmod 755 /home/" + spec["user"] + "; "
+                  "printf '%s\\n' '" + pub + "' > /home/" + spec["user"] + "/.ssh/authorized_keys; "
+                  "chown -R " + spec["user"] + ":" + spec["user"] + " /home/" + spec["user"] + "/.ssh; "
+                  "chmod 700 /home/" + spec["user"] + "/.ssh; "
+                  "chmod 600 /home/" + spec["user"] + "/.ssh/authorized_keys; "
+                  "rc-service sshd restart 2>/dev/null || true\" ]\n")
     p["userdata"].write_text(
         "#cloud-config\n"
         f"hostname: {spec['label']}\n"
@@ -146,13 +170,13 @@ def write_seed(name: str) -> None:
         "users:\n"
         f"  - name: {spec['user']}\n"
         "    groups: [wheel]\n"
-        "    shell: /bin/bash\n"
+        f"    shell: {spec.get('shell', '/bin/bash')}\n"
         # No passwordless sudo: the scan is read-only, so the test host does not need root, and a
         # plugin that ships an NOPASSWD rule in its own tree is a finding (it was, at admission).
         "    ssh_authorized_keys:\n"
         f"      - {pub}\n"
         "ssh_pwauth: false\n"
-        "package_update: false\n" + extra_text,
+        "package_update: false\n" + manual + extra_text,
         encoding="utf-8")
     p["meta"].write_text(f"instance-id: {spec['label']}\nlocal-hostname: {spec['label']}\n",
                          encoding="utf-8")
