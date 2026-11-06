@@ -20,6 +20,7 @@ import importlib.util
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -115,6 +116,25 @@ def apply(body: dict | None = None) -> dict:
     return _payload(tools.cve_apply, args)
 
 
+_LOADED_AT = time.time()
+
+
+def _api_state() -> dict:
+    """Is the Python half the one on disk?
+
+    The pane's routes are imported once, when the plugin host loads. Editing ``tools.py`` afterwards
+    leaves the *back end* serving the previous code while the JS reloads — a count with no rows, a
+    field that is simply absent. This reports it instead of letting it look like a UI bug.
+    """
+    try:
+        current = os.path.getmtime(tools.__file__)
+    except OSError:
+        return {"stale": False, "loaded_at": _LOADED_AT}
+    return {"stale": current > _LOADED_AT + 1,
+            "loaded_at": datetime.fromtimestamp(_LOADED_AT, timezone.utc).isoformat(timespec="seconds"),
+            "source_mtime": datetime.fromtimestamp(current, timezone.utc).isoformat(timespec="seconds")}
+
+
 def _ui_prints() -> dict:
     """Which build of the pane is where.
 
@@ -146,4 +166,4 @@ def _ui_prints() -> dict:
 def health() -> dict:
     """Liveness for the pane, plus which build of the pane the app is actually serving."""
     return {"ok": True, "plugin": "patch-sentinel", "tools": sorted(tools.HANDLERS),
-            "ui": _ui_prints()}
+            "ui": _ui_prints(), "api": _api_state()}

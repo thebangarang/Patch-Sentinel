@@ -214,7 +214,7 @@ function NowPanel({ status, onRefresh, busy }) {
 // --------------------------------------------------------------------------- UPDATES
 
 /** The raw update list for the selected host — every package, searchable, copyable. */
-function UpdatesPanel({ entry, hostLabel }) {
+function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
   const [query, setQuery] = useState('')
   const rows = (entry && entry.pending) || []
   const total = (entry && entry.pending_count) || 0
@@ -228,9 +228,24 @@ function UpdatesPanel({ entry, hostLabel }) {
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label('updates'),
       jsx('span', { style: { flex: 1 } }),
-      jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: total ? C.warn : C.faint } },
+      jsx('span', { fontFamily: MONO, fontSize: '0.625rem', color: total ? C.warn : C.faint },
         hostLabel ? total + ' available' : '—'),
-      rows.length ? jsx(Copy, { text, what: 'the update list' }) : null
+      jsx('span', { style: { fontSize: '0.625rem', color: C.faint } },
+        entry && entry.measured_at ? 'measured ' + entry.measured_at.replace('T', ' ').slice(11, 16) + ' UTC' : ''),
+      rows.length ? jsx(Copy, { text, what: 'the update list' }) : null,
+      onRescan
+        ? jsx('button', {
+            type: 'button',
+            onClick: onRescan,
+            disabled: busy,
+            title: 're-measure this host — the list is part of the scan, not a separate query',
+            style: {
+              fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: busy ? 'default' : 'pointer',
+              color: busy ? C.faint : C.accent, background: 'transparent',
+              border: '1px solid ' + C.border, borderRadius: '3px'
+            }
+          }, busy ? 'measuring…' : 'rescan')
+        : null
     ]),
     rows.length
       ? jsxs('div', {}, [
@@ -277,8 +292,18 @@ function UpdatesPanel({ entry, hostLabel }) {
 function LanguagesPanel({ libraries, onCheck, busy }) {
   const [query, setQuery] = useState('')
   const [onlyFindings, setOnlyFindings] = useState(false)
-  const packages = (libraries && libraries.packages) || []
+  const answered = (libraries && libraries.packages) || []
   const vulnerable = (libraries && libraries.vulnerable) || []
+  // if the payload carries findings but no inventory (an older backend, or a host that answered
+  // nothing), the findings themselves are the list — a count with no rows is what the operator
+  // rightly called broken
+  const seen = new Set(answered.map((p) => (p.ecosystem || '') + '/' + p.package))
+  const fromFindings = []
+  for (const v of vulnerable) {
+    const key = (v.ecosystem || '') + '/' + v.package
+    if (!seen.has(key)) { seen.add(key); fromFindings.push({ ecosystem: v.ecosystem, package: v.package, version: v.version }) }
+  }
+  const packages = answered.length ? answered : fromFindings
   const hit = new Set(vulnerable.map((v) => (v.ecosystem || '') + '/' + v.package))
   const worst = {}
   for (const v of vulnerable) {
@@ -522,7 +547,7 @@ function GapsPanel({ coverage, selected }) {
 
 // --------------------------------------------------------------------------- APPLY GATE
 
-function ApplyGate({ hostLabel }) {
+function ApplyGate({ hostLabel, entry }) {
   const [typed, setTyped] = useState('')
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -546,13 +571,24 @@ function ApplyGate({ hostLabel }) {
   }, [armed, busy, hostLabel, typed])
 
   const steps = (result && result.steps) || []
+  const count = entry ? (entry.pending_count || 0) : null
+  const nothingToDo = count === 0
   return jsxs('section', { style: { borderTop: '1px solid ' + C.border, paddingTop: '10px', marginTop: '6px' } }, [
-    label('apply', { marginBottom: '6px' }),
-    jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginBottom: '6px' } },
-      'This is the only control that changes a machine. Type ' + (hostLabel || 'the host name') +
-      ' exactly to unlock it. “Stage” downloads and prints the command, changes nothing. “Apply” runs it and writes a receipt with the versions before and after.'),
-    jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '6px' } },
-      armed ? 'unlocked — stage first, then apply' : 'locked — the two buttons stay dead until the name matches'),
+    jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', marginBottom: '6px' } }, [
+      label('apply'),
+      jsx('span', { style: { flex: 1 } }),
+      jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: nothingToDo ? C.faint : C.warn } },
+        count === null ? 'no measurement' : nothingToDo ? 'nothing to apply' : count + ' update(s) to install')
+    ]),
+    jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginBottom: '4px' } },
+      nothingToDo
+        ? 'The scan found no updates on ' + hostLabel + ', so both buttons would be pointless — that is not a refusal, there is simply nothing to do.'
+        : 'This is the step that actually pushes the update list above onto ' + (hostLabel || 'the host') +
+          '. “Stage” downloads and prints the command and changes nothing; “Apply” runs it, then re-measures the host and writes a receipt with the versions before and after. It is the same action as asking me in chat.'),
+    nothingToDo ? null : jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '6px' } },
+      'Type ' + (hostLabel || 'the host name') + ' exactly to unlock it — the lock exists so a stray click cannot patch a machine.'),
+    armed ? jsx('div', { style: { fontSize: '0.6875rem', color: C.accent, marginBottom: '6px' } },
+      'unlocked — stage first, then apply') : null,
     jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
       jsx('input', {
         value: typed,
@@ -566,7 +602,7 @@ function ApplyGate({ hostLabel }) {
       jsx('button', {
         type: 'button',
         onClick: () => run(true),
-        disabled: !armed || busy,
+        disabled: !armed || busy || nothingToDo,
         title: 'Stages the download and prints the command. Changes nothing.',
         style: {
           fontFamily: MONO, fontSize: '0.6875rem', padding: '4px 10px',
@@ -578,7 +614,7 @@ function ApplyGate({ hostLabel }) {
       jsx('button', {
         type: 'button',
         onClick: () => run(false),
-        disabled: !armed || busy,
+        disabled: !armed || busy || nothingToDo,
         title: 'Applies for real. Writes a receipt with the versions before and after.',
         style: {
           fontFamily: MONO, fontSize: '0.6875rem', padding: '4px 12px',
@@ -586,7 +622,7 @@ function ApplyGate({ hostLabel }) {
           color: armed ? C.danger : C.faint, background: 'transparent',
           border: '1px solid ' + (armed ? C.danger : C.border), borderRadius: '3px'
         }
-      }, armed ? 'apply for real' : 'apply — locked')
+      }, busy ? '…' : armed && !nothingToDo ? 'apply for real' : 'apply — locked')
     ]),
     result
       ? jsxs('div', { style: { marginTop: '8px', borderTop: '1px dashed ' + C.border, paddingTop: '6px' } }, [
@@ -729,11 +765,12 @@ export function PatchSentinel({ compact }) {
     ]),
     jsx(NowPanel, { status, onRefresh: rescan, busy }),
     jsx(UpdatesPanel, { entry: status && status.hosts ? status.hosts[selected] : null,
-                        hostLabel: selected }),
+                        hostLabel: selected, onRescan: rescan, busy }),
     jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }),
     jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning }),
     jsx(GapsPanel, { coverage, selected }),
-    jsx(ApplyGate, { hostLabel: selected }),
+    jsx(ApplyGate, { hostLabel: selected,
+                     entry: status && status.hosts ? status.hosts[selected] : null }),
     jsx('div', {
       style: {
         marginTop: '12px', paddingTop: '8px', borderTop: '1px solid ' + C.border,
@@ -744,7 +781,10 @@ export function PatchSentinel({ compact }) {
         ? 'pane build ' + health.ui.served.sha +
           (health.ui.in_sync === false
             ? ' — the app is still serving the previous build, reload it'
-            : ' · matches the repo')
+            : ' · matches the repo') +
+          (health.api && health.api.stale
+            ? ' · BACKEND STALE — the routes still run the previous code, restart the app'
+            : health.api ? ' · backend current' : '')
         : 'pane build unknown — /health did not answer')
   ])
 }
