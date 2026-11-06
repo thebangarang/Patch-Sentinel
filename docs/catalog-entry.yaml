@@ -1,0 +1,27 @@
+# The catalogue entry — paste as `plugin-catalog/patch-sentinel.yaml` in NousResearch/hermes-agent.
+#
+# The SHA must be a full 40-hex commit from THIS repository, and must point at a commit whose tree
+# is clean and contains everything the entry claims. A commit cannot contain its own hash, so the
+# pin points at the reviewed tree and the pinning commit follows it — say so in the PR body.
+#
+# Before opening the PR, re-run (all three must be green on the pinned commit):
+#   python3 -m unittest discover -s tests -t .
+#   hermes plugins validate .
+#   hermes plugins doctor . --ci
+name: patch-sentinel
+repo: https://github.com/thebangarang/Patch-Sentinel
+sha: "1f5bc2ef6fa99faa6608617a9b11c79957d1fb56"
+subdir: ""
+description: >
+  Answers "are we patched?" with evidence, for whatever the host runs — apt, dnf, pacman and zypper
+  adapters chosen from the host's own /etc/os-release, plus container image digests and the language
+  stack (npm, pip) through OSV. Three outcomes per check, so an unreachable host, an unimplemented
+  distro or a rate-limited registry reads as unknown rather than clean; a gated apply stages,
+  applies, re-measures and writes a receipt.
+maintainer: thebangarang
+tier: community
+category: automation
+requires_hermes: ">=0.19"
+version: "0.1.0"
+docs_url: "https://github.com/thebangarang/Patch-Sentinel#readme"
+image: ""
