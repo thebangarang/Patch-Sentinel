@@ -1,0 +1,4 @@
+{
+  "name": "patch-sentinel",
+  "api": "plugin_api.py"
+}
