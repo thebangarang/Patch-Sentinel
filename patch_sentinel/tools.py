@@ -22,7 +22,7 @@ from . import plan, schemas, store, verdict
 from .sources import cve_tracker, dispatch, languages, osv, usn
 from .sources import hosts as inventory_module
 
-MAX_PENDING = 60              # a payload the model can read; the count is always the true one
+MAX_PENDING = 400             # the update list is a surface the operator reads, not a sample of one
 PLAN_MAX_AGE = 600            # seconds a stored measurement may be reused by cve_plan
 CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
 
@@ -590,7 +590,10 @@ def cve_libraries(args: dict, **kwargs) -> str:
     base = {"tool": "cve_libraries", "host": host["label"], "target": host["target"] or "local",
             "measured_at": collected["measured_at"], "outcomes": collected["outcomes"],
             "details": collected["details"], "by_ecosystem": collected["by_ecosystem"],
-            "components": len(components), "truncated": collected["truncated"]}
+            "components": len(components), "truncated": collected["truncated"],
+            # the installed list itself, so a pane can show what was checked instead of a count
+            "packages": [{"ecosystem": c.get("ecosystem"), "package": c.get("package"),
+                          "version": c.get("version")} for c in components[:MAX_PENDING]]}
 
     if not components:
         return _json({**base, "vulnerable": [], "exit_code": 2,

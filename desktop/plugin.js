@@ -211,6 +211,165 @@ function NowPanel({ status, onRefresh, busy }) {
   ])
 }
 
+// --------------------------------------------------------------------------- UPDATES
+
+/** The raw update list for the selected host — every package, searchable, copyable. */
+function UpdatesPanel({ entry, hostLabel }) {
+  const [query, setQuery] = useState('')
+  const rows = (entry && entry.pending) || []
+  const total = (entry && entry.pending_count) || 0
+  const needle = query.trim().toLowerCase()
+  const filtered = needle ? rows.filter((r) => (r.package || '').toLowerCase().includes(needle)) : rows
+  const LIMIT = 60
+  const shown = filtered.slice(0, LIMIT)
+  const text = filtered.map((r) => r.package + '  ' + (r.from || '?') + ' → ' + r.to).join('\n')
+
+  return jsxs('section', { style: { marginBottom: '18px' } }, [
+    jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
+      label('updates'),
+      jsx('span', { style: { flex: 1 } }),
+      jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: total ? C.warn : C.faint } },
+        hostLabel ? total + ' available' : '—'),
+      rows.length ? jsx(Copy, { text, what: 'the update list' }) : null
+    ]),
+    rows.length
+      ? jsxs('div', {}, [
+          jsx('input', {
+            value: query,
+            onChange: (event) => setQuery(event.target.value),
+            placeholder: 'filter by package name',
+            style: {
+              width: '100%', boxSizing: 'border-box', fontFamily: MONO, fontSize: '0.6875rem',
+              padding: '3px 7px', marginBottom: '5px', background: 'transparent', color: C.text,
+              border: '1px solid ' + C.border, borderRadius: '3px'
+            }
+          }),
+          shown.map((row, index) => jsxs('div', {
+            key: index,
+            style: {
+              display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px',
+              fontFamily: MONO, fontSize: '0.625rem', padding: '2px 0',
+              borderTop: '1px solid ' + C.border
+            }
+          }, [
+            jsx('span', { style: { color: C.text, wordBreak: 'break-all' } }, row.package),
+            jsx('span', { style: { color: C.dim, textAlign: 'right' } },
+              (row.from || '?') + ' → ' + row.to)
+          ])),
+          filtered.length > LIMIT
+            ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '4px' } },
+                'showing ' + LIMIT + ' of ' + filtered.length + ' — filter to narrow it, or copy the list')
+            : null,
+          entry && entry.pending_truncated
+            ? jsx('div', { style: { fontSize: '0.625rem', color: C.warn, marginTop: '3px' } },
+                'the stored scan kept the first ' + rows.length + ' of ' + total + ' — rescan for the rest')
+            : null
+        ])
+      : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, padding: '6px 0' } },
+          entry ? 'nothing available — this host is up to date, as measured'
+                : 'no measurement for this host yet — press rescan above')
+  ])
+}
+
+// --------------------------------------------------------------------------- LANGUAGES
+
+/** What the language check actually read, and what it found. Nothing runs until you ask. */
+function LanguagesPanel({ libraries, onCheck, busy }) {
+  const [query, setQuery] = useState('')
+  const [onlyFindings, setOnlyFindings] = useState(false)
+  const packages = (libraries && libraries.packages) || []
+  const vulnerable = (libraries && libraries.vulnerable) || []
+  const hit = new Set(vulnerable.map((v) => (v.ecosystem || '') + '/' + v.package))
+  const worst = {}
+  for (const v of vulnerable) {
+    const key = (v.ecosystem || '') + '/' + v.package
+    if (!worst[key]) worst[key] = v
+  }
+  const needle = query.trim().toLowerCase()
+  const rows = packages
+    .filter((p) => !needle || (p.package || '').toLowerCase().includes(needle))
+    .filter((p) => !onlyFindings || hit.has((p.ecosystem || '') + '/' + p.package))
+
+  return jsxs('section', { style: { marginBottom: '18px' } }, [
+    jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
+      label('languages'),
+      jsx('span', { style: { flex: 1 } }),
+      libraries
+        ? jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: vulnerable.length ? C.danger : C.faint } },
+            packages.length + ' package(s) · ' + vulnerable.length + ' finding(s)')
+        : null,
+      jsx('button', {
+        type: 'button',
+        onClick: onCheck,
+        disabled: busy,
+        title: 'Reads the global npm tree and the pip environment on PATH, then asks osv.dev',
+        style: {
+          fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: busy ? 'default' : 'pointer',
+          color: busy ? C.faint : C.accent, background: 'transparent',
+          border: '1px solid ' + C.border, borderRadius: '3px'
+        }
+      }, busy ? 'checking…' : libraries ? 're-check' : 'check')
+    ]),
+    libraries
+      ? jsxs('div', {}, [
+          jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '4px' } },
+            (libraries.answer || '') + (libraries.details
+              ? ' · ' + Object.entries(libraries.details).map(([k, v]) => k + ' via ' + v).join(', ')
+              : '')),
+          jsxs('div', { style: { display: 'flex', gap: '6px', marginBottom: '5px' } }, [
+            jsx('input', {
+              value: query,
+              onChange: (event) => setQuery(event.target.value),
+              placeholder: 'filter packages',
+              style: {
+                flex: 1, fontFamily: MONO, fontSize: '0.6875rem', padding: '3px 7px',
+                background: 'transparent', color: C.text, border: '1px solid ' + C.border,
+                borderRadius: '3px'
+              }
+            }),
+            jsx('button', {
+              type: 'button',
+              onClick: () => setOnlyFindings((current) => !current),
+              style: {
+                fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: 'pointer',
+                color: onlyFindings ? C.danger : C.dim, background: 'transparent',
+                border: '1px solid ' + (onlyFindings ? C.danger : C.border), borderRadius: '3px'
+              }
+            }, onlyFindings ? 'showing findings' : 'only findings')
+          ]),
+          rows.slice(0, 80).map((row, index) => {
+            const key = (row.ecosystem || '') + '/' + row.package
+            const found = worst[key]
+            return jsxs('div', {
+              key: index,
+              style: {
+                display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px',
+                fontFamily: MONO, fontSize: '0.625rem', padding: '2px 0',
+                borderTop: '1px solid ' + C.border
+              }
+            }, [
+              jsx('span', { style: { color: C.text, wordBreak: 'break-all' } },
+                row.package + '@' + row.version + '  ' + (row.ecosystem || '')),
+              jsx('span', { style: { color: found ? C.danger : C.faint, textAlign: 'right' } },
+                found ? (found.id || '') + (found.fixed && found.fixed[0] ? ' → ' + found.fixed[0] : '')
+                      : 'clean')
+            ])
+          }),
+          !rows.length
+            ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint } },
+                onlyFindings ? 'no findings in what was read' : 'nothing matches the filter')
+            : null,
+          rows.length > 80
+            ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '3px' } },
+                'showing 80 of ' + rows.length + ' — filter to narrow it')
+            : null
+        ])
+      : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, padding: '6px 0' } },
+          'not read yet — press check. It reads npm\'s global tree and the pip environment on PATH; '
+          + 'project lockfiles are not read automatically (see GAPS).')
+  ])
+}
+
 // --------------------------------------------------------------------------- PENDING
 
 function PendingPanel({ hostLabel, plan, onPlan, limited, planning }) {
@@ -455,7 +614,7 @@ function ApplyGate({ hostLabel }) {
 
 // --------------------------------------------------------------------------- root
 
-export { NowPanel, PendingPanel, GapsPanel, ApplyGate }
+export { NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate }
 
 export function PatchSentinel({ compact }) {
   const [status, setStatus] = useState(null)
@@ -465,6 +624,8 @@ export function PatchSentinel({ compact }) {
   const [plan, setPlan] = useState(null)
   const [planning, setPlanning] = useState(false)
   const [health, setHealth] = useState(null)
+  const [libraries, setLibraries] = useState(null)
+  const [libBusy, setLibBusy] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -501,6 +662,19 @@ export function PatchSentinel({ compact }) {
       setPlan({ steps: [], refusals: [{ reason: String(err && err.message ? err.message : err) }] })
     } finally {
       setPlanning(false)
+    }
+  }, [])
+
+  // the language check hits the network and takes seconds: it runs when asked, never on open
+  const checkLibraries = useCallback(async () => {
+    setLibBusy(true)
+    try {
+      setLibraries(await call('/libraries'))
+    } catch (err) {
+      setLibraries({ answer: 'could not look: ' + (err && err.message ? err.message : err),
+                     packages: [], vulnerable: [] })
+    } finally {
+      setLibBusy(false)
     }
   }, [])
 
@@ -547,11 +721,16 @@ export function PatchSentinel({ compact }) {
       }
     }, [
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'now'), ' — one row per machine: what the scan measured, and when.'),
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'updates'), ' — every package this host would upgrade, searchable.'),
+      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'languages'), ' — the npm/pip packages on this machine, checked against OSV on demand.'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'pending'), ' — this host\'s updates turned into ordered commands, each with a way back.'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'gaps'), ' — what this scan could not see. Red here is a fact about the scan, not the host.'),
       jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'apply'), ' — the only control that changes a machine, and it needs the host name typed.')
     ]),
     jsx(NowPanel, { status, onRefresh: rescan, busy }),
+    jsx(UpdatesPanel, { entry: status && status.hosts ? status.hosts[selected] : null,
+                        hostLabel: selected }),
+    jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }),
     jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning }),
     jsx(GapsPanel, { coverage, selected }),
     jsx(ApplyGate, { hostLabel: selected }),

@@ -64,6 +64,8 @@ _IMAGES_BLOCK = (
 
 _DNF_BLOCK = (
     "uname -r; "
+    # every installed version, so the update list can say what each package is *now* (I| prefix)
+    "rpm -qa --qf 'I|%{NAME} %{VERSION}-%{RELEASE}\n' 2>/dev/null; "
     "rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' 'kernel*' 2>/dev/null; "
     "echo " + hostprobe.MARK_K + "; "
     "dnf -q list --available kernel 2>/dev/null; "
@@ -190,7 +192,13 @@ def parse_dnf(out: str) -> dict:
         raise ValueError("no kernel release reported")
     running = head_lines[0]
     installed = []
+    installed_map: dict[str, str] = {}
     for line in head_lines[1:]:
+        if line.startswith("I|"):
+            bits = line[2:].split()
+            if len(bits) == 2:
+                installed_map[bits[0]] = bits[1]
+            continue
         version = _rpm_kernel_version(line)
         if version:
             installed.append(version)
@@ -203,8 +211,8 @@ def parse_dnf(out: str) -> dict:
     pending = []
     for name, version, origin in _dnf_rows(ablock):
         package = name.rpartition(".")[0] if "." in name else name
-        pending.append({"package": package, "from": None, "to": version, "origin": origin,
-                        "arch": name.rpartition(".")[2] if "." in name else ""})
+        pending.append({"package": package, "from": installed_map.get(package), "to": version,
+                        "origin": origin, "arch": name.rpartition(".")[2] if "." in name else ""})
 
     images, answers, outcome = [], {}, "measured"
     for line in iblock.splitlines():

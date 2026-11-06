@@ -1,0 +1,570 @@
+@@FAMILY@@dnf
+7.2.11-300.fc45.x86_64
+I|libgcc 16.2.1-2.fc45.1
+I|fonts-filesystem 5.0.0-4.fc45
+I|redhat-systemd-presets 102-3.fc45
+I|redhat-systemd-presets-common 102-3.fc45
+I|whois-nls 5.6.6-2.fc45
+I|tzdata 2026c-2.fc45
+I|libssh-config 0.12.2-1.fc45
+I|publicsuffix-list-dafsa 20260624-2.fc45
+I|gnulib-l10n 20241231-4.fc45
+I|coreutils-common 9.11-6.fc45
+I|fedora-release-identity-cloud 45-13
+I|fedora-gpg-keys 45-1
+I|fedora-repos 45-1
+I|fedora-release-common 45-13
+I|fedora-release-cloud 45-13
+I|setup 2.15.1-2.fc45
+I|filesystem 3.18-59.fc45
+I|pkgconf-m4 2.5.1-2.fc45
+I|xkeyboard-config 2.48-4.fc45
+I|kbd-misc 2.10.0-3.fc45
+I|kbd-legacy 2.10.0-3.fc45
+I|pcre2-syntax 10.47-1.fc45.2
+I|ncurses-base 6.6-3.fc45
+I|glibc-common 2.44-1.fc45
+I|glibc-gconv-extra 2.44-1.fc45
+I|glibc 2.44-1.fc45
+I|ncurses-libs 6.6-3.fc45
+I|bash 5.3.15-2.fc45
+I|glibc-minimal-langpack 2.44-1.fc45
+I|zlib-ng-compat 2.3.3-6.fc45
+I|systemd-libs 262-3.fc45
+I|libzstd 1.5.7-6.fc45
+I|libstdc++ 16.2.1-2.fc45.1
+I|xz-libs 5.8.3-2.fc45
+I|libuuid 2.42.4-1.fc45
+I|libblkid 2.42.4-1.fc45
+I|libacl 2.4.0-2.fc45
+I|json-c 0.18-9.fc45
+I|sqlite-libs 3.53.4-1.fc45
+I|systemd-shared 262-3.fc45
+I|fmt 12.1.0-3.fc45
+I|crypto-policies 20260713-2.gitc42da77.fc45
+I|readline 8.3-6.fc45
+I|libxml2 2.15.4-1.fc45
+I|bzip2-libs 1.0.8-24.fc45
+I|libffi 3.5.2-3.fc45
+I|libunistring 1.1-12.fc45
+I|libidn2 2.3.8-4.fc45
+I|libxcrypt 4.5.2-4.fc45
+I|gdbm-libs 1.23-12.fc45
+I|libsmartcols 2.42.4-1.fc45
+I|popt 1.19-11.fc45
+I|pcre2 10.47-1.fc45.2
+I|grep 3.12-4.fc45
+I|gmp 6.3.0-6.fc45
+I|libtasn1 4.21.0-2.fc45
+I|p11-kit 0.26.5-1.fc45
+I|libcap-ng 0.9.6-1.fc45
+I|audit-libs 4.2.1-2.fc45
+I|systemd-sysusers 262-3.fc45
+I|libfdisk 2.42.4-1.fc45
+I|sdbus-cpp 2.3.1-3.fc45
+I|grub2-common 2.12-81.fc45
+I|libeconf 0.7.9-4.fc45
+I|pam-libs 1.7.2-4.fc45
+I|libcap 2.78-2.fc45
+I|libcom_err 1.47.4-2.fc45
+I|ngtcp2 1.22.1-3.fc45
+I|expat 2.8.3-1.fc45
+I|liblastlog2 2.42.4-1.fc45
+I|nettle 4.0-5.fc45
+I|xz 5.8.3-2.fc45
+I|gdbm 1.23-12.fc45
+I|cyrus-sasl-lib 2.1.28-37.fc45
+I|libpsl 0.23.1-1.fc45
+I|libxkbcommon 1.13.1-4.fc45
+I|kbd 2.10.0-3.fc45
+I|libtextstyle 1.0-4.fc45
+I|fips-provider 1.5.2-3.fc45
+I|zstd 1.5.7-6.fc45
+I|elfutils-libelf 0.196-1.fc45
+I|libbpf 1.7.0-2.fc45
+I|libusb1 1.0.30-2.fc45
+I|procps-ng 4.0.6-2.fc45
+I|file-libs 5.48-3.fc45
+I|file 5.48-3.fc45
+I|dbus-common 1.16.2-6.fc45
+I|fuse3-libs 3.18.3-1.fc45
+I|lua-libs 5.5.1-2.fc45
+I|libsepol 3.11-2.fc45
+I|libselinux 3.11-5.fc45
+I|sed 4.10-2.fc45
+I|libmount 2.42.4-1.fc45
+I|util-linux-core 2.42.4-1.fc45
+I|findutils 4.11.0-2.fc45
+I|gettext-libs 1.0-4.fc45
+I|dbus-broker 37-9.fc45
+I|cpio 2.15-10.fc45
+I|gettext-envsubst 1.0-4.fc45
+I|gettext-runtime 1.0-4.fc45
+I|libyaml 0.2.5-19.fc45
+I|lz4-libs 1.10.0-5.fc45
+I|libseccomp 2.6.1-3.fc45
+I|libpkgconf 2.5.1-2.fc45
+I|pkgconf 2.5.1-2.fc45
+I|pkgconf-pkg-config 2.5.1-2.fc45
+I|alternatives 1.33-6.fc45
+I|p11-kit-trust 0.26.5-1.fc45
+I|gnutls 3.8.13-3.fc45
+I|glib2 2.90.0-1.fc45
+I|gsettings-desktop-schemas 51.0-1.fc45
+I|keyutils-libs 1.6.3-8.fc45
+I|libverto 0.3.2-13.fc45
+I|libattr 2.6.0-2.fc45
+I|openssl-libs 4.0.3-1.fc45
+I|coreutils 9.11-6.fc45
+I|ca-certificates 2026.2.92_v9.0.319-2.fc45
+I|krb5-libs 1.22.2-9.fc45
+I|kmod 34.2-6.fc45
+I|tpm2-tss 4.2.0-1.fc45
+I|libtirpc 1.3.8-0.fc45
+I|authselect-libs 1.8.0-1.fc45
+I|kmod-libs 34.2-6.fc45
+I|zchunk-libs 1.5.4-1.fc45
+I|libnsl2 2.0.1-6.fc45
+I|python-pip-wheel 26.1.2-5.fc45
+I|gzip 1.14-4.fc45
+I|cracklib 2.10.3-2.fc45
+I|libpwquality 1.4.5-18.fc45
+I|pam 1.7.2-4.fc45
+I|util-linux 2.42.4-1.fc45
+I|systemd 262-3.fc45
+I|device-mapper 1.02.217-2.fc45
+I|device-mapper-libs 1.02.217-2.fc45
+I|grub2-tools-minimal 2.12-81.fc45
+I|cryptsetup-libs 2.8.8-1.fc45
+I|libkcapi 1.5.1-2.fc45
+I|libkcapi-hasher 1.5.1-2.fc45
+I|libkcapi-hmaccalc 1.5.1-2.fc45
+I|grubby 8.40-91.fc45
+I|systemd-udev 262-3.fc45
+I|dracut 111-4.fc45
+I|os-prober 1.81-12.fc45
+I|grub2-tools 2.12-81.fc45
+I|rpm-sequoia 1.10.3-1.fc45
+I|rpm-libs 6.1.0-1.fc45
+I|libmodulemd 2.15.3-3.fc45
+I|libsolv 0.7.40-2.fc45
+I|libarchive 3.8.9-2.fc45
+I|ngtcp2-crypto-ossl 1.22.1-3.fc45
+I|libevent 2.1.13-1.fc45
+I|libbrotli 1.2.1-1.fc45
+I|libnghttp2 1.69.0-6.fc45
+I|libnghttp3 1.18.0-1.fc45
+I|libtool-ltdl 2.5.4-11.fc45
+I|openldap 2.6.14-1.fc45
+I|libcbor 0.14.0-3.fc45
+I|libfido2 1.17.0-5.fc45
+I|libssh 0.12.2-1.fc45
+I|libcurl 8.21.0-6.fc45
+I|curl 8.21.0-6.fc45
+I|librepo 1.21.2-2.fc45
+I|libdnf5 5.4.6.0-3.fc45
+I|libdnf5-cli 5.4.6.0-3.fc45
+I|tpm2-tss-fapi 4.2.0-1.fc45
+I|duktape 2.7.0-12.fc45
+I|libproxy 0.5.12-3.fc45
+I|mpdecimal 4.0.1-4.fc45
+I|python3-libs 3.15.0-1.fc45
+I|python3 3.15.0-1.fc45
+I|crypto-policies-scripts 20260713-2.gitc42da77.fc45
+I|python-unversioned-command 3.15.0-1.fc45
+I|glib-networking 2.90.0-1.fc45
+I|tpm2-tools 5.8-1.fc45
+I|dnf5 5.4.6.0-3.fc45
+I|libdnf5-plugin-systemd-inhibit 5.4.6.0-3.fc45
+I|rpm 6.1.0-1.fc45
+I|wcurl 2026.01.05-3.fc45
+I|rpm-plugin-audit 6.1.0-1.fc45
+I|kpartx 0.14.3-2.fc45
+I|systemd-networkd 262-3.fc45
+I|systemd-resolved 262-3.fc45
+I|systemd-pam 262-3.fc45
+I|cracklib-dicts 2.10.3-2.fc45
+I|authselect 1.8.0-1.fc45
+I|pkcs11-provider 1.2.0-3.fc45
+I|dbus 1.16.2-6.fc45
+I|mkpasswd 5.6.6-2.fc45
+I|bash-completion 2.18-1.fc45
+I|memstrack 0.2.5-9.fc45
+I|diffutils 3.12-6.fc45
+I|adwaita-mono-fonts 51.0-1.fc45
+I|adwaita-sans-fonts 51.0-1.fc45
+I|libgpg-error 1.61-2.fc45
+I|libassuan 2.5.7-6.fc45
+I|libtalloc 2.5.0-2.fc45
+I|libgcrypt 1.12.2-2.fc45
+I|libtevent 0.17.2-2.fc45
+I|npth 1.8-5.fc45
+I|dbus-libs 1.16.2-6.fc45
+I|libedit 3.1-60.20260512cvs.fc45
+I|efi-filesystem 6-9.fc45
+I|protobuf3-c 1.5.2-52.fc45
+I|libmnl 1.0.5-10.fc45
+I|libsemanage 3.11-4.fc45
+I|shadow-utils 4.20.0-2.fc45
+I|gnupg2-gpgconf 2.4.9-18.fc45
+I|device-mapper-event-libs 1.02.217-2.fc45
+I|libtdb 1.4.15-4.fc45
+I|jansson 2.14-5.fc45
+I|libselinux-utils 3.11-5.fc45
+I|console-login-helper-messages 0.22.0-2.fc45
+I|python3-libselinux 3.11-5.fc45
+I|libnvme 1.16.2-1.fc45
+I|libksba 1.8.0-3.fc45
+I|hiredis 1.2.0-10.fc45
+I|qemu-user-static-x86 11.1.2-1.fc45
+I|qemu-user-static-arm 11.1.2-1.fc45
+I|qemu-user-static-aarch64 11.1.2-1.fc45
+I|libaio 0.3.111-24.fc45
+I|libdnf 0.76.0-1.fc45
+I|python3-libdnf 0.76.0-1.fc45
+I|elfutils-libs 0.196-1.fc45
+I|samba-common 4.25.0-3.fc45
+I|python3-idna 3.18-2.fc45
+I|python3-urllib3 2.8.0-1.fc45
+I|python3-rpds-py 2026.6.3-6.fc45
+I|python3-attrs 26.1.0-4.fc45
+I|python3-referencing 0.37.0-4.fc45
+I|python3-distro 1.9.0-13.fc45
+I|libtsm 4.8.0-1.fc45
+I|libsss_idmap 2.13.1-7.fc45
+I|libnl3 3.12.0-4.fc45
+I|libdhash 0.5.0-63.fc45
+I|openssh 10.5p1-1.fc45
+I|e2fsprogs-libs 1.47.4-2.fc45
+I|efivar-libs 39-13.fc45
+I|mokutil 0.7.2-7.fc45
+I|python3-jsonschema-specifications 2025.9.1-4.fc45
+I|python3-jsonschema 4.26.0-10.fc45
+I|python3-hawkey 0.76.0-1.fc45
+I|gnupg2-dirmngr 2.4.9-18.fc45
+I|gnupg2-keyboxd 2.4.9-18.fc45
+I|python3-libsemanage 3.11-4.fc45
+I|device-mapper-event 1.02.217-2.fc45
+I|lvm2-libs 2.03.43-2.fc45
+I|gnupg2-gpg-agent 2.4.9-18.fc45
+I|shadow-utils-subid 4.20.0-2.fc45
+I|libnftnl 1.3.1-3.fc45
+I|grub2-efi-ia32 2.12-81.fc45
+I|grub2-efi-x64 2.12-81.fc45
+I|python3-dbus 1.4.0-14.fc45
+I|gnupg2-verify 2.4.9-18.fc45
+I|gnupg2 2.4.9-18.fc45
+I|gpgme 2.0.1-6.fc45
+I|libsss_certmap 2.13.1-7.fc45
+I|kernel-core 7.2.11-300.fc45
+I|kernel-modules-core 7.2.11-300.fc45
+I|oniguruma 6.9.10-5.fc45
+I|jq 1.8.2-5.fc45
+I|libnet 1.3-8.fc45
+I|libsecret 0.21.8.2-2.fc45
+I|fuse-common 3.18.3-1.fc45
+I|fuse3 3.18.3-1.fc45
+I|fuse-overlayfs 1.17-1.fc45
+I|python3-pysocks 1.7.1-35.fc45
+I|dns-root-data 2026260100-5.fc45
+I|unbound-libs 1.26.1-1.fc45
+I|qemu-user-static-xtensa 11.1.2-1.fc45
+I|qemu-user-static-sparc 11.1.2-1.fc45
+I|qemu-user-static-sh4 11.1.2-1.fc45
+I|qemu-user-static-s390x 11.1.2-1.fc45
+I|qemu-user-static-riscv 11.1.2-1.fc45
+I|qemu-user-static-ppc 11.1.2-1.fc45
+I|qemu-user-static-or1k 11.1.2-1.fc45
+I|qemu-user-static-mips 11.1.2-1.fc45
+I|qemu-user-static-microblaze 11.1.2-1.fc45
+I|qemu-user-static-m68k 11.1.2-1.fc45
+I|qemu-user-static-loongarch64 11.1.2-1.fc45
+I|qemu-user-static-hppa 11.1.2-1.fc45
+I|qemu-user-static-hexagon 11.1.2-1.fc45
+I|qemu-user-static-alpha 11.1.2-1.fc45
+I|composefs-libs 1.0.8-7.fc45
+I|google-noto-fonts-common 20260601-3.fc45
+I|google-noto-sans-vf-fonts 20260601-3.fc45
+I|abattis-cantarell-vf-fonts 0.301-18.fc45
+I|default-fonts-core-sans 4.3-3.fc45
+I|xml-common 0.6.3-70.fc45
+I|nano 9.2-1.fc45
+I|device-mapper-persistent-data 1.3.3-2.fc45
+I|libmd 1.2.0-2.fc45
+I|libbsd 0.12.2-8.fc45
+I|libretls 3.8.1-9.fc45
+I|netcat 1.238-2.fc45
+I|userspace-rcu 0.15.6-2.fc45
+I|inih 62-3.fc45
+I|xfsprogs 7.1.1-1.fc45
+I|crun 1.29.1-1.fc45
+I|libnfnetlink 1.0.2-2.fc45
+I|libnetfilter_conntrack 1.1.1-2.fc45
+I|iptables-libs 1.8.13-3.fc45
+I|nftables 1.1.6-4.fc45
+I|nftables-services 1.1.6-4.fc45
+I|criu 4.2.1-2.fc45
+I|podman-sequoia 0.3.2-4.fc45
+I|mpfr 4.2.2-4.fc45
+I|gawk 5.4.1-1.fc45
+I|policycoreutils 3.11-2.fc45
+I|selinux-policy 45.23-1.fc45
+I|selinux-policy-targeted 45.23-1.fc45
+I|container-selinux 2.251.0-1.fc45
+I|containers-common 0.69.2-1.fc45
+I|passt-selinux 0^20260728.gf8df3f1-2.fc45
+I|passt 0^20260728.gf8df3f1-2.fc45
+I|audit-rules 4.2.1-2.fc45
+I|libcomps 0.1.24-5.fc45
+I|python3-libcomps 0.1.24-5.fc45
+I|hwdata 0.412-1.fc45
+I|libpciaccess 0.16-18.fc45
+I|libdrm 2.4.134-2.fc45
+I|kmscon 10.0.4-5.fc45
+I|libfsverity 1.7-4.fc45
+I|ima-evm-utils-libs 1.6.2-12.fc45
+I|rpm-sign-libs 6.1.0-1.fc45
+I|libicu 78.3-8.fc45
+I|samba-core-libs 4.25.0-3.fc45
+I|samba-ndr-libs 4.25.0-3.fc45
+I|aardvark-dns 2.1.0-1.fc45
+I|netavark 2.1.0-1.fc45
+I|containers-common-extra 0.69.2-1.fc45
+I|graphite2 1.3.14-22.fc45
+I|dnf-data 4.24.0-5.fc45
+I|libgomp 16.2.1-2.fc45.1
+I|rpm-build-libs 6.1.0-1.fc45
+I|python3-rpm 6.1.0-1.fc45
+I|python3-dnf 4.24.0-5.fc45
+I|python3-dnf-plugins-extras-common 4.1.2-13.fc45
+I|cyrus-sasl-gssapi 2.1.28-37.fc45
+I|libsss_nss_idmap 2.13.1-7.fc45
+I|sssd-client 2.13.1-7.fc45
+I|lmdb-libs 0.9.34-3.fc45
+I|libldb 4.25.0-3.fc45
+I|python3-charset-normalizer 3.4.9-2.fc45
+I|python3-requests 2.34.2-2.fc45
+I|python3-setools 4.7.1-1.fc45
+I|python3-audit 4.2.1-2.fc45
+I|checkpolicy 3.11-2.fc45
+I|python3-policycoreutils 3.11-2.fc45
+I|python3-jsonpointer 2.4-11.fc45
+I|python3-jsonpatch 1.33-18.fc45
+I|python3-markupsafe 3.0.2-10.fc45
+I|python3-jinja2 3.1.6-10.fc45
+I|libpng 1.6.58-2.fc45
+I|freetype 2.14.3-2.fc45
+I|harfbuzz 14.5.0-1.fc45
+I|fontconfig 2.18.3-2.fc45
+I|tracer-common 1.6-1.fc45
+I|python3-six 1.17.0-10.fc45
+I|python3-psutil 7.2.2-10.fc45
+I|python3-libdnf5 5.4.6.0-3.fc45
+I|python3-tracer 1.6-1.fc45
+I|lzo 2.10-17.fc45
+I|zram-generator 1.2.1-6.fc45
+I|libndp 1.9-6.fc45
+I|NetworkManager-libnm 1.58.1-3.fc45
+I|NetworkManager 1.58.1-3.fc45
+I|vim-data 9.2.1129-1.fc45
+I|libini_config 2.0.0-63.fc45
+I|c-ares 1.34.8-2.fc45
+I|libsss_sudo 2.13.1-7.fc45
+I|sssd-common 2.13.1-7.fc45
+I|sssd-krb5-common 2.13.1-7.fc45
+I|libpipeline 1.5.8-5.fc45
+I|groff-base 1.24.1-2.fc45
+I|psmisc 23.7-9.fc45
+I|iproute 7.0.0-2.fc45
+I|libss 1.47.4-2.fc45
+I|e2fsprogs 1.47.4-2.fc45
+I|conmon 2.2.1-2.fc45
+I|catatonit 0.2.1-6.fc45
+I|python3-pyyaml 6.0.3-6.fc45
+I|python3-oauthlib 3.3.1-3.fc45
+I|python3-configobj 5.0.9-11.fc45
+I|openssl 4.0.3-1.fc45
+I|dhcpcd 10.3.2-2.fc45
+I|xxhash-libs 0.8.4-1.fc45
+I|mtools 4.0.49-4.fc45
+I|numactl-libs 2.0.19-5.fc45
+I|liburing 2.13-3.fc45
+I|hostname 3.25-5.fc45
+I|less 704-4.fc45
+I|grub2-pc-modules 2.12-81.fc45
+I|grub2-pc 2.12-81.fc45
+I|man-db 2.13.1-4.fc45
+I|cloud-init 26.2-2.fc45
+I|qemu-guest-agent 11.1.2-1.fc45
+I|grub2-tools-extra 2.12-81.fc45
+I|rsync 3.5.0-2.fc45
+I|podman 6.1.3-1.fc45
+I|sssd-kcm 2.13.1-7.fc45
+I|vim-minimal 9.2.1129-1.fc45
+I|console-login-helper-messages-issuegen 0.22.0-2.fc45
+I|zram-generator-defaults 1.2.1-6.fc45
+I|btrfs-progs 7.1-1.fc45
+I|python3-dnf-plugin-tracer 4.1.2-13.fc45
+I|kmscon-freetype 10.0.4-5.fc45
+I|dnf5-plugins 5.4.6.0-3.fc45
+I|audit 4.2.1-2.fc45
+I|console-login-helper-messages-motdgen 0.22.0-2.fc45
+I|cloud-utils-growpart 0.34-2.fc45
+I|initscripts-service 10.27-3.fc45
+I|criu-libs 4.2.1-2.fc45
+I|lvm2 2.03.43-2.fc45
+I|nano-default-editor 9.2-1.fc45
+I|composefs 1.0.8-7.fc45
+I|qemu-user-static 11.1.2-1.fc45
+I|python3-unbound 1.26.1-1.fc45
+I|unbound-anchor 1.26.1-1.fc45
+I|python3-urllib3+socks 2.8.0-1.fc45
+I|pinentry 1.3.3-2.fc45
+I|shim-x64 16.1-7
+I|shim-ia32 16.1-7
+I|efibootmgr 18-13.fc45
+I|openssh-clients 10.5p1-1.fc45
+I|openssh-server 10.5p1-1.fc45
+I|elfutils-debuginfod-client 0.196-1.fc45
+I|console-login-helper-messages-profile 0.22.0-2.fc45
+I|chrony 4.9-1.fc45
+I|rpm-plugin-systemd-inhibit 6.1.0-1.fc45
+I|logrotate 3.22.0-6.fc45
+I|python3-html2text 2025.4.15-8.fc45
+I|7zip 26.03-1.fc45
+I|unzip 6.0-71.fc45
+I|gawk-all-langpacks 5.4.1-1.fc45
+I|rpm-plugin-selinux 6.1.0-1.fc45
+I|parted 3.7.13-1.fc45
+I|prefixdevname 0.2.0-9.fc45
+I|rootfiles 9.0-8.fc45
+I|ncurses 6.6-3.fc45
+I|iputils 20250605-3.fc45
+I|sudo 1.9.17-16.p2.fc45
+I|dracut-config-generic 111-4.fc45
+I|tar 1.35-10.fc45
+I|grub2-tools-efi 2.12-81.fc45
+I|systemd-oomd-defaults 262-3.fc45
+I|grub2-efi-x64-modules 2.12-81.fc45
+I|grub2-efi-ia32-modules 2.12-81.fc45
+I|glibc-langpack-en 2.44-1.fc45
+kernel-core 7.2.11-300.fc45
+kernel-modules-core 7.2.11-300.fc45
+@@K@@
+Available packages
+kernel.x86_64 7.2.15-300.fc45 updates
+@@A@@
+Upgrades
+7zip.x86_64                           26.04-1.fc45               updates
+criu.x86_64                           4.3-1.fc45                 updates
+criu-libs.x86_64                      4.3-1.fc45                 updates
+crun.x86_64                           1.30.1-1.fc45              updates
+curl.x86_64                           8.21.0-9.fc45              updates
+device-mapper-persistent-data.x86_64  1.3.4-1.fc45               updates
+dhcpcd.x86_64                         10.5.2-2.fc45              updates
+dnf5.x86_64                           5.4.7.0-1.fc45             updates
+dnf5-plugins.x86_64                   5.4.7.0-1.fc45             updates
+dracut.x86_64                         111-5.fc45                 updates
+dracut-config-generic.x86_64          111-5.fc45                 updates
+elfutils-debuginfod-client.x86_64     0.197-1.fc45               updates
+elfutils-libelf.x86_64                0.197-1.fc45               updates
+elfutils-libs.x86_64                  0.197-1.fc45               updates
+expat.x86_64                          2.9.0-1.fc45               updates
+fedora-release-cloud.noarch           45-14                      updates
+fedora-release-common.noarch          45-14                      updates
+fedora-release-identity-cloud.noarch  45-14                      updates
+fips-provider.x86_64                  1.5.3-2.fc45               updates
+freetype.x86_64                       2.14.3-3.fc45              updates
+glib-networking.x86_64                2.90.1-1.fc45              updates
+glib2.x86_64                          2.90.1-1.fc45              updates
+glibc.x86_64                          2.44-2.fc45                updates
+glibc-common.x86_64                   2.44-2.fc45                updates
+glibc-gconv-extra.x86_64              2.44-2.fc45                updates
+glibc-langpack-en.x86_64              2.44-2.fc45                updates
+glibc-minimal-langpack.x86_64         2.44-2.fc45                updates
+grub2-common.noarch                   1:2.12-83.fc45             updates
+grub2-efi-ia32.x86_64                 1:2.12-83.fc45             updates
+grub2-efi-ia32-modules.noarch         1:2.12-83.fc45             updates
+grub2-efi-x64.x86_64                  1:2.12-83.fc45             updates
+grub2-efi-x64-modules.noarch          1:2.12-83.fc45             updates
+grub2-pc.x86_64                       1:2.12-83.fc45             updates
+grub2-pc-modules.noarch               1:2.12-83.fc45             updates
+grub2-tools.x86_64                    1:2.12-83.fc45             updates
+grub2-tools-efi.x86_64                1:2.12-83.fc45             updates
+grub2-tools-extra.x86_64              1:2.12-83.fc45             updates
+grub2-tools-minimal.x86_64            1:2.12-83.fc45             updates
+harfbuzz.x86_64                       15.0.0-2.fc45              updates
+hwdata.noarch                         0.413-1.fc45               updates
+kernel-core.x86_64                    7.2.15-300.fc45            updates
+kernel-modules-core.x86_64            7.2.15-300.fc45            updates
+krb5-libs.x86_64                      1.22.2-11.fc45             updates
+less.x86_64                           710-2.fc45                 updates
+libcurl.x86_64                        8.21.0-9.fc45              updates
+libdnf5.x86_64                        5.4.7.0-1.fc45             updates
+libdnf5-cli.x86_64                    5.4.7.0-1.fc45             updates
+libdnf5-plugin-systemd-inhibit.x86_64 5.4.7.0-1.fc45             updates
+libfido2.x86_64                       1.17.0-6.fc45              updates
+libgcc.x86_64                         16.2.1-3.fc45              updates
+libgomp.x86_64                        16.2.1-3.fc45              updates
+libicu.x86_64                         78.3-9.fc45                updates
+libldb.x86_64                         2:4.25.1-1.fc45            updates
+libmd.x86_64                          1.3.0-1.fc45               updates
+libpng.x86_64                         2:1.6.59-1.fc45            updates
+librepo.x86_64                        1.22.0-1.fc45              updates
+libsolv.x86_64                        0.7.41-1.fc45              updates
+libstdc++.x86_64                      16.2.1-3.fc45              updates
+openldap.x86_64                       2.6.16-1.fc45              updates
+passt.x86_64                          0^20261002.gcba3570-1.fc45 updates
+passt-selinux.noarch                  0^20261002.gcba3570-1.fc45 updates
+pkcs11-provider.x86_64                1.3.0-1.fc45               updates
+python3-dbus.x86_64                   1.5.1-1.fc45               updates
+python3-libdnf5.x86_64                5.4.7.0-1.fc45             updates
+python3-unbound.x86_64                1.26.2-2.fc45              updates
+python3-urllib3.noarch                2.8.0-3.fc45               updates
+python3-urllib3+socks.noarch          2.8.0-3.fc45               updates
+qemu-guest-agent.x86_64               2:11.1.3-1.fc45            updates
+qemu-user-static.x86_64               2:11.1.3-1.fc45            updates
+qemu-user-static-aarch64.x86_64       2:11.1.3-1.fc45            updates
+qemu-user-static-alpha.x86_64         2:11.1.3-1.fc45            updates
+qemu-user-static-arm.x86_64           2:11.1.3-1.fc45            updates
+qemu-user-static-hexagon.x86_64       2:11.1.3-1.fc45            updates
+qemu-user-static-hppa.x86_64          2:11.1.3-1.fc45            updates
+qemu-user-static-loongarch64.x86_64   2:11.1.3-1.fc45            updates
+qemu-user-static-m68k.x86_64          2:11.1.3-1.fc45            updates
+qemu-user-static-microblaze.x86_64    2:11.1.3-1.fc45            updates
+qemu-user-static-mips.x86_64          2:11.1.3-1.fc45            updates
+qemu-user-static-or1k.x86_64          2:11.1.3-1.fc45            updates
+qemu-user-static-ppc.x86_64           2:11.1.3-1.fc45            updates
+qemu-user-static-riscv.x86_64         2:11.1.3-1.fc45            updates
+qemu-user-static-s390x.x86_64         2:11.1.3-1.fc45            updates
+qemu-user-static-sh4.x86_64           2:11.1.3-1.fc45            updates
+qemu-user-static-sparc.x86_64         2:11.1.3-1.fc45            updates
+qemu-user-static-x86.x86_64           2:11.1.3-1.fc45            updates
+qemu-user-static-xtensa.x86_64        2:11.1.3-1.fc45            updates
+rsync.x86_64                          3.5.1-1.fc45               updates
+samba-common.noarch                   2:4.25.1-1.fc45            updates
+samba-core-libs.x86_64                2:4.25.1-1.fc45            updates
+samba-ndr-libs.x86_64                 2:4.25.1-1.fc45            updates
+sudo.x86_64                           1.9.17-18.p2.fc45          updates
+systemd.x86_64                        262.1-1.fc45               updates
+systemd-libs.x86_64                   262.1-1.fc45               updates
+systemd-networkd.x86_64               262.1-1.fc45               updates
+systemd-oomd-defaults.noarch          262.1-1.fc45               updates
+systemd-pam.x86_64                    262.1-1.fc45               updates
+systemd-resolved.x86_64               262.1-1.fc45               updates
+systemd-shared.x86_64                 262.1-1.fc45               updates
+systemd-sysusers.x86_64               262.1-1.fc45               updates
+systemd-udev.x86_64                   262.1-1.fc45               updates
+tpm2-tss.x86_64                       4.2.1-1.fc45               updates
+tpm2-tss-fapi.x86_64                  4.2.1-1.fc45               updates
+tzdata.noarch                         2026e-1.fc45               updates
+unbound-anchor.x86_64                 1.26.2-2.fc45              updates
+unbound-libs.x86_64                   1.26.2-2.fc45              updates
+vim-data.noarch                       2:9.2.1202-1.fc45          updates
+vim-minimal.x86_64                    2:9.2.1202-1.fc45          updates
+xxhash-libs.x86_64                    0.8.4-2.fc45               updates
+zchunk-libs.x86_64                    1.5.5-1.fc45               updates
+@@I@@
+img|no-docker||
+@@R@@
+fedora 45

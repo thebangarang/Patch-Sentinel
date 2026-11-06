@@ -257,6 +257,26 @@ class SuseAdapter(unittest.TestCase):
         self.assertEqual(rows[1]["from"], "6.4.0-150600.23.100.1")
 
 
+class TheUpdateListCarriesBothVersions(unittest.TestCase):
+    """A list that only says "what is available" is half an update list. Captured on the Fedora VM
+    (2026-11-06) after the probe started reporting installed versions alongside them."""
+
+    def setUp(self):
+        _, self.body = split_fixture("fedora_vm_dnf_full.txt")
+        self.facts = dispatch.PARSERS["dnf"](self.body)
+
+    def test_every_row_has_the_version_it_would_replace(self):
+        rows = [row for row in self.facts["pending"] if row["from"]]
+        self.assertGreater(len(rows), 90,
+                           "the I| section is what makes `from` knowable on an rpm host")
+        self.assertTrue(all(row["from"] != row["to"] for row in rows))
+
+    def test_the_kernel_is_told_apart_from_the_rest_of_the_noise(self):
+        # 448 installed packages in, and the kernel columns must still be the kernel's own
+        self.assertEqual(self.facts["kernel"], "kernel-update-available")
+        self.assertEqual(self.facts["newest_installed"], "7.2.11-300.fc45")
+
+
 class RpmNames(unittest.TestCase):
     def test_kernel_package_names_become_comparable_versions(self):
         self.assertEqual(dispatch._rpm_kernel_version("kernel-7.2.15-300.fc45.x86_64"),
