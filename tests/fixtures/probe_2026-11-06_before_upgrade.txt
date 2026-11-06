@@ -1,0 +1,16 @@
+7.0.0-42-generic
+linux-image-7.0.0-38-generic 7.0.0-38.38
+linux-image-7.0.0-42-generic 7.0.0-42.42
+@@K@@
+7.0.0-42-generic
+7.0.0-43-generic
+@@A@@
+Inst base-files [14ubuntu6.2] (14ubuntu6.3 Ubuntu:26.04/resolute-updates [amd64])
+Inst linux-image-generic [7.0.0-42.42] (7.0.0-43.43 Ubuntu:26.04/resolute-updates [amd64])
+Inst containerd [2.2.2-0ubuntu1.1] (2.2.2-0ubuntu1.2 Ubuntu:26.04/resolute-updates [amd64])
+Inst newpkg (1.2.3-1 Ubuntu:26.04/resolute-security [amd64])
+@@I@@
+img|authelia/authelia:4.39.27|authelia/authelia@sha256:ea6ddce051110a0459b9393117a86383771269aac72f89cabe07f3e9e07f892d|ERROR: unexpected status 429 Too Many Requests
+img|caddy:2.11.4-alpine|caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b|ERROR: unexpected status 429 Too Many Requests
+@@R@@
+ubuntu resolute

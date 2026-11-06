@@ -1,0 +1,64 @@
+name: patch-sentinel
+version: 0.1.0
+manifest_version: 2
+description: >
+  Answers "are we patched?" with evidence, and says when it could not look instead of reporting
+  a clean. Measures, per host: the running kernel against the newest installed and the newest
+  installable (three states — a kernel patch counts only when it is running); every package the
+  apt simulation would install, deliberately not filtered to -security; which recent Ubuntu
+  security notice names those exact versions; and whether each running container image's tag
+  still resolves to the digest you run. Read-only in the scan: it installs nothing, reboots
+  nothing. Each check has three outcomes — clean, finding, could-not-look — and an unreachable
+  host or a rate-limited registry is reported as unknown with its reason, never as patched.
+  Known blind spots, stated in every coverage answer: CVEs inside image layers (needs an image
+  scanner) and language dependencies (needs an SBOM + scanner).
+license: MIT
+author: Kevin L. (AITurn)
+homepage: https://github.com/thebangarang/Patch-Sentinel
+tags: [security, patching, ubuntu, linux, kernel, containers, homelab, auditing]
+requires_hermes: ">=0.19"
+provides_tools:
+  - cve_scan
+  - cve_plan
+  - cve_explain
+  - cve_coverage
+provides_hooks: []
+config_schema:
+  hosts:
+    type: str
+    default: ""
+    label: Hosts to scan
+    description: >
+      Comma-separated `label=ssh-target` pairs, e.g. `beelink=local,vps=webasix`. `local` (or an
+      empty target) is the machine Hermes runs on, which is always included. Remote hosts are
+      reached over SSH with your own agent key; the plugin stores no credential for them. Empty
+      means this machine only.
+  release:
+    type: str
+    default: resolute
+    label: Ubuntu release codename
+    description: >
+      The codename used when reading the advisory feed (resolute = 26.04, noble = 24.04). It is
+      overridden automatically by the codename the local host reports in /etc/os-release, so this
+      value only matters for a host that cannot be read.
+  usn_limit:
+    type: int
+    default: 20
+    label: Advisories to fetch
+    description: >
+      How many recent security notices to read per scan (1–20; the feed refuses 25 and above with
+      HTTP 422). Higher means a longer trail for attribution, not a better verdict.
+  timeout:
+    type: int
+    default: 180
+    label: Host timeout (seconds)
+    description: >
+      How long one host's probe may take before it is reported as unreadable. A timeout is
+      reported as unknown with its reason, never as clean.
+  data_dir:
+    type: str
+    default: ""
+    label: Data directory
+    description: >
+      Absolute path where the last scan and the receipts are kept, mode 700. Empty means the
+      plugin's own directory under $HERMES_HOME. Nothing here leaves the machine.

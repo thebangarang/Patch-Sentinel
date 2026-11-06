@@ -1,0 +1,111 @@
+"""Tool schemas — the API the model reads.
+
+The description is the only thing that decides whether a tool gets called and how its answer is
+worded, so each one names what it measures, what it refuses, and what a refusal means. A
+capability the description does not name is not used, however well it is implemented.
+"""
+from __future__ import annotations
+
+CVE_SCAN = {
+    "name": "cve_scan",
+    "description": (
+        "Answer 'are we patched?' with evidence, for this machine and any configured remote host. "
+        "Use it whenever the user asks whether a machine is patched, up to date, vulnerable, or what "
+        "updates are pending — including 'is the kernel patched', 'any security updates', 'are the "
+        "containers current'. It measures four things per host: the running kernel versus the newest "
+        "installed and the newest installable one (three states — a kernel patch counts only when it "
+        "is RUNNING), every package the apt simulation would install (deliberately not filtered to "
+        "-security, because fixes ship through -updates too), which recent Ubuntu advisory names those "
+        "exact versions, and whether each running container image's tag still resolves to the digest "
+        "we run. Read-only: it installs nothing, reboots nothing, writes no system state. "
+        "Every check has three outcomes — clean, finding, could-not-look — so the payload carries "
+        "`outcomes` per host, a `blind` list, and `exit_code` (0 nothing to do, 1 something to patch, "
+        "2 at least one check could not answer). An unreachable host or a registry that rate-limited "
+        "us is reported as unknown WITH its reason; never summarize an unknown as patched, and never "
+        "say 'clean' when exit_code is 2. Quote the measurement time (`scan.at`) with any numbers you "
+        "report."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "host": {
+                "type": "string",
+                "description": (
+                    "Optional host label to scan. Omit to scan every configured host (this machine is "
+                    "always one of them). An unknown label returns the refusal shape rather than a "
+                    "guess."
+                ),
+            },
+        },
+        "required": [],
+    },
+}
+
+CVE_PLAN = {
+    "name": "cve_plan",
+    "description": (
+        "Propose the exact commands that would close what cve_scan found on one host — ranked, with "
+        "risk, expected downtime, why each step is needed, how to verify it by effect, and how to "
+        "reverse it. Use it after cve_scan when the user asks what to do, how to fix it, or whether "
+        "it needs a reboot. It NEVER executes anything: no install, no restart, no reboot, no ssh "
+        "write. The command is apt-get full-upgrade, not upgrade, because a new kernel is a new "
+        "package that plain upgrade keeps back; a kernel that is installed but not running produces a "
+        "reboot step, not an install step. Answers from the last measurement when it is fresh (the "
+        "payload quotes its timestamp). Applying is a separate, operator-confirmed action that does "
+        "not exist in this version — say so if asked to apply."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "host": {
+                "type": "string",
+                "description": (
+                    "Host label to plan for. Omit for this machine. An unknown label returns the "
+                    "refusal shape."
+                ),
+            },
+        },
+        "required": [],
+    },
+}
+
+CVE_EXPLAIN = {
+    "name": "cve_explain",
+    "description": (
+        "Explain one CVE id from the vendor's own record: which Ubuntu security notice names it, when "
+        "that notice was published, the fixed package versions it lists for this release, and — from "
+        "the last scan — whether that fix is installable here, already installed, or already running. "
+        "Use it when the user names a CVE ('what about CVE-2026-98432?', 'does that affect us?'). "
+        "The Ubuntu CVE page's own status word is deliberately not used as a source, because it lags "
+        "behind the archive (it read 'work in progress' for a week while the fix was installable). "
+        "If no fetched advisory names the id, it returns {\"match\": \"none\", \"answer\": null, "
+        "\"reason\": ..., \"nearest\": [...]} — relay that refusal; do not answer from general "
+        "knowledge or from the model's memory of the CVE."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "cve_id": {
+                "type": "string",
+                "description": "The CVE identifier, e.g. 'CVE-2026-98432'.",
+            },
+        },
+        "required": ["cve_id"],
+    },
+}
+
+CVE_COVERAGE = {
+    "name": "cve_coverage",
+    "description": (
+        "State what this plugin can see and what it cannot: which sources actually answered and when, "
+        "which hosts were unreachable, and the standing gaps that no scan closes — CVEs inside "
+        "container image layers (needs an image scanner), language/package-manager dependencies "
+        "outside the OS package manager (needs an SBOM and a dependency scanner), and hosts that are "
+        "not Ubuntu (the advisory feed is Ubuntu's). Use it when the user asks how complete, how "
+        "reliable, or how trustworthy the answer is, or asks what it misses. The gap list is never "
+        "empty and never green: an empty gap list would be a claim that nothing is missed."
+    ),
+    "parameters": {"type": "object", "properties": {}, "required": []},
+}
+
+SCHEMAS = {schema["name"]: schema for schema in (CVE_SCAN, CVE_PLAN, CVE_EXPLAIN, CVE_COVERAGE)}
