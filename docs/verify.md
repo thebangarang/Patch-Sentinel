@@ -136,6 +136,27 @@ If it disagrees, or no footer is visible, quit the app completely and relaunch �
 alone does not re-import the module. `GET /api/plugins/patch-sentinel/health` reports the two
 fingerprints (`repo` and `served`) directly.
 
+## "Plugin failed to load — missing ) argument list"
+
+The desktop app imports `desktop/plugin.js` as a module and hot-reloads it when the file changes. It
+stages a copy under `$HERMES_HOME/desktop-plugins/<name>/` first, so the renderer can import the file
+while it is still being written — and V8's report for a file that ends mid-expression is exactly
+`missing ) after argument list`.
+
+Check the file rather than the toast:
+
+```bash
+node --check desktop/plugin.js                                  # syntax
+sha1sum desktop/plugin.js ~/.hermes/desktop-plugins/patch-sentinel/plugin.js   # same build?
+```
+
+If both copies match and the file parses, the error is a stale read: touch or save the file again, or
+restart the app, and it clears. A real syntax error would fail `node --check` too.
+
+**Editing discipline (for whoever works on this tree):** write `desktop/plugin.js` atomically —
+`cp file /tmp/x && mv /tmp/x file` — and run `node --check` after every edit. A plain truncate-and-write
+leaves a window in which the app can import half a file, which is how this toast appears.
+
 ## The theme
 
 The palette is a skin file, not a marketplace download: `~/.hermes/skins/patch-sentinel.yaml`
