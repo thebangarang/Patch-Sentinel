@@ -15,14 +15,21 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from patch_sentinel import plan                       # noqa: E402
 from patch_sentinel.sources import dispatch          # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def split_fixture(name: str) -> tuple[str, str]:
-    """A captured probe output -> (family, body), the way ``dispatch.probe`` splits it."""
+    """A captured probe output -> (family, body), the way ``dispatch.probe`` splits it.
+
+    Captures taken before the adapter layer existed carry no family mark; they are all apt,
+    because apt was the only adapter then.
+    """
     text = (FIXTURES / name).read_text(encoding="utf-8")
+    if dispatch.FAMILY_MARK not in text:
+        return "apt", text
     _, rest = text.split(dispatch.FAMILY_MARK, 1)
     family, _, body = rest.partition("\n")
     return family.strip(), body
@@ -141,6 +148,44 @@ class DebianVmAdapter(unittest.TestCase):
         self.assertEqual(self.facts["running"], "6.1.0-54-cloud-amd64")
         self.assertEqual(self.facts["newest_installed"], "6.1.0-54-cloud-amd64")
         self.assertEqual(self.facts["installed_packages"]["6.1.0-54-cloud-amd64"], "6.1.190-1")
+
+
+class PlanSpeaksTheHostsLanguage(unittest.TestCase):
+    """A plan that says `apt-get` on Fedora is worse than no plan: wrong, and authoritative."""
+
+    def _host(self, fixture_name, adapter):
+        facts = dispatch.PARSERS[adapter](split_fixture(fixture_name)[1])
+        return {"label": "lab", "adapter": adapter, "measured_at": facts.get("measured_at"),
+                "kernel": {"running": facts["running"], "installed": facts["newest_installed"],
+                           "installable": facts["candidate"],
+                           "installed_packages": facts["installed_packages"],
+                           "verdict": facts["kernel"]},
+                "pending": facts["pending"], "images": facts["images"],
+                "images_outcome": facts["images_outcome"]}
+
+    def test_a_fedora_plan_uses_dnf_and_never_mentions_apt(self):
+        steps = plan.steps_for(self._host("fedora45_vm_dnf.txt", "dnf"))
+        commands = " ".join(step["command"] for step in steps)
+        self.assertIn("dnf -y upgrade", commands)
+        self.assertNotIn("apt-get", commands)
+        self.assertNotIn("full-upgrade", commands)
+
+    def test_a_fedora_plan_still_says_reboot_for_a_pending_kernel(self):
+        steps = plan.steps_for(self._host("fedora45_vm_dnf.txt", "dnf"))
+        self.assertTrue(any("reboot" in step["command"] for step in steps))
+
+    def test_an_ubuntu_plan_keeps_full_upgrade(self):
+        steps = plan.steps_for(self._host("probe_2026-11-06_before_upgrade.txt", "apt"))
+        commands = " ".join(step["command"] for step in steps)
+        self.assertIn("full-upgrade", commands)
+        self.assertNotIn("dnf", commands)
+
+    def test_every_plan_step_is_reversible_and_verifiable_in_both_families(self):
+        for fixture_name, adapter in (("fedora45_vm_dnf.txt", "dnf"),
+                                      ("probe_2026-11-06_before_upgrade.txt", "apt")):
+            for step in plan.steps_for(self._host(fixture_name, adapter)):
+                self.assertTrue(step["verify"], step)
+                self.assertTrue(step["reversal"], step)
 
 
 class RpmNames(unittest.TestCase):

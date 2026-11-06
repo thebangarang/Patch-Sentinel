@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -36,7 +37,36 @@ if "patch_sentinel" not in sys.modules:
 
 from patch_sentinel import store, tools                # noqa: E402  (after the loader above)
 
-tools.configure({})                                    # defaults + env overrides
+def _settings_from_config() -> dict:
+    """The plugin's own settings, read the way the agent reads them.
+
+    A dashboard router gets no ``ctx``, so ``ctx.get_config`` is not available here — and a pane
+    configured differently from the agent would show a different machine list than the answer the
+    agent just gave. Read ``plugins.entries.<id>.settings`` from config.yaml with the host's own
+    YAML reader, and fall back to defaults (plus env overrides) if it cannot be read.
+    """
+    candidates = []
+    home = os.environ.get("HERMES_HOME")
+    if home:
+        candidates.append(Path(home) / "config.yaml")
+    candidates.append(Path.home() / ".hermes" / "config.yaml")
+    try:
+        import hermes_yaml as yaml                      # the reader the host itself uses
+    except Exception:                                   # noqa: BLE001 - outside the host
+        return {}
+    for path in candidates:
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8-sig")) or {}
+        except OSError:
+            continue
+        entry = (((data.get("plugins") or {}).get("entries") or {})
+                 .get("patch-sentinel") or {})
+        settings = entry.get("settings") or {}
+        return dict(settings) if isinstance(settings, dict) else {}
+    return {}
+
+
+tools.configure(_settings_from_config())                # config + env overrides, same as the agent
 router = APIRouter()
 
 

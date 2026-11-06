@@ -17,7 +17,34 @@
 import { host } from '@hermes/plugin-sdk'
 import * as sdk from '@hermes/plugin-sdk'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { jsx, jsxs } from 'react/jsx-runtime'
+import { jsx as hostJsx } from 'react/jsx-runtime'
+
+// The automatic runtime's third argument to jsx()/jsxs() is the KEY, not the children — pass a
+// child there and React renders the element with nothing inside it, which is a silently empty
+// pane. These two thin adapters take children as the third argument (and lift `key` out of the
+// props, where the runtime wants it), so the call sites below read the way JSX would have.
+function element(type, props, children) {
+  const raw = props || {}
+  const next = { ...raw }
+  const key = next.key
+  delete next.key
+  if (children !== undefined) {
+    // Array children are a list: give each element a stable key so React does not warn on every
+    // render. Rebuilding through the runtime is the only way to set a key on an existing element.
+    next.children = Array.isArray(children)
+      ? children.map((child, index) =>
+          child && child.$$typeof && child.key == null
+            ? hostJsx(child.type, { ...child.props }, 'k' + index)
+            : child)
+      : children
+  }
+  return key === undefined ? hostJsx(type, next) : hostJsx(type, next, key)
+}
+
+const jsx = (type, props, ...kids) =>
+  element(type, props, kids.length === 0 ? undefined : kids.length === 1 ? kids[0] : kids)
+
+const jsxs = jsx
 
 const ID = 'patch-sentinel'
 const ROUTE = '/patch-sentinel'
@@ -313,6 +340,8 @@ function ApplyGate({ hostLabel }) {
 }
 
 // --------------------------------------------------------------------------- root
+
+export { NowPanel, PendingPanel, GapsPanel, ApplyGate }
 
 export function PatchSentinel({ compact }) {
   const [status, setStatus] = useState(null)

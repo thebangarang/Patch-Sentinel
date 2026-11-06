@@ -31,7 +31,7 @@ def fixture(name: str) -> str:
 
 def host_payload(facts: dict) -> dict:
     """The shape ``tools.cve_scan`` hands to ``plan`` — kept in one place so a drift shows up."""
-    return {"label": "beelink", "measured_at": "2026-11-06T10:00:00+00:00",
+    return {"label": "beelink", "adapter": "apt", "measured_at": "2026-11-06T10:00:00+00:00",
             "kernel": {"running": facts["running"], "installed": facts["newest_installed"],
                        "installable": facts["candidate"],
                        "installed_packages": facts["installed_packages"],

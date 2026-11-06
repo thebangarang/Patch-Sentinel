@@ -29,9 +29,37 @@ def _kernel_facts(host: dict) -> dict:
             "installed": host.get("newest_installed"), "candidate": host.get("candidate")}
 
 
+# The command for each step depends on the host's own package manager. A plan that says
+# `apt-get` on Fedora is worse than no plan: it is wrong *and* it looks authoritative.
+COMMANDS = {
+    "apt": {
+        "stage": "sudo apt-get update && sudo apt-get -y --download-only full-upgrade",
+        "apply": "sudo apt-get -y full-upgrade",
+        "verify": "apt-get -s dist-upgrade | grep '^Inst ' || echo 'nothing pending'",
+        "stage_why": "Staging first means the apply window is not waiting on a mirror.",
+        "reversal": "the pre-change state is in the scan this plan came from; re-install the "
+                    "recorded versions with apt-get install <pkg>=<version>",
+    },
+    "dnf": {
+        "stage": "sudo dnf -y check-upgrade --refresh",
+        "apply": "sudo dnf -y upgrade --refresh",
+        "verify": "dnf check-upgrade >/dev/null; echo rc=$?   # 100 = still updates, 0 = none",
+        "stage_why": "Refreshing the metadata first means the apply window is not waiting on a "
+                     "mirror, and the list is re-read from the repo rather than from a cache.",
+        "reversal": "dnf history undo last   (the transaction id is in dnf history)",
+    },
+}
+
+
+def _commands(host: dict) -> dict:
+    family = str(host.get("adapter") or host.get("family") or "apt")
+    return COMMANDS.get(family, {})
+
+
 def steps_for(host: dict) -> list[dict]:
     """The ordered steps for one measured host, each with risk, downtime, why, verify, reversal."""
     steps: list[dict] = []
+    commands = _commands(host)
     pending = host.get("pending") or []
     facts = _kernel_facts(host)
     kernel, running = facts["verdict"], facts["running"]
@@ -43,26 +71,27 @@ def steps_for(host: dict) -> list[dict]:
                    + (f", {len(advisories)} named by a recent advisory: {', '.join(advisories)}"
                       if advisories else ", none named by a recent advisory"))
 
-    if pending:
+    if pending and commands:
         steps.append({
-            "action": "Refresh the package lists and download everything, without restarting anything",
-            "command": "sudo apt-get update && sudo apt-get -y --download-only full-upgrade",
+            "action": "Refresh the metadata and check what would change, without installing anything",
+            "command": commands["stage"],
             "risk": "low",
-            "downtime": "none (download only)",
-            "why": why_updates + ". Staging first means the apply window is not waiting on a mirror.",
-            "verify": "apt-get -s dist-upgrade | grep '^Inst ' | wc -l",
-            "reversal": "nothing changed to reverse: apt-get clean reclaims the downloaded files",
+            "downtime": "none (nothing installed)",
+            "why": why_updates + ". " + commands["stage_why"],
+            "verify": commands["verify"],
+            "reversal": "nothing changed to reverse",
         })
         steps.append({
             "action": "Install the updates",
-            "command": "sudo apt-get -y full-upgrade",
+            "command": commands["apply"],
             "risk": "medium",
             "downtime": "1–3 min; services restart as their packages require",
-            "why": "full-upgrade and not upgrade: a new kernel is a new package, which upgrade "
-                   "keeps back (rule 4).",
-            "verify": "apt-get -s dist-upgrade | grep '^Inst ' || echo 'nothing pending'",
-            "reversal": "the pre-change state is in the scan this plan came from; "
-                        "re-install the recorded versions with apt-get install <pkg>=<version>",
+            "why": ("full-upgrade and not upgrade: a new kernel is a new package, which upgrade "
+                    "keeps back (rule 4)." if commands is COMMANDS["apt"] else
+                    "upgrade moves every installed package, kernel included; refresh so the "
+                    "metadata is not stale."),
+            "verify": commands["verify"],
+            "reversal": commands["reversal"],
         })
 
     if kernel == "kernel-update-available":
@@ -120,8 +149,13 @@ def plan_for(host: dict) -> dict:
         refusals.append({"reason": "nothing to do on this host, as measured",
                          "detail": "kernel current or unmeasured, no installable update, "
                                    "no image rebuilt"})
+    # Ubuntu keeps the ported proposal text (it is what the daily routine prints); any other
+    # family gets its steps joined, because verdict.proposal() speaks apt by design.
+    if str(host.get("adapter") or "apt") == "apt":
+        proposal_text = verdict.proposal(host.get("label") or "", host.get("pending") or [],
+                                        _kernel_facts(host)["verdict"] or "",
+                                        host.get("images") or [])
+    else:
+        proposal_text = "\n".join(step["command"] for step in steps) or "(nothing)"
     return {"host": host.get("label"), "measured_at": host.get("measured_at"),
-            "steps": steps, "refusals": refusals,
-            "proposal_text": verdict.proposal(host.get("label") or "", host.get("pending") or [],
-                                              _kernel_facts(host)["verdict"] or "",
-                                              host.get("images") or [])}
+            "steps": steps, "refusals": refusals, "proposal_text": proposal_text}
