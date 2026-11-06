@@ -556,6 +556,17 @@ def cve_coverage(args: dict, **kwargs) -> str:
          "next": "name the project in chat and I will query OSV for its packages ('which of my "
                  "node/python dependencies have known CVEs in ~/projects/x?'). Reading lockfiles "
                  "automatically is a 0.2 item; today it is one question away."},
+        {"gap": "known CVEs that have no vendor fix yet", "state": "not measured",
+         "hosts": "every", "kind": "limit",
+         "why": "this scan reports what the archive ships. When an advisory names a fix version the "
+                "archive does not carry yet (the upstream patch exists, the distro has not shipped "
+                "it), the host shows '0 pending' — which is true, and is not the same sentence as "
+                "'no known vulnerability'",
+         "consequence": "an operator can read a clean row while a known CVE is still waiting on the "
+                        "distro, and nothing on screen says so",
+         "next": "the state is buildable and is the next feature, not a setting: compare the fixed "
+                 "version an advisory names with the best candidate the archive offers, and report "
+                 "'vendor lag' as its own outcome instead of folding it into 'nothing to do'."},
         {"gap": "operating systems without an adapter", "state": "not measured",
          "hosts": "every", "kind": "limit",
          "why": f"adapters exist for: {', '.join(implemented)}; every other OS answers "
