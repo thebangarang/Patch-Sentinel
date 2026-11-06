@@ -123,6 +123,26 @@ class DebianAdapter(unittest.TestCase):
         self.assertEqual(self.facts["kernel"], "kernel-unknown")
 
 
+class DebianVmAdapter(unittest.TestCase):
+    """A real Debian 12 machine (QEMU, 127.0.0.1:2223) — same adapter as Ubuntu, different kernel."""
+
+    def setUp(self):
+        self.family, self.body = split_fixture("debian12_vm_apt.txt")
+        self.facts = dispatch.PARSERS["apt"](self.body)
+
+    def test_a_debian_host_reads_as_clean_and_current(self):
+        self.assertEqual(self.family, "apt")
+        self.assertEqual(self.facts["os"], {"id": "debian", "codename": "bookworm"})
+        self.assertEqual(self.facts["pending"], [])
+        self.assertEqual(self.facts["kernel"], "kernel-current")
+
+    def test_the_debian_kernel_is_its_own(self):
+        # 6.1.0-54-cloud-amd64: neither the beelink's 7.0.0-43-generic nor Fedora's 7.2.11
+        self.assertEqual(self.facts["running"], "6.1.0-54-cloud-amd64")
+        self.assertEqual(self.facts["newest_installed"], "6.1.0-54-cloud-amd64")
+        self.assertEqual(self.facts["installed_packages"]["6.1.0-54-cloud-amd64"], "6.1.190-1")
+
+
 class RpmNames(unittest.TestCase):
     def test_kernel_package_names_become_comparable_versions(self):
         self.assertEqual(dispatch._rpm_kernel_version("kernel-7.2.15-300.fc45.x86_64"),
