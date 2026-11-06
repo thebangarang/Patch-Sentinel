@@ -61,8 +61,8 @@ same database osv.dev serves) for advisories naming those exact versions:
 | PyPI | `pip list --format=json` (first pip on PATH) | proven (real machine) |
 | Packagist | `composer global show --format=json` | proven (container capture) |
 | RubyGems | `gem list --local` | proven (container capture) |
-| crates.io | `cargo install --list` | format only — no capture yet |
-| NuGet | `dotnet tool list -g` | format only — no capture yet |
+| crates.io | `cargo install --list` | format only — capture pending |
+| NuGet | `dotnet tool list -g` | proven (container capture, dotnet SDK 8) |
 | Maven | every `*.pom` under `~/.m2/repository` | proven (container capture, 227 artifacts) |
 | Go | `go version -m` on each binary in `GOPATH/bin` | proven (container capture, golang:alpine) |
 

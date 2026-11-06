@@ -116,11 +116,15 @@ class MoreRuntimes(unittest.TestCase):
                           {"package": "cargo-binstall", "version": "1.6.4"}])
 
     def test_dotnet_tool_list(self):
-        text = ("Package Id      Version      Commands\n"
-                "----------------------------------------\n"
-                "dotnetsay       2.1.4        dotnetsay\n")
-        self.assertEqual(languages.parse_dotnet(text),
-                         [{"package": "dotnetsay", "version": "2.1.4"}])
+        # real output from mcr.microsoft.com/dotnet/sdk:8.0 after `dotnet tool install -g dotnetsay`
+        rows = languages.parse_dotnet((FIXTURES / "dotnet_tool_list.txt").read_text())
+        self.assertEqual(rows, [{"package": "dotnetsay", "version": "3.0.3"}])
+
+    def test_dotnets_empty_table_is_not_a_package(self):
+        # a machine with no global tools prints only the header and the dashed rule
+        text = ("Package Id      Version      Commands \n"
+                "--------------------------------------\n")
+        self.assertEqual(languages.parse_dotnet(text), [])
 
     def test_maven_local_repository(self):
         # 227 real .pom paths from `mvn dependency:get` inside maven:3-eclipse-temurin-21

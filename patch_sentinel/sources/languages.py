@@ -184,15 +184,22 @@ def parse_gem(text: str) -> list[dict]:
 
 
 def parse_cargo(text: str) -> list[dict]:
-    """``cargo install --list`` → components. Lines are ``name v1.2.3:`` followed by the binaries."""
+    """``cargo install --list`` → components.
+
+    Two shapes exist and both are real: a crates.io install prints ``ripgrep v13.0.0:``, while a
+    ``cargo install --path .`` prints ``mybin v0.1.0 (/tmp/t):`` — same line with the source in
+    parentheses. Taking the first whitespace-delimited token of the version keeps both, and keeps the
+    path out of a field OSV will be queried with.
+    """
     out = []
     for line in text.splitlines():
         line = line.strip()
         if not line.endswith(":") or " v" not in line:
             continue
-        name, _, version = line.rstrip(":").partition(" v")
+        name, _, rest = line.rstrip(":").partition(" v")
+        version = rest.split()[0] if rest.split() else ""
         if name and version:
-            out.append({"package": name.strip(), "version": version.strip()})
+            out.append({"package": name.strip(), "version": version})
     return out
 
 

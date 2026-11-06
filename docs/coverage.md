@@ -1,0 +1,70 @@
+# Coverage: what is measured, what is excluded, and how each one was proven
+
+This page exists because "we cover many ecosystems" is a claim, and claims rot. Every row below says
+which command reads the machine, and exactly how far the proof goes. If a row says *format only*, no
+capture of that tool's output exists in this repository and the reader has never been exercised
+against a real toolchain.
+
+Two rules decide inclusion:
+
+1. **Machine-wide only.** A reader lists what is installed for the machine's user, not what one
+   project happens to depend on. Per-project files are someone else's question ("which of my
+   project's dependencies…") and pretending otherwise produces a number nobody can act on.
+2. **A missing tool is an outcome.** `missing` and `unreadable` are reported as such. An empty list
+   from a tool that is not installed is the classic false clean, and this plugin exists to avoid it.
+
+## OS package managers
+
+| family | command | proven on |
+|---|---|---|
+| apt | `apt-get -s dist-upgrade`, `dpkg-query` | this machine (Ubuntu 26.04) and a Debian 12 VM |
+| dnf | `dnf -q check-update`, `rpm -qa` | a Fedora 45 VM |
+| pacman | `pacman -Q`, `pacman -Qu` | an Arch VM |
+| zypper | `zypper -q lu`, `rpm -qf` | an openSUSE Leap 15.6 VM |
+
+Alpine (`apk`) is written but **not registered**: its cloud images would not take a cloud-init seed,
+so no Alpine host has ever been read. Alpine therefore answers `unsupported`.
+
+## Language ecosystems
+
+`cve_libraries` reads each toolchain's own machine-wide store, then asks OSV for advisories that name
+those exact versions.
+
+| ecosystem | command | proof |
+|---|---|---|
+| npm | `npm ls -g --json` | real machine |
+| PyPI | `pip list --format=json` (first pip on PATH) | real machine |
+| Packagist | `composer global show --format=json` | container capture (`composer:latest`) |
+| RubyGems | `gem list --local` | container capture (`ruby:3-slim`), 88 real lines incl. `(default: 0.4.0)` |
+| Maven | every `*.pom` under `~/.m2/repository` | container capture (`maven:3-eclipse-temurin-21`), 227 artifacts |
+| Go | `go version -m` on each `GOPATH/bin` binary | container capture (`golang:alpine`) |
+| crates.io | `cargo install --list` | format only — capture in progress, not yet evidence |
+| NuGet | `dotnet tool list -g` | container capture (`mcr.microsoft.com/dotnet/sdk:8.0`), dotnetsay 3.0.3 |
+
+Each capture is committed under `tests/fixtures/` and asserted in `tests/test_libraries.py`, so the
+parser cannot drift from the output it was written against without a test failing.
+
+Ecosystem names were confirmed against the live API rather than assumed: `rack 2.2.0` → 36 advisories
+(RubyGems), `laravel/framework 6.0.0` → 16 (Packagist), `log4j-core 2.14.1` → advisories (Maven),
+`Jinja2 2.10` → 12 (PyPI).
+
+## Excluded, with the reason
+
+| not covered | why |
+|---|---|
+| project lockfiles (`package-lock.json`, `composer.lock`, `Cargo.toml`, `go.mod`, `*.csproj`) | per-project, not machine-wide; guessing which project is meant is how a scanner lies. One chat question away. |
+| `~/.nuget/packages` | the folder names are lowercased package ids; querying OSV under the wrong casing risks a **false clean**, which is worse than a stated gap. Reading the `.nuspec` for the real id is the fix. |
+| `~/.gradle/caches` | same shape as `~/.m2` but the layout differs per Gradle version; not yet captured. |
+| inside container images | needs an image scanner (trivy) and a vulnerability database; refused on purpose in 0.1.0. |
+| Hex/Elixir, CocoaPods, Swift | no machine-wide store — both resolve per project. |
+| Conda, CPAN, CRAN, PECL | OSV does not carry these ecosystems, so a reader would produce findings nobody can look up. |
+| Windows (winget/choco) | needs a PowerShell transport, not a shell block. |
+
+## What a "finding" is
+
+An advisory (OSV/GHSA record) that names the exact installed version. One package can carry many —
+`Jinja2 2.10` carries 12 — which is why findings are grouped per package with a count, the worst
+severity, and the first version that closes it.
+
+Where the advisory carries its own **Workarounds** section, that text is shown with the finding: the
+vendor's temporary mitigation, quoted rather than invented.
