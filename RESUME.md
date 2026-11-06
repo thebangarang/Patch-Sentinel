@@ -19,6 +19,10 @@ Repo: `github.com/thebangarang/Patch-Sentinel`. Judged on **usefulness, reliabil
 creativity**, and on doing more than a prompt or a skill could — which is what the honesty layer
 (three outcomes, installed ≠ running) is for. Scope cuts are decided in `decisions.md` D9.
 
+**`docs/submission.md` is the mechanical part**: the exact catalogue-entry YAML (schema checked against
+`plugin-catalog/README.md` on 2026-11-06), the seven admission rules that bite this plugin, the
+disclosure block to paste into the README and the PR, and the 90-second demo beat sheet.
+
 ## Read, in this order (≈10 minutes)
 
 1. `project-context.md` — the why, the reuse table, the v0.1 boundary, the four questions for the operator
