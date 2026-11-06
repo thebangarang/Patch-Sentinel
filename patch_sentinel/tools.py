@@ -18,7 +18,7 @@ import os
 import re
 
 from . import plan, schemas, store, verdict
-from .sources import cve_tracker, hostprobe, usn
+from .sources import cve_tracker, dispatch, usn
 from .sources import hosts as inventory_module
 
 MAX_PENDING = 60              # a payload the model can read; the count is always the true one
@@ -97,7 +97,9 @@ def _summarise(host: dict) -> str:
                 if advisories else ", none named by a recent advisory")]
     kernel = host.get("kernel") or {}
     kernel_line = f"kernel {kernel.get('running')} → {kernel.get('verdict')}"
-    if kernel.get("verdict") == "kernel-update-available" and kernel.get("installable"):
+    if kernel.get("verdict") == "kernel-unknown":
+        kernel_line = f"kernel unmeasured on {host['label']} (no kernel package to compare with)"
+    elif kernel.get("verdict") == "kernel-update-available" and kernel.get("installable"):
         kernel_line += f" (installable {kernel['installable']})"
     elif kernel.get("verdict") == "kernel-reboot-needed":
         kernel_line += f" (installed {kernel.get('installed')}, not running)"
@@ -124,12 +126,16 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
     measured: list[dict] = []
     blind: list[dict] = []
     for host in selected:
-        result = hostprobe.probe(host["label"], host["target"],
-                                 timeout=int(_settings.get("timeout") or 180))
+        result = dispatch.probe(host["label"], host["target"],
+                                timeout=int(_settings.get("timeout") or 180))
         measured.append(result)
         if not result.get("ok"):
-            blind.append({"host": host["label"], "class": "host", "reason": result.get("why"),
-                          "detail": result.get("detail", "")})
+            entry = {"host": host["label"], "class": "host", "reason": result.get("why"),
+                     "detail": result.get("detail", "")}
+            if result.get("unsupported"):
+                entry["unsupported"] = True
+                entry["os_id"] = result.get("os_id")
+            blind.append(entry)
 
     release = str(_settings.get("release") or verdict.DEFAULT_RELEASE)
     for result in measured:
@@ -161,7 +167,7 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
         rebuilt = [i for i in images if i.get("state") == "rebuilt"]
 
         outcomes = {
-            "kernel": "ok",
+            "kernel": "unmeasured" if result.get("kernel") == "kernel-unknown" else "ok",
             "apt": "ok",
             "advisories": "ok" if feed.get("ok") else "refused",
             "images": ("unreadable" if result.get("images_outcome") == "unreadable"
@@ -169,6 +175,10 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
                        else "not-applicable" if result.get("images_outcome") == "not-applicable"
                        else "ok"),
         }
+        if outcomes["kernel"] == "unmeasured":
+            blind.append({"host": label, "class": "kernel",
+                          "reason": result.get("kernel_reason") or "kernel state not measurable",
+                          "detail": "the kernel is unmeasured here, not current"})
         if outcomes["images"] == "unreadable":
             blind.append({"host": label, "class": "images",
                           "reason": "docker is installed but refused to list containers",
@@ -179,18 +189,21 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
                                     f"({unknown[0].get('answer', 'no reason given')[:80]})",
                           "detail": "a refused registry is not a clean image"})
 
-        if pending or result.get("kernel") != "kernel-current" or rebuilt:
+        if pending or rebuilt or result.get("kernel") in ("kernel-update-available",
+                                                          "kernel-reboot-needed"):
             findings += 1
         host_payload = {
             "label": label,
             "target": result.get("target") or "local",
+            "adapter": result.get("family"),
             "measured_at": result.get("measured_at"),
             "os": result.get("os"),
             "kernel": {"running": result.get("running"),
                        "installed": result.get("newest_installed"),
                        "installable": result.get("candidate"),
                        "installed_packages": result.get("installed_packages"),
-                       "verdict": result.get("kernel")},
+                       "verdict": result.get("kernel"),
+                       "reason": result.get("kernel_reason")},
             "pending": pending[:MAX_PENDING],
             "pending_count": len(pending),
             "pending_truncated": len(pending) > MAX_PENDING,

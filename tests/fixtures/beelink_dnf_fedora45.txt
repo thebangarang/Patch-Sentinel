@@ -1,0 +1,9 @@
+@@FAMILY@@dnf
+7.0.0-43-generic
+@@K@@
+7.2.15-300.fc45
+@@A@@
+@@I@@
+img|no-docker||
+@@R@@
+fedora 45

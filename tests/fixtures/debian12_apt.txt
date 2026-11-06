@@ -1,0 +1,8 @@
+@@FAMILY@@apt
+7.0.0-43-generic
+@@K@@
+@@A@@
+@@I@@
+img|no-docker||
+@@R@@
+debian bookworm

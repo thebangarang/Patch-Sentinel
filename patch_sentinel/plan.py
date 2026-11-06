@@ -110,9 +110,16 @@ def plan_for(host: dict) -> dict:
     """``{"steps": [...], "refusals": []}`` for one measured host. Never executes anything."""
     steps = steps_for(host)
     refusals = []
+    if _kernel_facts(host).get("verdict") == "kernel-unknown":
+        kernel_block = host.get("kernel")
+        refusals.append({
+            "reason": "the kernel was not measurable on this host",
+            "detail": (kernel_block.get("reason") if isinstance(kernel_block, dict)
+                       else "no kernel package to compare with")})
     if not steps:
         refusals.append({"reason": "nothing to do on this host, as measured",
-                         "detail": "kernel current, no installable update, no image rebuilt"})
+                         "detail": "kernel current or unmeasured, no installable update, "
+                                   "no image rebuilt"})
     return {"host": host.get("label"), "measured_at": host.get("measured_at"),
             "steps": steps, "refusals": refusals,
             "proposal_text": verdict.proposal(host.get("label") or "", host.get("pending") or [],

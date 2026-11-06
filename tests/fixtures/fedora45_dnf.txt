@@ -1,0 +1,23 @@
+@@FAMILY@@dnf
+7.0.0-43-generic
+package kernel is not installed
+@@K@@
+Available packages
+kernel.x86_64 7.2.15-300.fc45 updates
+@@A@@
+Upgrades
+curl.x86_64            8.21.0-9.fc45  updates
+dnf5.x86_64            5.4.7.0-1.fc45 updates
+dnf5-plugins.x86_64    5.4.7.0-1.fc45 updates
+elfutils-libelf.x86_64 0.197-1.fc45   updates
+elfutils-libs.x86_64   0.197-1.fc45   updates
+libcurl.x86_64         8.21.0-9.fc45  updates
+libdnf5.x86_64         5.4.7.0-1.fc45 updates
+libdnf5-cli.x86_64     5.4.7.0-1.fc45 updates
+librepo.x86_64         1.22.0-1.fc45  updates
+openldap.x86_64        2.6.16-1.fc45  updates
+tpm2-tss.x86_64        4.2.1-1.fc45   updates
+@@I@@
+img|no-docker||
+@@R@@
+fedora 45

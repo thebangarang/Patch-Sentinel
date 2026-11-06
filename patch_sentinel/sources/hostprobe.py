@@ -103,12 +103,22 @@ def parse(out: str) -> dict:
     os_info = {"id": os_bits[0] if os_bits else "unknown",
                "codename": os_bits[1] if len(os_bits) > 1 else "unknown"}
 
+    if not installed:
+        # A container (or a host with no kernel package): the running release is the HOST's and
+        # there is nothing installed here to compare it with. Could not look — not "current".
+        kernel = "kernel-unknown"
+        kernel_reason = ("no kernel package is installed on this host, so running vs installed "
+                         "cannot be compared (a container shares its host's kernel)")
+    else:
+        kernel, kernel_reason = verdict.kernel_verdict(running, newest, candidate), ""
+
     return {
         "running": running,
         "newest_installed": newest,
         "installed_packages": installed_packages,
         "candidate": candidate,
-        "kernel": verdict.kernel_verdict(running, newest, candidate),
+        "kernel": kernel,
+        "kernel_reason": kernel_reason,
         "pending": verdict.parse_inst(ablock),
         "images": images,
         "images_outcome": images_outcome,
