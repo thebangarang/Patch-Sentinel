@@ -9,8 +9,8 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate }
-  from './pane.mjs'
+import { HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate,
+         PatchSentinel, SECTIONS } from './pane.mjs'
 
 const dataPath = process.env.PANE_DATA || '../pane-data.json'
 const data = JSON.parse(readFileSync(dataPath, 'utf8'))
@@ -29,6 +29,61 @@ const panes = [
   ['apply', createElement(ApplyGate, { hostLabel: data.hostLabel,
                                        entry: data.status.hosts[data.hostLabel] })]
 ]
+
+// The three states that used to be unreachable in a check: a row that carries a finding (the code
+// path that still called the old function name), the agent's own packages, and a clean machine.
+const FIXTURE = {
+  answer: 'read 5 package(s) from 2 store(s)',
+  packages: [
+    { ecosystem: 'PyPI', package: 'urllib3', version: '1.24.1', source: 'pip3', owner: 'machine',
+      manager: { tool: 'pip3', path: '/opt/py/bin/pip3', upgrade: '{tool} install -U {spec}' } },
+    { ecosystem: 'npm', package: 'lodash', version: '4.17.4', source: "npm's global tree",
+      owner: 'machine',
+      manager: { tool: 'npm', path: '/usr/bin/npm', upgrade: '{tool} install -g {spec}' } },
+    { ecosystem: 'PyPI', package: 'filelock', version: '3.12.0', source: 'pip3', owner: 'hermes',
+      manager: { tool: 'pip3', path: '/opt/py/bin/pip3', upgrade: null, owner: 'hermes',
+                 why: "part of Hermes's own environment — upgraded by `hermes update`" } }
+  ],
+  vulnerable: [
+    { ecosystem: 'PyPI', package: 'urllib3', version: '1.24.1', id: 'CVE-5000-1',
+      severity: 'high', fixed: ['1.26.5'], workaround: 'pin urllib3<2 in the embedding app' },
+    { ecosystem: 'npm', package: 'lodash', version: '4.17.4', id: 'CVE-5000-2',
+      severity: 'critical', fixed: ['4.17.21'], workaround: null },
+    { ecosystem: 'PyPI', package: 'filelock', version: '3.12.0', id: 'CVE-5000-3',
+      severity: 'moderate', fixed: ['3.20.0'], workaround: null }
+  ]
+}
+
+for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXTURE],
+                                 ['libs (nothing read)', null]]) {
+  const html = renderToStaticMarkup(createElement(LanguagesPanel, { libraries, onCheck: noop,
+                                                                    busy: false }))
+  if (html.length < 20) throw new Error(name + ' rendered nothing')
+  if (libraries) {
+    if (!html.includes('/opt/py/bin/pip3 install -U')) throw new Error('no resolved pip path in a row')
+    if (!html.includes('npm install -g lodash@4.17.21')) throw new Error('no npm fix command')
+    // React escapes the apostrophe in text nodes, so assert on the fragment before it
+    if (!html.includes('belong to Hermes')) throw new Error('agent-owned block missing')
+    if (html.includes('/opt/py/bin/pip3 install -U \'filelock')) throw new Error(
+      "the agent's own package was given a pip command")
+  }
+  console.log('  ' + name.padEnd(36) + html.length + ' bytes')
+}
+
+// The legend and the panels read from one array, in one order. This asserts it on the rendered page.
+const root = renderToStaticMarkup(createElement(PatchSentinel, {}))
+let cursor = -1
+for (const section of SECTIONS) {
+  // React escapes & as &amp; in text nodes
+  const needle = '>' + section.title.replace(/&/g, '&amp;') + '<'
+  // the LAST occurrence is the section heading (the first is the legend line), so this proves the
+  // panels themselves follow the legend's order, not just that the legend is sorted
+  const at = root.lastIndexOf(needle)
+  if (at === -1) throw new Error('section "' + section.title + '" never appears on the page')
+  if (at < cursor) throw new Error('section "' + section.title + '" is out of order')
+  cursor = at
+}
+console.log('  legend and panels agree on ' + SECTIONS.length + ' sections, in order')
 
 let bytes = 0
 for (const [name, element] of panes) {

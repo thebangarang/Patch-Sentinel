@@ -102,6 +102,33 @@ function stateOf(entry) {
 
 const LEVEL_COLOUR = { green: C.ok, amber: C.warn, red: C.danger, grey: C.faint }
 
+/**
+ * One ordered list, used twice: the legend at the top and the title of each section below. Keeping
+ * them in a single array is what stops the legend from describing an order the pane does not use —
+ * which is exactly what happened when the legend was six hand-written lines and the pane gained a
+ * seventh panel above them.
+ */
+const SECTIONS = [
+  { key: 'servers', title: 'servers',
+    blurb: 'the machines this pane answers for (this one included). A server is added only after a '
+         + 'probe of it succeeds; addresses only, never a key.' },
+  { key: 'overview', title: 'overview',
+    blurb: 'one row per server: what the last scan measured, and how old that measurement is.' },
+  { key: 'packages', title: 'system packages',
+    blurb: "the distro's own update list (apt, dnf, pacman, zypper), every package it would upgrade." },
+  { key: 'libs', title: 'libs & runtimes',
+    blurb: 'what each language toolchain has installed machine-wide, checked against OSV: npm, pip, '
+         + 'PHP, Ruby, Rust, .NET, Maven and Go.' },
+  { key: 'plan', title: 'plan',
+    blurb: 'the system packages above turned into ordered commands (risk, downtime, how to verify, '
+         + 'how to undo).' },
+  { key: 'gaps', title: 'gaps',
+    blurb: 'what this scan could not see. Red here is a fact about the scan, not the server.' },
+  { key: 'apply', title: 'apply',
+    blurb: 'the only control that changes a machine, and it needs the server name typed.' }
+]
+const SECTION = SECTIONS.reduce((acc, section) => { acc[section.key] = section; return acc }, {})
+
 /** The newest of a list of versions, by numeric segments (`2.10` sorts above `2.9`). */
 function newestVersion(list) {
   const key = (v) => String(v).split(/[.\-+]/).map((part) => parseInt(part, 10) || 0)
@@ -130,6 +157,10 @@ function buildFixCommand(row, found) {
   const spec = eco === 'npm'
     ? row.package + '@' + (fix || 'latest')
     : (fix ? "'" + row.package + '>=' + fix + "'" : row.package)
+  if (row.owner === 'hermes') {
+    return '# ' + row.package + ': part of Hermes\'s own environment — upgraded with `hermes update`, '
+      + 'not by hand'
+  }
   if (!manager) {
     return '# ' + row.package + ': upgrade it to ' + (fix || 'the fixed version')
       + ' where it is pinned — this scan did not find the store that owns it'
@@ -265,7 +296,7 @@ function HostsPanel({ onChanged, startOpen }) {
 
   return jsxs('section', { style: { marginBottom: '16px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label('servers'),
+      label(SECTION.servers.title),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: C.faint } },
         hosts ? hosts.length + ' server(s)' : '…'),
@@ -434,7 +465,7 @@ function NowPanel({ status, onRefresh, busy }) {
 
   return jsxs('section', { style: { marginBottom: '18px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label('now'),
+      label(SECTION.overview.title),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: C.faint } },
         ago(status ? status.age_seconds : null) + ' · exit ' + (status && status.exit_code !== null && status.exit_code !== undefined ? status.exit_code : '—')),
@@ -473,7 +504,7 @@ function UpdatesPanel({ entry, hostLabel, onRescan, busy }) {
 
   return jsxs('section', { style: { marginBottom: '18px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label('system packages'),
+      label(SECTION.packages.title),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { fontFamily: MONO, fontSize: '0.625rem', color: total ? C.warn : C.faint },
         hostLabel ? total + ' available' : '—'),
@@ -566,6 +597,9 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   // a list of 130 rows where 127 say "clean" buries the three that matter: findings first, the rest
   // behind an explicit "show all" — the count of what was checked is still on screen either way
   const [showAll, setShowAll] = useState(false)
+  // the agent's own dependencies are packages, but they are not the user's to upgrade one by one:
+  // they are separated out and collapsed instead of counting as findings against this machine
+  const [showHermes, setShowHermes] = useState(false)
   const answered = (libraries && libraries.packages) || []
   const vulnerable = (libraries && libraries.vulnerable) || []
   // if the payload carries findings but no inventory (an older backend, or a host that answered
@@ -596,8 +630,19 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   const hit = new Set(Object.keys(foundByPackage))
   const needle = query.trim().toLowerCase()
   const keyOf = (p) => (p.ecosystem || '') + '/' + p.package
-  const matching = packages.filter((p) => !needle || (p.package || '').toLowerCase().includes(needle))
-  const flagged = matching.filter((p) => hit.has(keyOf(p)))
+  const ownerOf = (p) => (p && p.owner) || 'machine'
+  const matchingAll = packages.filter((p) => !needle || (p.package || '').toLowerCase().includes(needle))
+  // split by whose package it is, before the findings-first view is built
+  const mine = matchingAll.filter((p) => ownerOf(p) !== 'hermes')
+  const agentOwned = matchingAll.filter((p) => ownerOf(p) === 'hermes')
+  const findingsOn = (list) => {
+    const keys = new Set(list.map(keyOf))
+    return vulnerable.filter((v) => keys.has((v.ecosystem || '') + '/' + v.package))
+  }
+  const findingsMine = findingsOn(mine)
+  const findingsAgent = findingsOn(agentOwned)
+  const matching = mine
+  const flagged = mine.filter((p) => hit.has(keyOf(p)))
   // nothing flagged? then the clean list IS the answer, so show it rather than an empty box
   const rows = (showAll || !flagged.length ? matching : flagged)
     .slice()
@@ -613,11 +658,12 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
 
   return jsxs('section', { style: { marginBottom: '18px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label('libs & runtimes'),
+      label(SECTION.libs.title),
       jsx('span', { style: { flex: 1 } }),
       libraries
         ? jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: vulnerable.length ? C.danger : C.faint } },
-            packages.length + ' package(s) · ' + vulnerable.length + ' finding(s)')
+            mine.length + ' package(s) · ' + findingsMine.length + ' finding(s)'
+            + (agentOwned.length ? ' · ' + agentOwned.length + ' in Hermes\'s env' : ''))
         : null,
       flagged && flagged.length
         ? jsx(Copy, { text: fixLines.join('\n'), label: 'copy fix commands' })
@@ -644,7 +690,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
           vulnerable.length
             ? jsx('div', { style: { fontSize: '0.6875rem', color: C.dim, marginBottom: '4px', lineHeight: 1.45 } },
                 'A finding is a published advisory that names this exact version — one package can carry many, '
-                + 'which is why ' + vulnerable.length + ' findings sit on ' + Object.keys(foundByPackage).length +
+                + 'which is why ' + findingsMine.length + ' findings sit on ' + flagged.length +
                 ' package(s). The fix column is the first version that closes it.')
             : null,
           !Array.isArray(libraries.packages)
@@ -710,7 +756,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                       fontFamily: MONO, fontSize: '0.5625rem', color: C.faint,
                       marginTop: '1px', wordBreak: 'break-all'
                     }
-                  }, '→ ' + fixCommand(row, found))
+                  }, '→ ' + buildFixCommand(row, found))
                 : null,
               found && found.workaround
                 ? jsx('div', {
@@ -729,7 +775,46 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 hidden + ' more package(s) read and clean (no advisory names their version) — '
                 + '“show all ' + matching.length + '” lists them')
             : jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '3px' } },
-                rows.length + ' row(s) in the box above — it scrolls, the filter narrows')
+                rows.length + ' row(s) in the box above — it scrolls, the filter narrows'),
+          agentOwned.length
+            ? jsxs('div', {
+                style: {
+                  marginTop: '8px', padding: '6px 8px', borderLeft: '2px solid ' + C.border,
+                  background: C.panel, borderRadius: '3px'
+                }
+              }, [
+                jsxs('div', {
+                  style: { display: 'flex', alignItems: 'baseline', gap: '8px', fontSize: '0.6875rem', color: C.dim }
+                }, [
+                  jsx('span', {}, agentOwned.length + ' package(s) belong to Hermes\'s own environment'
+                    + (findingsAgent.length ? ' — ' + findingsAgent.length + ' advisory(ies) on them' : '')),
+                  jsx('span', { style: { flex: 1 } }),
+                  jsx('button', {
+                    type: 'button',
+                    onClick: () => setShowHermes((current) => !current),
+                    style: {
+                      fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 7px', cursor: 'pointer',
+                      color: showHermes ? C.accent : C.faint, background: 'transparent',
+                      border: '1px solid ' + C.border, borderRadius: '2px'
+                    }
+                  }, showHermes ? 'hide' : 'show')
+                ]),
+                jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
+                  'These ship with the agent and are read from the interpreter it runs on. They are '
+                  + 'upgraded with `hermes update`, not one by one — installing them by hand into the '
+                  + 'agent\'s own venv is how an agent stops starting.'),
+                showHermes
+                  ? jsx('div', {
+                      style: {
+                        fontFamily: MONO, fontSize: '0.5625rem', color: C.faint, marginTop: '3px',
+                        maxHeight: '90px', overflowY: 'auto', wordBreak: 'break-all'
+                      }
+                    }, agentOwned.map((row) => jsx('div', { key: keyOf(row) },
+                        row.package + '@' + row.version
+                        + (hit.has(keyOf(row)) ? '  · ' + foundByPackage[keyOf(row)].count + ' advisory(ies)' : ''))))
+                  : null
+              ])
+            : null
         ])
       : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, padding: '6px 0' } },
           'not read yet — press check. It reads npm\'s global tree and the pip environment on PATH; '
@@ -744,7 +829,7 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning }) {
   const refusals = (plan && plan.refusals) || []
   return jsxs('section', { style: { marginBottom: '18px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label('plan'),
+      label(SECTION.plan.title),
       jsx('span', { style: { flex: 1 } }),
       jsx('button', {
         type: 'button',
@@ -862,7 +947,7 @@ function GapsPanel({ coverage, selected }) {
 
   return jsxs('section', {}, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label('gaps'),
+      label(SECTION.gaps.title),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { style: { fontSize: '0.625rem', color: C.faint } },
         selected ? 'what a scan of ' + selected + ' cannot see' : 'what this scan cannot see')
@@ -919,7 +1004,7 @@ function ApplyGate({ hostLabel, entry, onRescan, rescannning }) {
   const ready = armed && measured && !nothingToDo
   return jsxs('section', { style: { borderTop: '1px solid ' + C.border, paddingTop: '10px', marginTop: '6px' } }, [
     jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', marginBottom: '6px' } }, [
-      label('apply'),
+      label(SECTION.apply.title),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: nothingToDo ? C.faint : C.warn } },
         !measured ? 'no measurement' : nothingToDo ? 'nothing to apply' : count + ' update(s) to install'),
@@ -1026,7 +1111,8 @@ function ApplyGate({ hostLabel, entry, onRescan, rescannning }) {
 
 // --------------------------------------------------------------------------- root
 
-export { HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate, buildFixCommand }
+export { HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate,
+         buildFixCommand, SECTIONS }
 
 export function PatchSentinel({ compact }) {
   const [status, setStatus] = useState(null)
@@ -1167,19 +1253,8 @@ export function PatchSentinel({ compact }) {
         fontSize: '0.6875rem', color: C.faint, lineHeight: 1.5, marginBottom: '14px',
         borderLeft: '2px solid ' + C.border, paddingLeft: '9px'
       }
-    }, [
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'now'), ' — one row per machine: what the scan measured, and when.'),
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'system packages'),
-        ' — the distro\'s own update list (apt, dnf, pacman, zypper), every package it would upgrade.'),
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'libs & runtimes'),
-        ' — what each language toolchain has installed machine-wide, checked against OSV: npm, pip, PHP, Ruby, Rust, .NET, Maven and Go.'),
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'plan'),
-        ' — the system packages above turned into ordered commands (risk, downtime, how to verify, how to undo).'),
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'gaps'), ' — what this scan could not see. Red here is a fact about the scan, not the host.'),
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'apply'), ' — the only control that changes a machine, and it needs the host name typed.'),
-      jsx('div', {}, jsx('b', { style: { color: C.dim } }, 'servers'),
-        ' — the machines this pane answers for (this one included). A server is added only after a probe of it succeeds; addresses only, never a key.')
-    ]),
+    }, SECTIONS.map((section) => jsx('div', { key: section.key },
+        jsx('b', { style: { color: C.dim } }, section.title), ' — ' + section.blurb))),
     jsx(HostsPanel, { onChanged: load }),
     jsx(NowPanel, { status, onRefresh: rescan, busy }),
     jsx(UpdatesPanel, { entry: status && status.hosts ? status.hosts[selected] : null,

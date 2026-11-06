@@ -698,9 +698,16 @@ def cve_libraries(args: dict, **kwargs) -> str:
             # the installed list itself, so a pane can show what was checked instead of a count
             "packages": [{"ecosystem": c.get("ecosystem"), "package": c.get("package"),
                           "version": c.get("version"), "source": c.get("source"),
+                          "owner": c.get("owner") or "machine",
                           "manager": collected.get("installers", {}).get(c.get("ecosystem"), {})
                           .get(c.get("source"))}
-                         for c in components[:MAX_PENDING]]}
+                         for c in components[:MAX_PENDING]],
+            # How many of those packages belong to the agent's own environment. They are real
+            # advisories, but they are not the user's to upgrade one by one: the agent ships them.
+            "hermes_env": {
+                "packages": sum(1 for c in components if c.get("owner") == "hermes"),
+                "note": "read from the interpreter Hermes runs on — upgraded with `hermes update`, "
+                        "not package by package"}}
 
     if not components:
         return _json({**base, "vulnerable": [], "exit_code": 2,

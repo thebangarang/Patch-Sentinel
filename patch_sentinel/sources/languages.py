@@ -18,6 +18,8 @@ A missing tool is an outcome (``missing``), never an empty list read as clean.
 from __future__ import annotations
 
 import datetime as dt
+import json
+import os
 import sys
 import json
 
@@ -35,6 +37,15 @@ MISSING = "__MISSING__"
 # here: measured, `bash -lc 'echo $PATH'` from inside a non-interactive ssh or plugin process
 # returned a 63-character system PATH — the user's shims were not in it.)
 TOOL_PATH = shell.USER_PATH_PREFIX
+
+#: One program, reused by the Hermes-environment reader and by the ownership pass. ``pip list`` gives a
+#: name and a version, which is not enough to say whose package it is: a process with the agent's own
+#: environment on ``sys.path`` lists the agent's dependencies as if they were the machine's.
+#: ``importlib.metadata`` answers with the location too, in one call.
+_METADATA_PROGRAM = ("import importlib.metadata as m, json;"
+                     "print(json.dumps({d.metadata['Name']: {'v': d.version, "
+                     "'p': str(d.locate_file(''))} for d in m.distributions() "
+                     "if d.metadata['Name']}))")
 
 INVENTORIES: dict[str, dict] = {
     "npm": {
@@ -139,6 +150,14 @@ INVENTORIES["PyPI"]["candidates"] += [
     {"detect": "command -v uv", "command": "uv tool list",
      "label": "uv's tool store", "parser": "uv"},
 ]
+# The agent's own environment, read first and by path. Without it the answer depends on which python
+# happens to be on the inherited PATH: measured on one machine, the same scan reported 130 packages in
+# one process and 4 in another, and the user's three findings came from this environment. It needs no
+# pip — the agent's venv has none — and it is local by definition, so it never runs on a remote host.
+INVENTORIES["PyPI"]["candidates"].insert(0, {
+    "detect": "true",
+    "command": f"'{sys.executable}' -c \"{_METADATA_PROGRAM}\" 2>/dev/null",
+    "label": "Hermes's own environment", "parser": "metadata", "local_only": True})
 
 # Gradle keeps the same kind of machine-wide artifact cache as Maven, one directory deeper:
 # files-2.1/<group>/<artifact>/<version>/<sha1>/<artifact>-<version>.jar
@@ -161,6 +180,8 @@ UPGRADE: dict[tuple[str, str], tuple[str, str] | None] = {
     ("PyPI", "pip3"): ("pip3", "{tool} install -U {spec}"),
     ("PyPI", "pipx's venvs"): ("pipx", "{tool} upgrade {pkg}"),
     ("PyPI", "uv's tool store"): ("uv", "{tool} tool upgrade {pkg}"),
+    # the agent's own environment: nothing here is upgraded one package at a time
+    ("PyPI", "Hermes's own environment"): None,
     ("Packagist", "composer's global vendor"): ("composer", "{tool} global require {spec}"),
     ("RubyGems", "gem's local list"): ("gem", "{tool} update {pkg}"),
     ("crates.io", "cargo's installed binaries"): ("cargo", "{tool} install {pkg}"),
@@ -392,7 +413,21 @@ def parse_gradle(text: str) -> list[dict]:
     return out
 
 
-PARSERS = {"npm": parse_npm, "PyPI": parse_pip, "Packagist": parse_composer,
+def parse_metadata(text: str) -> list[dict]:
+    """The ``importlib.metadata`` dump → components. Needs no pip, which matters because the agent's
+    own venv has none: measured, that venv has no ``pip`` binary and no ``pip`` module at all."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    if not isinstance(data, dict):
+        return []
+    return [{"package": name, "version": str(entry.get("v") or "")}
+            for name, entry in data.items()
+            if isinstance(entry, dict) and entry.get("v")]
+
+
+PARSERS = {"npm": parse_npm, "PyPI": parse_pip, "metadata": parse_metadata, "Packagist": parse_composer,
            "RubyGems": parse_gem, "crates.io": parse_cargo, "NuGet": parse_dotnet,
            "Maven": parse_maven_poms, "Go": parse_go_modules,
            "nuget_store": parse_nuget_store, "pipx": parse_pipx, "uv": parse_uv_tools,
@@ -401,6 +436,11 @@ PARSERS = {"npm": parse_npm, "PyPI": parse_pip, "Packagist": parse_composer,
 
 def _resolve_upgrade(ecosystem: str, label: str, target: str | None, timeout: int) -> dict:
     """The absolute path of the tool behind a store, plus its upgrade template (or a refusal)."""
+    if label == "Hermes's own environment":
+        return {"upgrade": None, "owner": "hermes",
+                "why": "part of Hermes's own environment — it ships with the agent, so it is upgraded "
+                       "by `hermes update`, not package by package. Installing these by hand into the "
+                       "agent's venv is how an agent stops starting."}
     spec = UPGRADE.get((ecosystem, label), "unknown")
     if spec is None:
         return {"upgrade": None, "why": "a build dependency: the fix belongs in the project's own "
@@ -415,11 +455,30 @@ def _resolve_upgrade(ecosystem: str, label: str, target: str | None, timeout: in
     # told `python3 -m pip install -U 'filelock>=4.2.1'` for packages living in the agent's venv,
     # which has no pip at all.
     if target is None and resolved.startswith(sys.prefix.rstrip("/") + "/"):
-        return {"tool": tool, "path": resolved, "upgrade": None,
+        return {"tool": tool, "path": resolved, "upgrade": None, "owner": "hermes",
                 "why": "part of Hermes's own environment — it ships with the agent, so it is upgraded "
                        "by `hermes update`, not by pip. Overriding it by hand is how an agent stops "
                        "starting."}
     return {"tool": tool, "path": resolved, "upgrade": template}
+
+
+def _distributions(python: str, target: str | None, timeout: int) -> dict[str, dict]:
+    """name → {version, path} for every distribution that interpreter can see."""
+    code, out = shell.run(f"{python} -c \"{_METADATA_PROGRAM}\" 2>/dev/null", target,
+                          timeout=timeout, path_prefix=TOOL_PATH)
+    if code != 0 or not out.strip():
+        return {}
+    try:
+        data = json.loads(out)
+    except ValueError:
+        return {}
+    return {str(name): value for name, value in data.items() if isinstance(value, dict)}
+
+
+def _locations(target: str | None, timeout: int) -> dict[str, str]:
+    """lowercased name → the directory it was installed into, on the machine this plugin runs on."""
+    return {name.lower(): str(entry.get("p") or "")
+            for name, entry in _distributions("python3", target, timeout).items()}
 
 
 def collect(target: str | None = None, timeout: int = 90) -> dict:
@@ -442,6 +501,8 @@ def collect(target: str | None = None, timeout: int = 90) -> dict:
         failure: tuple[str, str] | None = None
         installers = installers_by_ecosystem.setdefault(ecosystem, {})
         for candidate in spec["candidates"]:
+            if candidate.get("local_only") and target is not None:
+                continue            # it names a path on this machine, not on the host being read
             command = (TOOL_PATH + f"if {candidate['detect']} >/dev/null 2>&1; "
                        f"then {candidate['command']} 2>/dev/null; else echo {MISSING}; fi")
             code, out = shell.run(command, target, timeout=timeout, path_prefix=TOOL_PATH)
@@ -457,15 +518,18 @@ def collect(target: str | None = None, timeout: int = 90) -> dict:
                 answered.append(candidate["label"])
                 # resolve the binary this store lives behind, once, so the fix command cannot land
                 # in a different environment than the one that was measured
-                installers[candidate["label"]] = _resolve_upgrade(
-                    ecosystem, candidate["label"], target, timeout)
+                resolved = _resolve_upgrade(ecosystem, candidate["label"], target, timeout)
+                installers[candidate["label"]] = resolved
                 for item in parsed:
                     key = (ecosystem, str(item["package"]), str(item["version"]))
                     if key in seen:
                         continue
                     seen.add(key)
+                    # whose package is it? "hermes" means it belongs to the environment this agent
+                    # runs in: not something a user should pip-upgrade by hand, and not their risk.
                     components.append({**item, "ecosystem": ecosystem,
-                                       "source": candidate["label"]})
+                                       "source": candidate["label"],
+                                       "owner": resolved.get("owner") or "machine"})
                 continue
             empty = out.strip() in ("", "{}", "[]")
             failure = failure or (("empty" if empty else "unreadable"),
@@ -477,6 +541,17 @@ def collect(target: str | None = None, timeout: int = 90) -> dict:
             outcomes[ecosystem], details[ecosystem] = failure
         else:
             outcomes[ecosystem], details[ecosystem] = "missing", spec["missing_detail"]
+    # Whose package is it? One extra call, and it is the difference between "upgrade this" and "this
+    # ships with the agent". Only meaningful for the machine the plugin runs on.
+    if target is None and any(c["ecosystem"] == "PyPI" for c in components):
+        home = os.path.expanduser("~" + os.sep + ".hermes") + os.sep
+        where = _locations(target, timeout)
+        for component in components:
+            if component["ecosystem"] != "PyPI":
+                continue
+            location = where.get(str(component["package"]).lower())
+            if location:
+                component["owner"] = "hermes" if location.startswith(home) else "machine"
     truncated = len(components) > MAX_COMPONENTS
     if truncated:
         components = components[:MAX_COMPONENTS]

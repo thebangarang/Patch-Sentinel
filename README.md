@@ -90,6 +90,20 @@ not a shell block) before it is a real claim.
 
 `docs/lab.md` has the lab recipe and every number above.
 
+## Your packages, and the agent's own
+
+A plugin that runs inside an agent reads that agent's environment too, and Hermes ships ~130 Python dependencies of its own. Reporting them as *your* findings is noise at best: the pane told its first
+user to `pip install -U` three packages that live in the agent's venv, which has no pip at all.
+
+So every package now carries an owner, read from where its files actually are
+(`importlib.metadata`, one call, not a guess from a name):
+
+* **your packages** — counted, listed and given a runnable fix command;
+* **`hermes`'s own environment** — separated into their own block, with the sentence that matters:
+  *these ship with the agent and are upgraded with `hermes update`, not one by one.* The check reads
+  that environment by path, so the answer no longer depends on which `python3` happens to be on the
+  inherited `PATH`.
+
 ## "There is a CVE but Ubuntu has not shipped the fix yet"
 
 A host can be *correctly* reported as `0 pending` while a known CVE is still open — because the
