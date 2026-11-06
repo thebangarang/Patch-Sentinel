@@ -113,11 +113,17 @@ exists to remove, so it is now its own state, **vendor lag**:
 > 3 fix(es) exist upstream but not in this archive yet
 > `openssl 3.0.13-1ubuntu0.3 → 3.0.13-1ubuntu0.4 (USN-9001-1)`
 
-The comparison uses Ubuntu's notice feed (which names a fixed version per release) against the host's
-own `dpkg` and `apt-cache policy`: installed ≥ advisory's fix → already fixed; candidate ≥ fix → it is
-in the pending list; candidate < fix → **vendor lag**. Version ordering is dpkg's own, ported and
-checked against `dpkg --compare-versions` over 900 version pairs (0 mismatches) — a comparator that is
-wrong either way would manufacture a lag or hide one.
+The comparison needs a feed that names a fixed version **per release**, and five families have one:
+Ubuntu's notice feed, Debian/Alpine/the RHEL family through OSV (`Debian:12`, `Alpine:v3.22`,
+`Rocky Linux:9`…), and Arch's own tracker. Installed ≥ fix → already fixed; the archive's candidate ≥
+fix → it is in the pending list; candidate < fix → **vendor lag**. Fedora and openSUSE have no feed
+wired yet, and those hosts say the lag is *unmeasured* rather than reporting none.
+
+Version ordering is dpkg's own, ported and checked against `dpkg --compare-versions` over 900 pairs
+(0 mismatches). Two guards matter more than the comparison itself: the distro feeds name **source**
+packages (`openssl`, not `libssl3`), so binaries are mapped to their source and back; and every lag
+row carries the age of the archive index, because a host that has not refreshed its metadata sees its
+own staleness as a vendor delay.
 
 Where an advisory carries a Workarounds section, the finding also shows the vendor's own temporary
 mitigation — quoted, never invented.

@@ -20,7 +20,7 @@ import re
 
 from . import apply as apply_mod
 from . import plan, schemas, store, verdict
-from .sources import cve_tracker, dispatch, languages, osv, shell, usn
+from .sources import cve_tracker, dispatch, distro_lag, languages, osv, shell, usn
 from .sources import vendor as vendor_lag
 from .sources import hosts as inventory_module
 
@@ -267,10 +267,32 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
                 if out.strip():
                     vendor_state = vendor_lag.classify(vendor_lag.parse(out), advisories)
                     vendor_state["advisories_read"] = len(advisories)
+                    code, fresh = shell.run(distro_lag.FRESHNESS["apt"], result.get("target"),
+                                            timeout=int(_settings.get("timeout") or 180),
+                                            path_prefix=shell.SYSTEM_PATH_PREFIX)
+                    vendor_state["index_fresh"] = bool((fresh or "").strip())
+                    vendor_state["state"] = "measured"
+                    if not vendor_state["index_fresh"]:
+                        vendor_state["index_note"] = (
+                            "the archive index on this host is older than 48 h, so a version that "
+                            "fixes this may already be published — refresh it before acting")
                 else:
                     blind.append({"host": label, "class": "vendor-lag",
                                   "reason": f"dpkg/apt-cache answered nothing (rc={code})",
                                   "detail": "the vendor-lag state is unmeasured, not empty"})
+        elif os_id != "ubuntu":
+            # Debian, Alpine, the RHEL family and Arch publish a feed with a fixed version per
+            # release; Fedora and openSUSE do not (yet), and say so instead of implying "no lag".
+            assessed = distro_lag.assess(
+                result.get("target"), str(result.get("family") or ""), str(os_id or ""),
+                str(host_release or "unknown"),
+                timeout=int(_settings.get("timeout") or 180))
+            vendor_state = {"vendor_lag": assessed.get("vendor_lag") or [],
+                            "counts": assessed.get("counts") or {},
+                            "advisories_read": assessed.get("advisories_read"),
+                            "state": assessed.get("state"), "reason": assessed.get("reason"),
+                            "index_fresh": assessed.get("index_fresh"),
+                            "index_note": assessed.get("index_note") or ""}
 
         if outcomes["kernel"] == "unmeasured":
             blind.append({"host": label, "class": "kernel",
@@ -315,6 +337,10 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             "vendor_lag": (vendor_state or {}).get("vendor_lag", [])[:20],
             "vendor_counts": (vendor_state or {}).get("counts"),
             "vendor_advisories_read": (vendor_state or {}).get("advisories_read"),
+            "vendor_state": (vendor_state or {}).get("state") or "not-run",
+            "vendor_reason": (vendor_state or {}).get("reason") or "",
+            "vendor_index_fresh": (vendor_state or {}).get("index_fresh"),
+            "vendor_index_note": (vendor_state or {}).get("index_note") or "",
         }
         host_payload["summary"] = _summarise(host_payload)
         hosts_payload[label] = host_payload
@@ -415,6 +441,15 @@ def cve_apply(args: dict, **kwargs) -> str:
     dry_run = args.get("dry_run")
     dry_run = True if dry_run is None else bool(dry_run)
     timeout = max(120, min(int(args.get("timeout") or apply_mod.APPLY_TIMEOUT), 1800))
+
+    # The gate is a string comparison; it is checked before the measurement, not after. Typing the
+    # wrong name used to cost a full scan of the inventory before being refused — measured, the pane
+    # sat for over 20 s on a refusal that could not have run anything.
+    if confirm.strip() != str(host["label"]).strip():
+        return _json({"tool": "cve_apply", "applied": False, "dry_run": dry_run,
+                      "host": host["label"], "steps": [],
+                      "reason": f"the gate is armed by typing {host['label']!r} exactly — got "
+                                f"{confirm.strip()!r}. Nothing was run, and nothing was measured."})
 
     # The apply must run against a measurement, not against a hope: reuse a fresh scan, else scan.
     stored = store.load_scan()
@@ -599,16 +634,17 @@ def cve_coverage(args: dict, **kwargs) -> str:
          "next": "name the project in chat and I will query OSV for its packages ('which of my "
                  "node/python dependencies have known CVEs in ~/projects/x?'). Reading lockfiles "
                  "automatically is a 0.2 item; today it is one question away."},
-        {"gap": "vendor lag on non-Ubuntu hosts", "state": "not measured",
-         "hosts": "every", "kind": "limit",
-         "why": "the vendor-lag comparison needs an advisory source that names a fixed version per "
-                "release. Only Ubuntu's notice feed is wired, so a Fedora, Debian, Arch or openSUSE "
-                "host reports a fix the archive does not carry as '0 pending'. Its bundled "
-                "libraries are still read by cve_libraries.",
-         "consequence": "on a non-Ubuntu host, 'nothing to do' can still mean 'the vendor has not "
-                        "shipped it yet'",
-         "next": "one feed per distro would close it (Fedora's Bodhi, Debian's tracker API). Until "
-                 "then the gap is named here rather than implied by a green row."},
+        {"gap": "vendor lag on Fedora and openSUSE hosts", "state": "not measured",
+         "hosts": "fedora, opensuse-leap, opensuse-tumbleweed, sles", "kind": "limit",
+         "why": "vendor lag needs a feed that names a fixed version per release. Ubuntu (USN), "
+                "Debian, Alpine, the RHEL family (all through OSV, per release) and Arch (its AVG "
+                "tracker) are read. Fedora's CVEs live inside Bodhi updates and openSUSE's in CSAF "
+                "documents; neither is wired yet, so those hosts report a fix the archive does not "
+                "carry as '0 pending'.",
+         "consequence": "on Fedora or openSUSE, 'nothing to do' can still mean 'the vendor has not "
+                        "shipped it yet' — the host row says the lag itself is unmeasured",
+         "next": "a Bodhi adapter (updates per package and release) and a CSAF/VEX one would close "
+                 "it. Until then the gap is named here rather than implied by a green row."},
         {"gap": "operating systems without an adapter", "state": "not measured",
          "hosts": "every", "kind": "limit",
          "why": f"adapters exist for: {', '.join(implemented)}; every other OS answers "

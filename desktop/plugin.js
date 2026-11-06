@@ -502,6 +502,26 @@ function UpdatesPanel({ entry, hostLabel }) {
         entry && entry.measured_at ? 'measured ' + entry.measured_at.replace('T', ' ').slice(11, 16) + ' UTC' : ''),
       rows.length ? jsx(Copy, { text, what: 'the update list' }) : null
     ]),
+    // the lag check itself can be unmeasured (a family with no feed) — say it rather than let the
+    // absence of rows read as "no lag"
+    entry && (entry.vendor_state === 'unsupported' || entry.vendor_state === 'unmeasured')
+      ? jsxs('div', {
+          style: {
+            borderLeft: '2px solid ' + C.border, background: C.panel, padding: '6px 8px',
+            marginBottom: '6px', borderRadius: '3px'
+          }
+        }, [
+          jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, fontWeight: 600 } },
+            'vendor lag: ' + (entry.vendor_state === 'unsupported' ? 'no feed for this family' : 'unmeasured')),
+          jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
+            entry.vendor_reason || 'the vendor-lag check did not run here')
+        ])
+      : null,
+    entry && entry.vendor_index_fresh === false
+      ? jsx('div', {
+          style: { fontSize: '0.625rem', color: C.warn, marginBottom: '4px', lineHeight: 1.45 }
+        }, entry.vendor_index_note || 'the archive index on this host is stale')
+      : null,
     (entry && entry.vendor_lag || []).length
       ? jsxs('div', {
           style: {
@@ -632,19 +652,38 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
     .filter(([, outcome]) => outcome === 'missing').map(([eco]) => eco)
 
   const fixLines = flagged.map((row) => buildFixCommand(row, foundByPackage[keyOf(row)]))
+  // An advisory with an empty `fixed` list has no published fix yet, in any version. Saying that
+  // separately is the difference between "you are behind" and "nobody has shipped a fix" — the operator
+  // ran `hermes update` and saw 40 advisories either way, which reads as if the update did nothing.
+  const withFix = (rows) => rows.filter((v) => Array.isArray(v.fixed) && v.fixed.length)
+  const agentWithFix = withFix(findingsAgent)
+  const mineWithFix = withFix(findingsMine)
 
   return jsxs('section', { style: { marginBottom: '18px' } }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.libs.title),
       jsx('span', { style: { flex: 1 } }),
       libraries
-        ? jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: vulnerable.length ? C.danger : C.faint } },
-            mine.length + ' package(s) · ' + findingsMine.length + ' finding(s)'
+        ? jsx('span', {
+            style: {
+              fontFamily: MONO, fontSize: '0.625rem',
+              color: findingsMine.length ? C.danger : C.faint
+            }
+          },
+            mine.length + ' package(s) · '
+            + (findingsMine.length
+                ? findingsMine.length + ' finding(s), ' + mineWithFix.length + ' with a fix published'
+                : 'nothing to upgrade')
             + (agentOwned.length ? ' · ' + agentOwned.length + ' in Hermes\'s env' : ''))
         : null,
       flagged && flagged.length
         ? jsx(Copy, { text: fixLines.join('\n'), label: 'copy fix commands' })
-        : null,
+        : libraries
+          ? jsx('span', {
+              style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint },
+              title: 'the copy control appears when there is a command to copy'
+            }, 'no fix commands to copy')
+          : null,
       jsx('button', {
         type: 'button',
         onClick: onCheck,
@@ -747,6 +786,14 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
             ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint } },
                 needle ? 'nothing matches the filter' : 'nothing was read')
             : null,
+          // "3 packages, 0 findings" with no explanation is the empty state that reads as broken
+          libraries && mine.length && !flagged.length
+            ? jsx('div', {
+                style: { fontSize: '0.6875rem', color: C.ok, marginTop: '3px' }
+              }, 'nothing to upgrade here: ' + mine.length + ' package(s) read and no published '
+               + 'advisory names these versions. The copy control appears when there is a command '
+               + 'to copy.')
+            : null,
           hidden > 0
             ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '3px' } },
                 hidden + ' more package(s) read and clean (no advisory names their version) — '
@@ -764,7 +811,11 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                   style: { display: 'flex', alignItems: 'baseline', gap: '8px', fontSize: '0.6875rem', color: C.dim }
                 }, [
                   jsx('span', {}, agentOwned.length + ' package(s) belong to Hermes\'s own environment'
-                    + (findingsAgent.length ? ' — ' + findingsAgent.length + ' advisory(ies) on them' : '')),
+                    + (findingsAgent.length
+                        ? ' — ' + findingsAgent.length + ' advisory(ies): ' + agentWithFix.length
+                          + ' have a fix published upstream, ' + (findingsAgent.length - agentWithFix.length)
+                          + ' have none yet'
+                        : '')),
                   jsx('span', { style: { flex: 1 } }),
                   jsx('button', {
                     type: 'button',
@@ -779,7 +830,9 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
                   'These ship with the agent and are read from the interpreter it runs on. They are '
                   + 'upgraded with `hermes update`, not one by one — installing them by hand into the '
-                  + 'agent\'s own venv is how an agent stops starting.'),
+                  + 'agent\'s own venv is how an agent stops starting. An advisory can survive an '
+                  + 'update: it stays until the agent itself ships a version past it, and nothing on '
+                  + 'this machine can close it sooner.'),
                 showHermes
                   ? jsx('div', {
                       style: {

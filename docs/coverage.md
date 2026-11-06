@@ -27,8 +27,26 @@ Two rules decide inclusion:
 | pacman | `pacman -Q`, `pacman -Qu` | an Arch VM |
 | zypper | `zypper -q lu`, `rpm -qf` | an openSUSE Leap 15.6 VM |
 
-Alpine (`apk`) is written but **not registered**: its cloud images would not take a cloud-init seed,
-so no Alpine host has ever been read. Alpine therefore answers `unsupported`.
+Alpine (`apk`) is registered; its cloud image needed the `nocloud_` variant before it would take a
+cloud-init seed (the plain one booted to a login prompt with no user), and once it did, `apk` answered.
+
+## Vendor lag: "fixed upstream, not in this archive yet"
+
+This comparison needs a feed that names a fixed version **per release**. Which families have one:
+
+| family | source | how the fixed version is read | state |
+|---|---|---|---|
+| Ubuntu | `ubuntu.com/security/notices.json` | `release_packages` per release, binary package names | proven live (beelink, 26.04) |
+| Debian | OSV `Debian:<major>` | `affected[].ranges[].events[].fixed`, source package names | proven live (Debian 12 VM) |
+| Alpine | OSV `Alpine:v<major.minor>` | same shape, source names | proven live (Alpine VM) |
+| Rocky / AlmaLinux / RHEL | OSV `Rocky Linux:<major>`, `AlmaLinux:<major>`, `Red Hat:<major>` | same shape | adapter tested against captured payloads; no RHEL host in the lab yet |
+| Arch | `security.archlinux.org/all.json` | `fixed` per AVG, binary names, resolved advisories skipped | proven live (Arch VM) |
+| Fedora | — (Bodhi holds CVE→build per update) | not read | **named gap**: the host says the lag is unmeasured |
+| openSUSE / SLES | — (SUSE publishes CSAF/VEX) | not read | **named gap**, same |
+
+The distro records key on the **source** package (`openssl`, not `libssl3`), so installed binaries are
+mapped to their source before querying and back again for the report. A family with no feed answers
+`unsupported` with the reason — never "no lag".
 
 ## Language ecosystems
 
