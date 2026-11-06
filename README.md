@@ -1,9 +1,10 @@
-# PatchPilot — a Hermes plugin that keeps a machine honest about its patches
+# Patch Sentinel — a Hermes plugin that keeps a machine honest about its patches
 
-> Status: **draft for a hackathon entry.** Nothing here is published yet; every number in this file is
-> a claim from a measured run and is re-checked before any catalogue listing is written.
+> Status: **hackathon entry** (Hermes Agent Plugin Hackathon, submissions due 11 Nov 2026, 17:00 EST).
+> Repo: https://github.com/thebangarang/Patch-Sentinel · MIT. Every number in this file is a claim from a
+> measured run, re-checked before the catalogue listing is written.
 
-PatchPilot answers one question with evidence, then offers the next step: **what is published as a
+Patch Sentinel answers one question with evidence, then offers the next step: **what is published as a
 security fix that this machine — or a machine we manage — is not running?** It reads what the vendor
 published, compares it with what is installed *and running*, and returns a patch plan: the exact
 commands, the downtime each costs, and a refusal when it cannot know.
@@ -44,7 +45,7 @@ its own verdict, not "patched". A registry that answered `429` is *unverified*, 
 ## Install (after publication)
 
 ```bash
-hermes plugins install <owner>/patchpilot --enable
+hermes plugins install <owner>/patch-sentinel --enable
 hermes chat -q "are we patched?"
 ```
 

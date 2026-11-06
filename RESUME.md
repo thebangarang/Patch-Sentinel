@@ -1,8 +1,23 @@
 # RESUME — start here in a fresh session
 
-You are picking up **patchpilot**, a Hermes plugin (hackathon entry): patch-posture scanning for the
+You are picking up **patch-sentinel**, a Hermes plugin (hackathon entry): patch-posture scanning for the
 local machine and remote hosts, with a dashboard pane and a gated apply. Today it is **design + reuse
 analysis only — no plugin code exists yet**. Do not assume otherwise.
+
+## The clock — this decides everything else
+
+**Submissions close 11 Nov 2026, 5 PM EST (= 23:00 CET).** An entry is three things:
+
+1. **A pull request adding `plugin-catalog/patch-sentinel.yaml`** to the Hermes catalogue. Needs: the
+   public repo (it exists, MIT `LICENSE` added), README, `SECURITY.md` with a disclosure block
+   (network calls, subprocesses, credential handling), and the catalogue file pinning a **full 40-char
+   commit SHA** from a clean tree.
+2. **A demo video ≤ 90 s, posted on X, tagging @NousResearch.**
+3. **The Typeform** `form.typeform.com/to/FwJLvOln` with both links — sendable as soon as the PR is open.
+
+Repo: `github.com/thebangarang/Patch-Sentinel`. Judged on **usefulness, reliability, polish,
+creativity**, and on doing more than a prompt or a skill could — which is what the honesty layer
+(three outcomes, installed ≠ running) is for. Scope cuts are decided in `decisions.md` D9.
 
 ## Read, in this order (≈10 minutes)
 
@@ -16,7 +31,7 @@ Then: `decisions.md` (D1–D7, closed decisions — do not reopen them silently)
 
 | | |
 |---|---|
-| scaffolded | `~/projects/patchpilot/` — git repo, `.venv`, tier High, docs complete |
+| scaffolded | `~/projects/patch_sentinel/` — git repo, `.venv`, tier High, docs complete |
 | built | **nothing** — no `plugin.yaml`, no `__init__.py`, no code |
 | proven elsewhere | the logic this plugin ports runs daily already: `~/hermes-admin/scripts/cve-watch.py` |
 | blocked by | 4 operator questions (`project-context.md` end) — none are technical |
@@ -24,28 +39,28 @@ Then: `decisions.md` (D1–D7, closed decisions — do not reopen them silently)
 ## First three tasks, in order
 
 **1. Port the pure logic (do this first — it has fixtures already).**
-Copy, from `~/hermes-admin/scripts/cve-watch.py` into `patchpilot/verdict.py`, these functions *and*
+Copy, from `~/hermes-admin/scripts/cve-watch.py` into `patch_sentinel/verdict.py`, these functions *and*
 their selftest cases: `abi`, `parse_inst`, `usn_index`, `explain`, `kernel_verdict`, `image_state`,
 `proposal`. Rename the module's selftest into `tests/test_verdict.py` (stdlib `unittest`). The
 19 assertions there are the plugin's first tests; keep them passing unchanged, they encode the rules.
 
 **2. The plugin shell.**
 ```
-plugin.yaml      name: patchpilot, version: 0.1.0, provides_tools: [cve_scan, cve_plan, cve_explain, cve_coverage]
+plugin.yaml      name: patch-sentinel, version: 0.1.0, provides_tools: [cve_scan, cve_plan, cve_explain, cve_coverage]
 __init__.py      register(ctx) — import the tools module *inside* register (never at module level)
-patchpilot/tools.py    four handlers: (args, **kwargs) -> str, JSON, try/except per tool, refusal shape
+patch_sentinel/tools.py    four handlers: (args, **kwargs) -> str, JSON, try/except per tool, refusal shape
 ```
 Then prove it, in a fresh process (the only evidence that counts):
 ```bash
-cd ~/projects/patchpilot
+cd ~/projects/patch-sentinel
 hermes plugins validate .            # manifest + registrations agree
 hermes plugins doctor . --ci         # blocks sockets during registration — catches imports that fetch
-ln -s ~/projects/patchpilot ~/.hermes/plugins/patchpilot   # install refuses ./, symlink for iteration
+ln -s ~/projects/patch-sentinel ~/.hermes/plugins/patch-sentinel   # install refuses ./, symlink for iteration
 hermes chat -q "are we patched?"     # read the tool-call line: it must name cve_scan
 ```
 
 **3. The dashboard half + the demo script.**
-`dashboard/{manifest.json,plugin_api.py}` (router scoped to `/api/plugins/patchpilot`) and
+`dashboard/{manifest.json,plugin_api.py}` (router scoped to `/api/plugins/patch-sentinel`) and
 `desktop/plugin.js` (three panels: NOW / PENDING / GAPS, house HUD style). Load the subpackage with
 `importlib.util.spec_from_file_location`, never `sys.path`. The GAPS panel is never green and never
 empty — that panel is the product's argument.
@@ -61,12 +76,17 @@ empty — that panel is the product's argument.
 - **`docker manifest inspect -v`.** Measured wrong: its first digest never equals RepoDigest (D5).
 - **Declaring a Python dependency.** Stdlib only in v0.1 (D7).
 
-## The four questions to put to the operator before building the demo
+## Answered already (do not re-ask)
 
-1. Hackathon: deadline, submission form, is a video required?
-2. Publish as a public repo (`thebangarang/patchpilot`, MIT)? Required for a catalogue PR.
-3. Is unattended auto-apply in scope? (The typed-confirmation version is built either way.)
-4. Confirm the name `patchpilot` before anything goes public (D1).
+- **Deadline / form / video**: 11 Nov 17:00 EST; catalogue PR + ≤90 s X video + Typeform. See the clock above.
+- **Repo**: `github.com/thebangarang/Patch-Sentinel`, public, MIT (`LICENSE` in the tree).
+- **Name**: Patch Sentinel — `patch-sentinel` id, `patch_sentinel` Python package (D1, closed).
+
+## Still his to decide
+
+1. **Unattended auto-apply in scope?** The typed-confirmation version is built either way (D6).
+2. **He posts the video and the form** — his X account and the Typeform. Write the script, the credits
+   line and the caption; never post them yourself.
 
 ## Definition of done for v0.1 (the demo lines, live)
 
@@ -82,6 +102,6 @@ the pane renders all three panels; one change-notification fires and a repeat do
 - Handlers return JSON strings and never raise; a refusal is a payload (`{"match": "none", ...}`),
   because a model handed prose will substitute a plausible sentence instead.
 - `hermes chat` runs the **installed** tree: after each change, remove and re-install (or re-symlink),
-  and check `git -C ~/.hermes/plugins/patchpilot rev-parse HEAD` when behaviour looks stale.
+  and check `git -C ~/.hermes/plugins/patch-sentinel rev-parse HEAD` when behaviour looks stale.
 - Secrets via `agent.secret_scope.get_secret`, declared in `requires_env`; never read `.env`/`auth.json`.
 - Server-side routes live behind the plugin's own `/api/plugins/<id>` prefix — no absolute URLs.

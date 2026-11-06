@@ -1,4 +1,4 @@
-# SECURITY.md — patchpilot
+# SECURITY.md — patch-sentinel
 
 **Tier: High (Tier 2).** Escalate to Critical before enabling unattended application (rule below).
 

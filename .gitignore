@@ -1,5 +1,4 @@
-# Project .gitignore — {{PROJECT_NAME}}
-# Copy to project root and customize as needed.
+# .gitignore — Patch Sentinel (a Hermes plugin)
 
 # Secrets (NEVER COMMIT)
 .env
@@ -7,7 +6,6 @@
 !.env.example
 credentials.json
 credentials.*.json
-service-account.json
 *.pem
 *.key
 *.pfx
@@ -15,7 +13,6 @@ service-account.json
 *.jks
 secrets/
 *.secret
-*.credentials
 
 # Dependencies
 .venv/
@@ -28,21 +25,17 @@ __pycache__/
 dist/
 build/
 
-# Databases
+# Scan receipts and the SQLite store (local state, never published)
+data/
 *.db
 *.sqlite
 *.sqlite3
-data/*.db
-data/*.sqlite
 
-# IDE / Editor
+# IDE / OS
 .vscode/
 .idea/
 *.swp
-*.swo
 *~
-
-# OS
 .DS_Store
 Thumbs.db
 
@@ -53,15 +46,7 @@ tmp/
 temp/
 *.pid
 
-# Docker
-docker-compose.override.yml
-
 # Backups
 *.bak
 *.backup
 backups/
-
-# Environment
-.env.local
-.env.production
-.env.staging

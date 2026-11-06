@@ -1,11 +1,11 @@
-# PatchPilot — design
+# Patch Sentinel — design
 
 ## Shape
 
 ```
 plugin.yaml                 manifest: name, version, provides_tools
 __init__.py                 register(ctx) — tools only; no imports that touch the network
-patchpilot/
+patch_sentinel/
   sources/                  one module per allowlisted source, each returning a typed result
     usn.py                  Ubuntu USN feed (nov 2026: limit ≤ 20, 25+ = HTTP 422)
     apt_sim.py              parse `apt-get -s dist-upgrade` (unprivileged, no lock)
@@ -17,10 +17,10 @@ patchpilot/
   store.py                  SQLite: scans, findings, receipts, notify state
   tools.py                  the four handlers, each JSON out, never raising
 dashboard/
-  manifest.json             {"name": "patchpilot", "api": "plugin_api.py"}
+  manifest.json             {"name": "patch-sentinel", "api": "plugin_api.py"}
   plugin_api.py             FastAPI router: /status /plan /coverage /apply (gated)
 desktop/plugin.js           the pane (opt-in): now / pending / gaps
-skills/patchpilot/SKILL.md  teaches the agent the workflow and the refusal vocabulary
+skills/patch_sentinel/SKILL.md  teaches the agent the workflow and the refusal vocabulary
 tests/                      stdlib unittest; fixtures from the real runs
 ```
 

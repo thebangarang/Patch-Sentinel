@@ -1,4 +1,4 @@
-# patchpilot — project context
+# patch-sentinel — project context
 
 ## What we are building
 
@@ -62,13 +62,23 @@ In:
 Out (explicitly, so a fresh session does not drift): applying patches unattended; macOS/Windows;
 in-image CVE scanning; SCAP/OVAL compliance; any SaaS backend.
 
-## Open questions for the operator (ask before the second session)
+## The contest (answered 2026-11-06)
 
-1. **Hackathon specifics** — deadline, submission form, video required? This decides how much of the
-   demo we build versus how much prose.
-2. **Repository** — a standalone public repo (`thebangarang/patchpilot`, MIT) is required for a
-   catalogue PR. Confirm we publish it.
-3. **Auto-apply in the demo?** The gated "type the host name" version is built either way; unattended
-   patching is a larger promise than a demo needs.
-4. **Name** — `patchpilot` is a placeholder; renaming costs one directory move + a manifest edit, and
-   it is cheapest now.
+**Hermes Agent Plugin Hackathon**, announced by @NousResearch on 4 Nov 2026: 7 days, $20,000 in prizes.
+
+| rule | what it means for us |
+|---|---|
+| **Submissions due 5 PM EST, 11 Nov 2026** (= 23:00 CET) | five working days from the day this project opened |
+| Entry = **a PR adding the plugin to the Hermes plugin catalogue** | needs a public repo, **MIT licence** (added), README + SECURITY with a disclosure block, and `plugin-catalog/patch-sentinel.yaml` pinning a full 40-char SHA |
+| plus a **demo video ≤ 90 s on X, tagging @NousResearch** | the video is a product surface, not a formality — the beat sheet is in `docs/design.md` |
+| plus the **Typeform** (`form.typeform.com/to/FwJLvOln`) with both links | can be sent as soon as the PR is open |
+| judged on **usefulness, reliability, polish, creativity**; favours plugins that do more than a prompt or a skill | our differentiator is the honesty layer (three outcomes, installed≠running) — exactly "more than a prompt" |
+
+Repository: **github.com/thebangarang/Patch-Sentinel** (public; empty until the first push).
+
+### Still open
+
+1. **Auto-apply in the demo?** The gated "type the host name" version is built either way; unattended
+   patching is a larger promise than a 90-second demo needs.
+2. **Who posts the video and the form** — both need the operator's own X account and the Typeform. The
+   agent writes the script, the credits line and the caption; it never posts them.

@@ -1,13 +1,15 @@
 # Decisions
 
-## D1 — Name `patchpilot` (2026-11-06) — provisional
+## D1 — Name: **Patch Sentinel** (2026-11-06) — decided
 
-**Decision:** the project folder and plugin id are `patchpilot`.
-**Reason:** short, says what it does, no existing Hermes plugin uses it (`manage_catalog search`).
-**Alternatives:** `cve-guard` (accurate but sounds like a scanner), `sentinel` (overused),
-`patchposture` (accurate, awkward to type).
-**Consequence:** renaming is one directory move + `plugin.yaml` + `dashboard/manifest.json`; cheapest
-now, so the operator should confirm before the first commit that goes public.
+**Decision:** product **Patch Sentinel**; folder, plugin id and repo `patch-sentinel` /
+`github.com/thebangarang/Patch-Sentinel`; the Python subpackage is `patch_sentinel/`.
+**Reason:** the operator named the public repository before any code existed; the working name
+(`patchpilot`) is retired everywhere.
+**Alternatives (rejected earlier):** `cve-guard`, `sentinel`, `patchposture`.
+**Consequence:** the id appears in `plugin.yaml`, `dashboard/manifest.json`, the pane's
+`/api/plugins/patch-sentinel` prefix and the catalogue entry — created with this name, never renamed
+after publication.
 
 ## D2 — A plugin, not a standalone service (2026-11-06)
 
@@ -69,3 +71,22 @@ question against Hermes' pins; stdlib keeps install to one command and lets the 
 Hermes' own interpreter.
 **Consequence:** hand-written parsers for the small payload shapes we read, each with a refusal path —
 which is also what makes the "could not look" rule enforceable.
+
+## D8 — MIT licence (2026-11-06)
+
+**Decision:** MIT, `Copyright (c) 2026 Kevin Lauharatanavisais (AITurn)`.
+**Reason:** catalogue admission requires a licence; MIT is the expected one.
+**Consequence:** stdlib-only means no licence-compatibility question ever arises.
+
+## D9 — The deadline sets the scope: v0.1 is the submission (2026-11-06)
+
+**Decision:** cut the demo to what can be **verified** by 11 Nov 17:00 EST — one host plus one remote,
+three sources, four tools, three-panel pane, one change notification. Everything else is a named gap in
+the pane, not a half-built feature.
+**Reason:** judging weights reliability and polish: a smaller thing that never lies scores better than a
+broad thing with a silent path. The rules also favour "more than a prompt or a skill", which the
+three-outcome honesty layer already is.
+**Alternatives:** in-image scanning via `trivy`, language deps via `osv-scanner` (deferred: each adds a
+binary, a database and a licence review); unattended auto-apply (deferred: Tier 1 gates).
+**Consequence:** the demo has a fixed beat sheet — a finding, a refusal, a proof — see
+`docs/design.md` *v0.1 acceptance*.

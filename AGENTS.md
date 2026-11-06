@@ -1,8 +1,8 @@
-# patchpilot — AGENTS.md
+# patch-sentinel — AGENTS.md
 
 ## Project identity
 
-- **Project:** patchpilot (placeholder name — see `decisions.md` D1)
+- **Project:** patch-sentinel (placeholder name — see `decisions.md` D1)
 - **Owner:** AITurn (internal tool, no customer data)
 - **Security tier:** High (Tier 2). Escalate to Critical if unattended application is ever enabled.
 - **Environment:** development on the beelink; ships as a standalone public repo
