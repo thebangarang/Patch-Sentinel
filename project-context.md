@@ -1,39 +1,74 @@
-# Project Context — {{PROJECT_NAME}}
+# patchpilot — project context
 
-## Client Profile
-- **Company:** {{CUSTOMER_NAME}}
-- **Industry:** [e.g., Restaurant, Finance, Healthcare]
-- **Size:** [employees, revenue, locations]
-- **Current tech stack:** [what they use today]
+## What we are building
 
-## Business Problem
-Describe the core friction or opportunity.
+A **Hermes plugin** that watches the patch posture of the machine Hermes runs on — and of remote
+hosts we manage over SSH — and makes its owner reactive: what is published, what we run, what to do
+next, with the option to apply behind a typed confirmation.
 
-## Main Pain Points
-1. [Pain point 1 — what hurts the most?]
-2. [Pain point 2]
-3. [Pain point 3]
+Target: **hackathon entry**. Deadline, rules and judging criteria are not yet known (see *Open
+questions*), so nothing in this project assumes them.
 
-## Current Workflow
-Describe how things work today — tools, manual steps, communication patterns.
+## Why this, why now
 
-## Desired Outcome
-What does success look like for the customer?
+We lived the problem for nine days in November 2026 — see `~/hermes-admin/threads/platform--kernel-cve.md`
+and `platform--patch-routine.md`:
 
-## Data Available
-| Source | Type | Format | Access Method | Classification |
-|--------|------|--------|---------------|----------------|
-| [e.g., POS system] | [e.g., Orders] | [CSV/API/DB] | [Export/API key] | [Confidential] |
+- CVE-2026-98432 was published 15 Oct; Ubuntu shipped the fix (7.0.0-43.43) on 5–6 Nov.
+- **Ubuntu's CVE page still read "vulnerable, work in progress" while the fixed kernel was already
+  published and installable through `-updates`.** Anyone trusting the CVE page alone would still be
+  waiting.
+- **`apt-get upgrade` silently keeps a new kernel back** (a new kernel arrives as a new *package*), so
+  the box looks handled and is not.
+- The fix arrived through `-updates`, not `-security` — a security-pocket filter would have missed it.
+- A Docker Hub `429` made an image check answer "nothing to do" while four images were out of date: a
+  false all-clear that took a second instrument to catch.
 
-## Constraints
-- **Technical:** [e.g., must work offline, must run on existing hardware]
-- **Legal:** [e.g., GDPR, PCI-DSS, industry regulations]
-- **Budget:** [e.g., max $X/month, one-time $Y]
-- **Timeline:** [e.g., MVP in 2 weeks, full system in 2 months]
-- **Privacy:** [what data must never leave the premises]
+Each of those is now a rule in `docs/design.md`. That is the differentiator — not "we scan CVEs", but
+"we refuse to report a clean we did not measure".
 
-## Key Contacts
-| Role | Name | Contact | Notes |
-|------|------|---------|-------|
-| [Decision maker] | | | |
-| [Technical contact] | | | |
+## What already exists on this machine (reuse, do not rebuild)
+
+| asset | what it does | how it is reused |
+|---|---|---|
+| `~/hermes-admin/scripts/cve-watch.py` | the standing routine: USN feed + apt simulation + registry digests + kernel currency, per host, with a 19-assertion selftest | **the logic core** — port the pure functions (`parse_inst`, `usn_index`, `kernel_verdict`, `image_state`) and their fixtures |
+| `~/hermes-admin/scripts/pull-pending-images.sh` | 429-aware pull retry; downloads only, never restarts | the "stage, never apply" pattern |
+| `~/hermes-admin/scripts/install-cve-2026-98432-controls.sh` | interim mitigations when no patch exists (idempotent, `--revert`) | the *interim controls* feature (v0.2) |
+| `~/hermes-admin/scripts/notify.py` | the one alert channel, dedup by key, `--dry-run` | notification path, unchanged |
+| `~/hermes-admin/scripts/probe-cve-2026-98432.py` | proves a netfilter control by effect | the "prove by effect, not by config" test pattern |
+
+## Constraints that shape the build
+
+1. **Hermes plugin API** (`hermes-agent` skill → `references/plugin-authoring.md`): `plugin.yaml` +
+   `__init__.py:register(ctx)`; tools return JSON strings and never raise; the desktop half is
+   `desktop/plugin.js` + `dashboard/{manifest.json,plugin_api.py}` and is **opt-in for the user**;
+   validate with `hermes plugins validate .` and `hermes plugins doctor . --ci` — the latter **blocks
+   sockets during registration**, so nothing may touch the network at import time.
+2. **No declared Python dependencies if avoidable** — stdlib only; network calls at call time.
+3. **Project isolation** (root AGENTS.md, 8 dimensions): this folder only, its own `.venv`, `.env`,
+   git repo; services loopback-only.
+4. **Security tier: High (Tier 2)** — see `SECURITY.md`. It reads privileged state and can change a
+   system, so those rules are load-bearing.
+
+## Scope for v0.1 (the hackathon slice)
+
+In:
+- Local host + one remote over SSH (config-driven).
+- Three sources: Ubuntu USN feed, the apt simulation, container image digests.
+- Tools: `cve_scan`, `cve_plan`, `cve_explain`, `cve_coverage`.
+- A dashboard pane: *now*, *pending*, *gaps*.
+- A daily scan with change-only notification.
+
+Out (explicitly, so a fresh session does not drift): applying patches unattended; macOS/Windows;
+in-image CVE scanning; SCAP/OVAL compliance; any SaaS backend.
+
+## Open questions for the operator (ask before the second session)
+
+1. **Hackathon specifics** — deadline, submission form, video required? This decides how much of the
+   demo we build versus how much prose.
+2. **Repository** — a standalone public repo (`thebangarang/patchpilot`, MIT) is required for a
+   catalogue PR. Confirm we publish it.
+3. **Auto-apply in the demo?** The gated "type the host name" version is built either way; unattended
+   patching is a larger promise than a demo needs.
+4. **Name** — `patchpilot` is a placeholder; renaming costs one directory move + a manifest edit, and
+   it is cheapest now.
