@@ -92,9 +92,17 @@ def _summarise(host: dict) -> str:
     images = host.get("images") or []
     rebuilt = [i for i in images if i.get("state") == "rebuilt"]
     unknown = [i for i in images if i.get("state") == "unknown"]
-    parts = [f"{host['label']}: {len(pending)} package update(s) installable"
-             + (f", {len(advisories)} named by a recent advisory ({', '.join(advisories[:4])})"
-                if advisories else ", none named by a recent advisory")]
+    total = host.get("pending_count")
+    total = len(pending) if total is None else total
+    advisory_source = host.get("advisory_source")
+    if advisory_source:
+        advisory_note = (f", {len(advisories)} named by a recent advisory "
+                         f"({', '.join(advisories[:4])})" if advisories
+                         else ", none named by a recent advisory")
+    else:
+        advisory_note = (", advisory ids not attributed on this distro (only Ubuntu's feed is "
+                         "wired) — the pending list is measured either way")
+    parts = [f"{host['label']}: {total} package update(s) installable" + advisory_note]
     kernel = host.get("kernel") or {}
     kernel_line = f"kernel {kernel.get('running')} → {kernel.get('verdict')}"
     if kernel.get("verdict") == "kernel-unknown":
@@ -156,20 +164,26 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
         if not result.get("ok"):
             continue
         label = result["label"]
+        # Attribution is Ubuntu's feed only. On any other distro the pending list is still
+        # measured; what is missing is the advisory id, and the summary says exactly that rather
+        # than "none named by a recent advisory" — which would be a false statement about Fedora.
+        os_id = (result.get("os") or {}).get("id")
+        advisory_source = f"USN ({release})" if os_id == "ubuntu" and feed.get("ok") else None
         pending = []
         for item in result.get("pending") or []:
             entry = dict(item)
-            entry["advisory"] = verdict.explain(item.get("package", ""), item.get("to", ""), index)
+            entry["advisory"] = (verdict.explain(item.get("package", ""), item.get("to", ""), index)
+                                 if advisory_source else None)
             pending.append(entry)
         named = [p for p in pending if p.get("advisory")]
         images = result.get("images") or []
         unknown = [i for i in images if i.get("state") == "unknown"]
         rebuilt = [i for i in images if i.get("state") == "rebuilt"]
-
         outcomes = {
             "kernel": "unmeasured" if result.get("kernel") == "kernel-unknown" else "ok",
             "apt": "ok",
-            "advisories": "ok" if feed.get("ok") else "refused",
+            "advisories": ("ok" if advisory_source
+                           else "not-applicable" if os_id != "ubuntu" else "refused"),
             "images": ("unreadable" if result.get("images_outcome") == "unreadable"
                        else "unknown" if unknown
                        else "not-applicable" if result.get("images_outcome") == "not-applicable"
@@ -208,6 +222,7 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             "pending_count": len(pending),
             "pending_truncated": len(pending) > MAX_PENDING,
             "advised_count": len(named),
+            "advisory_source": advisory_source,
             "images": images,
             "images_outcome": result.get("images_outcome"),
             "outcomes": outcomes,

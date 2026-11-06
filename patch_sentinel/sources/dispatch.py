@@ -60,7 +60,7 @@ _IMAGES_BLOCK = (
 
 _DNF_BLOCK = (
     "uname -r; "
-    "rpm -q kernel 2>/dev/null; "
+    "rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' 'kernel*' 2>/dev/null; "
     "echo " + hostprobe.MARK_K + "; "
     "dnf -q list --available kernel 2>/dev/null; "
     "echo " + hostprobe.MARK_A + "; "
@@ -96,16 +96,41 @@ def family_for(os_id: str | None) -> str:
     return "none"
 
 
+# The packages that ARE the kernel. Fedora's cloud image installs `kernel-core` and does not
+# install the `kernel` metapackage at all — asking for `kernel` alone reports "not installed" on a
+# machine that is plainly running one. Measured on fedora:latest and on a booted Fedora 45 VM.
+KERNEL_PACKAGES = frozenset({
+    "kernel", "kernel-core", "kernel-default", "kernel-rt", "kernel-rt-core",
+    "kernel-uki-virt", "kernel-generic", "kernel-lts",
+})
+
+
 def _rpm_kernel_version(line: str) -> str | None:
-    """``kernel-7.2.15-300.fc45.x86_64`` → ``7.2.15-300.fc45`` (the part a person compares)."""
+    """``kernel-core 7.2.11-300.fc45`` → ``7.2.11-300.fc45``.
+
+    Accepts the two shapes rpm prints: ``name version`` from the qf query, and the
+    ``kernel-7.2.15-300.fc45.x86_64`` name-only form, stripping the arch either way.
+    """
     text = line.strip()
-    if not text.startswith("kernel-"):
-        return None
-    rest = text[len("kernel-"):]
+    bits = text.split()
+    if len(bits) == 2 and bits[0] in KERNEL_PACKAGES:
+        version = bits[1]
+    else:
+        # name-only form: `kernel-7.2.15-300.fc45.x86_64`. The digit after the dash is what makes it
+        # a kernel package and not `kernel-modules-core`, which is not one (measured: the bare
+        # `kernel-` prefix once turned that package into a bogus "modules-core" version here).
+        version = ""
+        for package in sorted(KERNEL_PACKAGES, key=len, reverse=True):
+            prefix = package + "-"
+            if text.startswith(prefix) and text[len(prefix):len(prefix) + 1].isdigit():
+                version = text[len(prefix):]
+                break
+        if not version:
+            return None
     for suffix in (".x86_64", ".aarch64", ".noarch", ".i686", ".ppc64le", ".s390x"):
-        if rest.endswith(suffix):
-            return rest[: -len(suffix)]
-    return rest
+        if version.endswith(suffix):
+            return version[: -len(suffix)]
+    return version
 
 
 def _dnf_rows(text: str) -> list[tuple[str, str, str]]:

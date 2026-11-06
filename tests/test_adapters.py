@@ -77,6 +77,38 @@ class FedoraAdapter(unittest.TestCase):
         self.assertEqual(self.facts["images_outcome"], "not-applicable")
 
 
+class FedoraVmAdapter(unittest.TestCase):
+    """A real Fedora 45 machine (QEMU, 127.0.0.1:2222) — its own kernel, not the host's.
+
+    This fixture is what a container could never give: `fedora45_dnf.txt` proves the parser, this
+    one proves the kernel verdict on a host whose kernel is not ours.
+    """
+
+    def setUp(self):
+        self.family, self.body = split_fixture("fedora45_vm_dnf.txt")
+        self.facts = dispatch.parse_dnf(self.body)
+
+    def test_the_vm_runs_its_own_fedora_kernel(self):
+        self.assertEqual(self.facts["running"], "7.2.11-300.fc45.x86_64")
+        self.assertEqual(self.facts["newest_installed"], "7.2.11-300.fc45")
+
+    def test_kernel_core_is_read_as_the_kernel(self):
+        # Fedora's cloud image has kernel-core + kernel-modules-core, and no `kernel` metapackage:
+        # asking rpm for `kernel` alone reported "not installed" on a machine running one.
+        self.assertIn("7.2.11-300.fc45", self.facts["installed_packages"])
+        self.assertNotIn("modules-core", self.facts["installed_packages"])
+
+    def test_a_newer_kernel_is_a_finding_on_dnf_too(self):
+        self.assertEqual(self.facts["candidate"], "7.2.15-300.fc45")
+        self.assertEqual(self.facts["kernel"], "kernel-update-available")
+
+    def test_the_pending_list_is_a_real_fedora_list(self):
+        self.assertGreater(len(self.facts["pending"]), 50)
+        curl = next(p for p in self.facts["pending"] if p["package"] == "curl")
+        self.assertTrue(curl["to"].endswith(".fc45"))
+        self.assertEqual(self.facts["os"]["id"], "fedora")
+
+
 class DebianAdapter(unittest.TestCase):
     def setUp(self):
         self.family, self.body = split_fixture("debian12_apt.txt")

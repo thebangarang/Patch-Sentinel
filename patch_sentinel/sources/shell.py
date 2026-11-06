@@ -19,6 +19,18 @@ SSH_CONNECT_TIMEOUT = 12
 _PATH_PREFIX = "export PATH=/usr/sbin:/usr/bin:/sbin:/bin; "
 
 
+def split_target(target: str) -> tuple[str, str | None]:
+    """``user@host:2222`` → (``user@host``, ``2222``). ssh takes the port as ``-p``, not in the host.
+
+    A non-numeric suffix is left alone, so a mangled entry fails as an ssh error (a refusal) rather
+    than silently scanning the wrong host.
+    """
+    host, sep, port = target.rpartition(":")
+    if sep and host and port.isdigit():
+        return host, port
+    return target, None
+
+
 def run(cmd: str, target: str | None = None, timeout: int = DEFAULT_TIMEOUT) -> tuple[int, str]:
     """Execute *cmd* locally (``target is None``) or over ssh; return ``(returncode, stdout)``.
 
@@ -26,8 +38,11 @@ def run(cmd: str, target: str | None = None, timeout: int = DEFAULT_TIMEOUT) -> 
     prompt would hang the tool call, and a scan must answer.
     """
     if target:
-        argv = ["ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={SSH_CONNECT_TIMEOUT}",
-                target, _PATH_PREFIX + cmd]
+        host, port = split_target(target)
+        argv = ["ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={SSH_CONNECT_TIMEOUT}"]
+        if port:
+            argv += ["-p", port]
+        argv += [host, _PATH_PREFIX + cmd]
     else:
         argv = ["/bin/bash", "-c", _PATH_PREFIX + cmd]
     try:

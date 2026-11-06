@@ -1,0 +1,122 @@
+@@FAMILY@@dnf
+7.2.11-300.fc45.x86_64
+kernel-core 7.2.11-300.fc45
+kernel-modules-core 7.2.11-300.fc45
+@@K@@
+Available packages
+kernel.x86_64 7.2.15-300.fc45 updates
+@@A@@
+Upgrades
+7zip.x86_64                           26.04-1.fc45               updates
+criu.x86_64                           4.3-1.fc45                 updates
+criu-libs.x86_64                      4.3-1.fc45                 updates
+crun.x86_64                           1.30.1-1.fc45              updates
+curl.x86_64                           8.21.0-9.fc45              updates
+device-mapper-persistent-data.x86_64  1.3.4-1.fc45               updates
+dhcpcd.x86_64                         10.5.2-2.fc45              updates
+dnf5.x86_64                           5.4.7.0-1.fc45             updates
+dnf5-plugins.x86_64                   5.4.7.0-1.fc45             updates
+dracut.x86_64                         111-5.fc45                 updates
+dracut-config-generic.x86_64          111-5.fc45                 updates
+elfutils-debuginfod-client.x86_64     0.197-1.fc45               updates
+elfutils-libelf.x86_64                0.197-1.fc45               updates
+elfutils-libs.x86_64                  0.197-1.fc45               updates
+expat.x86_64                          2.9.0-1.fc45               updates
+fedora-release-cloud.noarch           45-14                      updates
+fedora-release-common.noarch          45-14                      updates
+fedora-release-identity-cloud.noarch  45-14                      updates
+fips-provider.x86_64                  1.5.3-2.fc45               updates
+freetype.x86_64                       2.14.3-3.fc45              updates
+glib-networking.x86_64                2.90.1-1.fc45              updates
+glib2.x86_64                          2.90.1-1.fc45              updates
+glibc.x86_64                          2.44-2.fc45                updates
+glibc-common.x86_64                   2.44-2.fc45                updates
+glibc-gconv-extra.x86_64              2.44-2.fc45                updates
+glibc-langpack-en.x86_64              2.44-2.fc45                updates
+glibc-minimal-langpack.x86_64         2.44-2.fc45                updates
+grub2-common.noarch                   1:2.12-83.fc45             updates
+grub2-efi-ia32.x86_64                 1:2.12-83.fc45             updates
+grub2-efi-ia32-modules.noarch         1:2.12-83.fc45             updates
+grub2-efi-x64.x86_64                  1:2.12-83.fc45             updates
+grub2-efi-x64-modules.noarch          1:2.12-83.fc45             updates
+grub2-pc.x86_64                       1:2.12-83.fc45             updates
+grub2-pc-modules.noarch               1:2.12-83.fc45             updates
+grub2-tools.x86_64                    1:2.12-83.fc45             updates
+grub2-tools-efi.x86_64                1:2.12-83.fc45             updates
+grub2-tools-extra.x86_64              1:2.12-83.fc45             updates
+grub2-tools-minimal.x86_64            1:2.12-83.fc45             updates
+harfbuzz.x86_64                       15.0.0-2.fc45              updates
+hwdata.noarch                         0.413-1.fc45               updates
+kernel-core.x86_64                    7.2.15-300.fc45            updates
+kernel-modules-core.x86_64            7.2.15-300.fc45            updates
+krb5-libs.x86_64                      1.22.2-11.fc45             updates
+less.x86_64                           710-2.fc45                 updates
+libcurl.x86_64                        8.21.0-9.fc45              updates
+libdnf5.x86_64                        5.4.7.0-1.fc45             updates
+libdnf5-cli.x86_64                    5.4.7.0-1.fc45             updates
+libdnf5-plugin-systemd-inhibit.x86_64 5.4.7.0-1.fc45             updates
+libfido2.x86_64                       1.17.0-6.fc45              updates
+libgcc.x86_64                         16.2.1-3.fc45              updates
+libgomp.x86_64                        16.2.1-3.fc45              updates
+libicu.x86_64                         78.3-9.fc45                updates
+libldb.x86_64                         2:4.25.1-1.fc45            updates
+libmd.x86_64                          1.3.0-1.fc45               updates
+libpng.x86_64                         2:1.6.59-1.fc45            updates
+librepo.x86_64                        1.22.0-1.fc45              updates
+libsolv.x86_64                        0.7.41-1.fc45              updates
+libstdc++.x86_64                      16.2.1-3.fc45              updates
+openldap.x86_64                       2.6.16-1.fc45              updates
+passt.x86_64                          0^20261002.gcba3570-1.fc45 updates
+passt-selinux.noarch                  0^20261002.gcba3570-1.fc45 updates
+pkcs11-provider.x86_64                1.3.0-1.fc45               updates
+python3-dbus.x86_64                   1.5.1-1.fc45               updates
+python3-libdnf5.x86_64                5.4.7.0-1.fc45             updates
+python3-unbound.x86_64                1.26.2-2.fc45              updates
+python3-urllib3.noarch                2.8.0-3.fc45               updates
+python3-urllib3+socks.noarch          2.8.0-3.fc45               updates
+qemu-guest-agent.x86_64               2:11.1.3-1.fc45            updates
+qemu-user-static.x86_64               2:11.1.3-1.fc45            updates
+qemu-user-static-aarch64.x86_64       2:11.1.3-1.fc45            updates
+qemu-user-static-alpha.x86_64         2:11.1.3-1.fc45            updates
+qemu-user-static-arm.x86_64           2:11.1.3-1.fc45            updates
+qemu-user-static-hexagon.x86_64       2:11.1.3-1.fc45            updates
+qemu-user-static-hppa.x86_64          2:11.1.3-1.fc45            updates
+qemu-user-static-loongarch64.x86_64   2:11.1.3-1.fc45            updates
+qemu-user-static-m68k.x86_64          2:11.1.3-1.fc45            updates
+qemu-user-static-microblaze.x86_64    2:11.1.3-1.fc45            updates
+qemu-user-static-mips.x86_64          2:11.1.3-1.fc45            updates
+qemu-user-static-or1k.x86_64          2:11.1.3-1.fc45            updates
+qemu-user-static-ppc.x86_64           2:11.1.3-1.fc45            updates
+qemu-user-static-riscv.x86_64         2:11.1.3-1.fc45            updates
+qemu-user-static-s390x.x86_64         2:11.1.3-1.fc45            updates
+qemu-user-static-sh4.x86_64           2:11.1.3-1.fc45            updates
+qemu-user-static-sparc.x86_64         2:11.1.3-1.fc45            updates
+qemu-user-static-x86.x86_64           2:11.1.3-1.fc45            updates
+qemu-user-static-xtensa.x86_64        2:11.1.3-1.fc45            updates
+rsync.x86_64                          3.5.1-1.fc45               updates
+samba-common.noarch                   2:4.25.1-1.fc45            updates
+samba-core-libs.x86_64                2:4.25.1-1.fc45            updates
+samba-ndr-libs.x86_64                 2:4.25.1-1.fc45            updates
+sudo.x86_64                           1.9.17-18.p2.fc45          updates
+systemd.x86_64                        262.1-1.fc45               updates
+systemd-libs.x86_64                   262.1-1.fc45               updates
+systemd-networkd.x86_64               262.1-1.fc45               updates
+systemd-oomd-defaults.noarch          262.1-1.fc45               updates
+systemd-pam.x86_64                    262.1-1.fc45               updates
+systemd-resolved.x86_64               262.1-1.fc45               updates
+systemd-shared.x86_64                 262.1-1.fc45               updates
+systemd-sysusers.x86_64               262.1-1.fc45               updates
+systemd-udev.x86_64                   262.1-1.fc45               updates
+tpm2-tss.x86_64                       4.2.1-1.fc45               updates
+tpm2-tss-fapi.x86_64                  4.2.1-1.fc45               updates
+tzdata.noarch                         2026e-1.fc45               updates
+unbound-anchor.x86_64                 1.26.2-2.fc45              updates
+unbound-libs.x86_64                   1.26.2-2.fc45              updates
+vim-data.noarch                       2:9.2.1202-1.fc45          updates
+vim-minimal.x86_64                    2:9.2.1202-1.fc45          updates
+xxhash-libs.x86_64                    0.8.4-2.fc45               updates
+zchunk-libs.x86_64                    1.5.5-1.fc45               updates
+@@I@@
+img|no-docker||
+@@R@@
+fedora 45
