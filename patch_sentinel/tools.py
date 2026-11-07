@@ -1031,7 +1031,32 @@ def cve_libraries(args: dict, **kwargs) -> str:
                                     f"from here. Point the path at a local checkout, or run the "
                                     f"project scan on that host.",
                           "exit_code": 2})
+        if not os.path.isdir(project_arg):
+            # a wrong path used to fall through to "no package manager answered on this host", which
+            # sent the operator looking at their toolchains instead of at the path they typed
+            return _json({"tool": "cve_libraries", "scope": "project", "exit_code": 2,
+                          "reason": f"there is no directory at {project_arg!r} on this machine — a "
+                                    f"project scan reads the lockfiles of a checkout, so the path has "
+                                    f"to exist here (and be readable by this account)"})
         project = projects.read(project_arg)
+        if not project.get("components"):
+            # files were found but pinned nothing exact — say which files, and that a range is not a
+            # version, rather than reporting "nothing measured"
+            files = project.get("files") or {}
+            if files:
+                return _json({"tool": "cve_libraries", "scope": "project",
+                              "project": {"root": project.get("root"), "files": files},
+                              "packages": [], "vulnerable": [], "vulnerable_count": 0,
+                              "answer": "this project pins no exact versions — a range such as "
+                                        "`>=2.0` cannot be compared with a published advisory, so "
+                                        "nothing here is claimed clean",
+                              "limit": "lockfile ranges are unverifiable by construction",
+                              "exit_code": 2})
+            return _json({"tool": "cve_libraries", "scope": "project", "exit_code": 2,
+                          "reason": f"no supported lockfile was found under {project_arg!r} — looked "
+                                    f"for package-lock.json, yarn.lock, pnpm-lock.yaml, "
+                                    f"requirements.txt, constraints.txt, poetry.lock, Pipfile.lock, "
+                                    f"go.sum, Cargo.lock, composer.lock, Gemfile.lock, pubspec.lock"})
         collected = {"components": project["components"], "outcomes": {}, "details": {},
                      "by_ecosystem": {}, "installers": {}, "truncated": project["truncated"],
                      "measured_at": _now()}
