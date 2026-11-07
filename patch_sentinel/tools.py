@@ -166,7 +166,12 @@ def _summarise(host: dict) -> str:
     else:
         advisory_note = (", no advisory id is attributed here (this host's feed names none of "
                          "these packages) — the pending list is measured either way")
-    parts = [f"{host['label']}: {total} package update(s) installable" + advisory_note]
+    if (host.get("outcomes") or {}).get("updates") == "unmeasured":
+        # never "0 installable" when the list could not be built
+        parts = [f"{host['label']}: the update list could not be read — "
+                 f"{(host.get('pending_reason') or 'the package manager refused')}"]
+    else:
+        parts = [f"{host['label']}: {total} package update(s) installable" + advisory_note]
     lag = host.get("vendor_lag") or []
     if lag:
         sample = ", ".join(f"{row['package']} (fixed {row['fixed_version']}, archive "
@@ -287,6 +292,9 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
         outcomes = {
             "kernel": "unmeasured" if result.get("kernel") == "kernel-unknown" else "ok",
             "apt": "ok",
+            # an adapter that could not build its update list says so here, and the host stops
+            # reading as "0 pending" (measured on Leap 15.6: zypper exits 0 with a cache error)
+            "updates": "unmeasured" if result.get("pending_unmeasured") else "ok",
             "advisories": ("ok" if advisory_source
                            else "not-applicable" if os_id != "ubuntu" else "refused"),
             "images": ("unreadable" if result.get("images_outcome") == "unreadable"
@@ -380,6 +388,10 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
         pending.sort(key=lambda row: (0 if row.get("kev") else 1, -(row.get("epss") or 0)))
         named = [p for p in pending if p.get("advisory")]
 
+        if result.get("pending_unmeasured"):
+            blind.append({"host": label, "class": "updates",
+                          "reason": str(result.get("pending_unmeasured")),
+                          "detail": "the pending list is unmeasured here, not empty"})
         if outcomes["kernel"] == "unmeasured":
             blind.append({"host": label, "class": "kernel",
                           "reason": result.get("kernel_reason") or "kernel state not measurable",
@@ -453,6 +465,7 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             "vendor_lag": (vendor_state or {}).get("vendor_lag", [])[:20],
             "vendor_counts": (vendor_state or {}).get("counts"),
             "vendor_advisories_read": (vendor_state or {}).get("advisories_read"),
+            "pending_reason": result.get("pending_unmeasured") or "",
             "vendor_state": (vendor_state or {}).get("state") or "not-run",
             "vendor_reason": (vendor_state or {}).get("reason") or "",
             "vendor_index_fresh": (vendor_state or {}).get("index_fresh"),

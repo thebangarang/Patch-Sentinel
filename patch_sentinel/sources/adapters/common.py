@@ -9,6 +9,25 @@ from __future__ import annotations
 from ... import verdict
 from .. import registry
 
+#: A package manager can fail while exiting 0 and printing no update rows: zypper as a normal user on
+#: Leap 15.6 says "No permission to write repository cache", and `pacman -Qu` prints nothing when its
+#: sync database is stale. Reading that as "0 pending" is a false clean, so an empty list plus one of
+#: these markers is reported as unmeasured.
+SILENT_FAILURES = (
+    "No permission", "Permission denied", "Error building the cache", "not loaded because of error",
+    "Problem loading data", "Could not open lock file", "Failed to synchronize",
+    "Cannot download", "error: failed to", "ERROR: ", "unable to lock database",
+)
+
+
+def silent_failure(text: str) -> str | None:
+    """Why an empty update list cannot be trusted, or None when the output looks like a real answer."""
+    for marker in SILENT_FAILURES:
+        if marker in (text or ""):
+            return (f"the package manager could not build its data ({marker.strip()}) — the update "
+                    f"list is unmeasured, not empty")
+    return None
+
 
 def parse_images(block: str) -> tuple[list[dict], dict[str, str], str]:
     """``img|ref|local|registry-answer`` lines → (images, raw answers, outcome).

@@ -227,6 +227,22 @@ class ArchAdapter(unittest.TestCase):
         self.assertEqual(rows, [("linux", "7.2.11.arch1-1", "7.2.12.arch1-1")])
 
 
+class TheUpdateListCanFailSilently(unittest.TestCase):
+    """Measured on Leap 15.6 as a normal user: `zypper -q lu` exits 0, prints no table, and says it
+    could not write the repository cache. Reading that as "0 pending" is the false clean this plugin
+    exists to prevent, so the adapter reports it as unmeasured."""
+
+    def test_a_cache_error_is_unreadable_not_empty(self):
+        from patch_sentinel.sources.adapters import zypper as zypper_adapter
+        body = "[repo-update|http://x] No permission to write repository cache.\n"
+        self.assertIn("not empty", zypper_adapter.updates_unreadable(body) or "")
+
+    def test_a_normal_table_is_usable(self):
+        from patch_sentinel.sources.adapters import zypper as zypper_adapter
+        body = "Repository | Name | Current | Available\n---------+------+---------+----------\n"
+        self.assertIsNone(zypper_adapter.updates_unreadable(body))
+
+
 class SuseAdapter(unittest.TestCase):
     """A real openSUSE Leap 15.6 machine (127.0.0.1:2226) — where `rpm -q kernel-default` answers
     "not installed" on a box running a kernel, because the running one is kernel-default-base."""

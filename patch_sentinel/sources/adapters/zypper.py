@@ -31,7 +31,9 @@ BLOCK = (
     "rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\n' 2>/dev/null "
     "| grep -E '^kernel-(default|default-base|rt|rt-base|azure|kvmsmall|vanilla|xen) '; "
     "echo " + hostprobe.MARK_K + "; "
-    "zypper -q lu 2>/dev/null; "
+    # stderr merged: as a normal user zypper explains the cache problem there, and an empty list
+    # without that reason would read as "0 pending"
+    "zypper -q lu 2>&1; "
     "echo " + hostprobe.MARK_A + "; "
     "echo " + hostprobe.MARK_I + "; "
     "if ! command -v docker >/dev/null 2>&1; then echo 'img|no-docker||'; "
@@ -70,6 +72,16 @@ def _newer(a: str, b: str) -> bool:
         return key(a) > key(b)
     except TypeError:
         return a > b
+
+
+#: `zypper -q lu` as a normal user on Leap 15.6: exit code 0, no table, and a cache error. Reading
+#: that as "0 pending" is the false clean this plugin exists to prevent.
+def updates_unreadable(text: str) -> str | None:
+    """Why zypper's list cannot be trusted — the shared markers, with zypper's own hint added."""
+    reason = common.silent_failure(text)
+    if reason:
+        return (reason + ". Run `sudo zypper refresh` on that host, or read it as root")
+    return None
 
 
 def parse_updates(text: str) -> list[dict]:
@@ -122,7 +134,8 @@ def parse(body: str) -> dict:
         installed.append(bits[1])
         installed_versions[bits[1]] = bits[1]
 
-    pending = parse_updates(updates)
+    unreadable = updates_unreadable(updates)
+    pending = [] if unreadable else parse_updates(updates)
     candidate = next((p["to"] for p in pending if p["package"] in installed_versions
                       or KERNEL_NAME_RE.match(p["package"])), None)
 
@@ -151,5 +164,6 @@ def parse(body: str) -> dict:
     return {"running": running, "newest_installed": newest,
             "installed_packages": installed_versions, "candidate": candidate,
             "kernel": kernel, "kernel_reason": kernel_reason, "pending": pending,
+            "pending_unmeasured": unreadable,
             "images": images, "images_outcome": outcome,
             "os": common.parse_os(os_block), "registry_answers": answers}
