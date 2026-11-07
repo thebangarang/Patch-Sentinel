@@ -50,6 +50,21 @@ The distro records key on the **source** package (`openssl`, not `libssl3`), so 
 mapped to their source before querying and back again for the report. A family with no feed answers
 `unsupported` with the reason — never "no lag".
 
+## Project lockfiles
+
+`cve_libraries` with a `project` argument (or the field in the pane) reads a repository instead of the
+machine: `package-lock.json`, `yarn.lock` (v1 and berry), `pnpm-lock.yaml`, `requirements.txt`,
+`constraints.txt`, `poetry.lock`, `Pipfile.lock`, `go.sum`, `Cargo.lock`, `composer.lock`,
+`Gemfile.lock`, `pubspec.lock` — three levels deep, skipping `node_modules`, `.venv`, `vendor`,
+`target`.
+
+Two limits are stated rather than hidden: only **pinned** versions count (a `>=` range is reported,
+never guessed), and a project with only a manifest (`composer.json`, `Cargo.toml`, `go.mod`,
+`*.csproj`) has no exact version to check — committing the lockfile is what closes it.
+
+Measured on a three-file fixture (`/tmp/demo-project`): 3 lockfiles read, 5 packages, **82 advisories**,
+each with the fixing version, its EPSS score and a KEV flag where one applies.
+
 ## Language ecosystems
 
 `cve_libraries` reads each toolchain's own machine-wide store, then asks OSV for advisories that name

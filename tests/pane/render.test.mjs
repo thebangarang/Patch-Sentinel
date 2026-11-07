@@ -44,6 +44,8 @@ const FIXTURE = {
       manager: { tool: 'pip3', path: '/opt/py/bin/pip3', upgrade: null, owner: 'hermes',
                  why: "part of Hermes's own environment — upgraded by `hermes update`" } }
   ],
+  scope: 'project',
+  project: { root: '/tmp/demo-project', files: { 'api/requirements.txt': 'read: 2 package(s)' } },
   threat: { kev_state: 'measured', kev_catalog: 1769, kev_count: 1,
             exploited: ['CVE-5000-1'], ransomware: ['CVE-5000-1'], scored: 3 },
   vulnerable: [
@@ -72,6 +74,8 @@ for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXT
     if (!html.includes('exploited · ransomware')) throw new Error('the exploited-in-the-wild chip is missing')
     if (!html.includes('epss 97')) throw new Error('the EPSS chip is missing')
     if (!html.includes('known-exploited list')) throw new Error('the KEV header line is missing')
+    if (!html.includes('project: /tmp/demo-project')) throw new Error('project scope is not shown')
+    if (!html.includes('machine-wide')) throw new Error('the way back to machine scope is missing')
     if (html.includes('/opt/py/bin/pip3 install -U \'filelock')) throw new Error(
       "the agent's own package was given a pip command")
   }

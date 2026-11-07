@@ -20,7 +20,8 @@ import re
 
 from . import apply as apply_mod
 from . import plan, schemas, store, verdict
-from .sources import cve_tracker, dispatch, distro_lag, languages, osv, shell, threat, usn
+from .sources import (cve_tracker, dispatch, distro_lag, languages, osv, projects, shell,
+                      threat, usn)
 from .sources import vendor as vendor_lag
 from .sources import hosts as inventory_module
 
@@ -638,18 +639,19 @@ def cve_coverage(args: dict, **kwargs) -> str:
                  "base-image CVE is only fixed by a newer base. Scanning inside layers needs an "
                  "image scanner (trivy), which 0.1.0 deliberately does not ship. Until then the "
                  "digest check still tells you a newer build exists."},
-        {"gap": "language packages outside the global trees",
+        {"gap": "dependencies pinned in manifests with no lockfile",
          "state": "partly measured", "hosts": "every", "kind": "limit",
-         "why": "cve_libraries reads the machine-wide installs it can list: npm's global tree, the "
-                "first pip on PATH, composer's global vendor, local gems, cargo's installed "
-                "binaries, dotnet's global tools, Maven's local repository, and Go's installed "
-                "binaries. Per-project dependency files (package-lock.json, composer.json, "
-                "Cargo.toml, go.mod, *.csproj) and other virtualenvs are not read.",
-         "consequence": "a vulnerable dependency of one project can be invisible while the "
-                        "machine-level list is clean",
-         "next": "name the project in chat and I will query OSV for its packages ('which of my "
-                 "node/python dependencies have known CVEs in ~/projects/x?'). Reading lockfiles "
-                 "automatically is a 0.2 item; today it is one question away."},
+         "why": "a project is covered when it has a lockfile: package-lock.json, yarn.lock, "
+                "pnpm-lock.yaml, requirements.txt, constraints.txt, poetry.lock, Pipfile.lock, "
+                "go.sum, Cargo.lock, composer.lock, Gemfile.lock or pubspec.lock are all parsed "
+                "(pass a directory to cve_libraries, or use the field in the pane). What is left "
+                "out is the project with only a manifest — composer.json, Cargo.toml, go.mod, "
+                "*.csproj, setup.py — where the version is a range rather than a pin, and any "
+                "virtualenv the machine-wide readers cannot see.",
+         "consequence": "a project without a lockfile can carry a vulnerable dependency that no "
+                        "scan here names; a lockfile makes the same project fully covered",
+         "next": "commit the lockfile — that is the fix, and this plugin reads it the moment it "
+                 "exists. Guessing from a range would be a claim, not a measurement."},
         {"gap": "vendor lag on Fedora and openSUSE hosts", "state": "not measured",
          "hosts": "fedora, opensuse-leap, opensuse-tumbleweed, sles", "kind": "limit",
          "why": "vendor lag needs a feed that names a fixed version per release. Ubuntu (USN), "
@@ -738,9 +740,28 @@ def cve_libraries(args: dict, **kwargs) -> str:
         return _json({"tool": "cve_libraries",
                       **_not_in_inventory(requested)})
 
-    collected = languages.collect(host["target"])
+    # Project mode: the lockfiles of a repository, read on this machine. A machine-wide scan cannot
+    # see what a project pins, and a project is exactly what ships.
+    project_arg = str(args.get("project") or args.get("path") or "").strip()
+    project = None
+    if project_arg:
+        if host.get("target") not in (None, "", "local"):
+            return _json({"tool": "cve_libraries", "scope": "project",
+                          "reason": f"a project path is read on the machine this plugin runs on — "
+                                    f"{host['label']!r} is remote, so its files are not reachable "
+                                    f"from here. Point the path at a local checkout, or run the "
+                                    f"project scan on that host.",
+                          "exit_code": 2})
+        project = projects.read(project_arg)
+        collected = {"components": project["components"], "outcomes": {}, "details": {},
+                     "by_ecosystem": {}, "installers": {}, "truncated": project["truncated"],
+                     "measured_at": _now()}
+    else:
+        collected = languages.collect(host["target"])
     components = collected["components"]
     base = {"tool": "cve_libraries", "host": host["label"], "target": host["target"] or "local",
+            "scope": "project" if project else "machine",
+            "project": ({"root": project["root"], "files": project["files"]} if project else None),
             "measured_at": collected["measured_at"], "outcomes": collected["outcomes"],
             "details": collected["details"], "by_ecosystem": collected["by_ecosystem"],
             "components": len(components), "truncated": collected["truncated"],
@@ -797,9 +818,11 @@ def cve_libraries(args: dict, **kwargs) -> str:
 
     unreadable = [eco for eco, state in collected["outcomes"].items() if state == "unreadable"]
     exit_code = 2 if unreadable else (1 if vulnerable else 0)
+    where = (f"pinned in {project['root']}" if project
+             else "across the machine's installed language packages")
     answer_line = (f"{host['label']}: {len(vulnerable)} advisory match(es) across "
                    f"{len({(v['ecosystem'], v['package']) for v in vulnerable})} package(s), "
-                   f"from {len(components)} installed language package(s) checked"
+                   f"from {len(components)} package(s) {where}"
                    if components else f"{host['label']}: nothing measurable")
     # An exploited CVE outranks a critical one that nobody is using. Say it in the answer, not only in
     # a field a pane might forget to render.

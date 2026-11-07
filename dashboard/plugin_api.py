@@ -245,9 +245,14 @@ def _save_hosts(entries: list[dict], **extra) -> dict:
 
 
 @router.get("/libraries")
-def libraries() -> dict:
-    """The language surface for this machine (npm global tree, pip on PATH)."""
-    return _payload(tools.cve_libraries, {})
+def libraries(project: str | None = None, host: str | None = None) -> dict:
+    """The language surface: machine-wide by default, or one project's lockfiles with `?project=`."""
+    args = {}
+    if project:
+        args["project"] = project
+    if host:
+        args["host"] = host
+    return _payload(tools.cve_libraries, args)
 
 
 @router.get("/coverage")

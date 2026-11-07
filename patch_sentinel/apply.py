@@ -53,9 +53,11 @@ def preflight(target: str | None) -> dict:
     ok = code == 0
     return {"ok": ok, "detail": _tail(out) or f"rc={code}",
             "why": "" if ok else (
-                "this user cannot run sudo without a password on that host, so an apply would "
-                "hang or fail. The operator can grant a no-prompt sudo rule for that user on "
-                "that host (their decision, not the plugin's), or run the plan by hand")}
+                "this user cannot run sudo without a password on that host, so the plugin will not "
+                "start: it runs sudo non-interactively and never asks for, holds or forwards a "
+                "password. Two ways round it, both yours to choose — run the commands below where "
+                "sudo can prompt you, or point this entry at an account that needs no sudo (root "
+                "over ssh) or at one with a no-prompt rule scoped to the update commands")}
 
 
 # The stage command's success codes differ per family, and reading one as a failure is how a

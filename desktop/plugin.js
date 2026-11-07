@@ -666,6 +666,7 @@ function UpdatesPanel({ entry, hostLabel }) {
 
 /** What the language check actually read, and what it found. Nothing runs until you ask. */
 function LanguagesPanel({ libraries, onCheck, busy }) {
+  const [projectPath, setProjectPath] = useState('')
   const [query, setQuery] = useState('')
   // a list of 130 rows where 127 say "clean" buries the three that matter: findings first, the rest
   // behind an explicit "show all" — the count of what was checked is still on screen either way
@@ -772,7 +773,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
           : null,
       jsx('button', {
         type: 'button',
-        onClick: onCheck,
+        onClick: () => onCheck(),
         disabled: busy,
         title: 'Reads the global npm tree and the pip environment on PATH, then asks osv.dev',
         style: {
@@ -784,6 +785,52 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
     ]),
     libraries
       ? jsxs('div', {}, [
+          // a project is what ships; the machine-wide view cannot see what a lockfile pins
+          jsxs('div', { style: { display: 'flex', gap: '6px', marginBottom: '5px' } }, [
+            jsx('input', {
+              value: projectPath,
+              onChange: (event) => setProjectPath(event.target.value),
+              placeholder: "a project's lockfiles — /path/to/repo (npm, pip, go, cargo, composer, bundler, pub)",
+              style: {
+                flex: 1, fontFamily: MONO, fontSize: '0.625rem', padding: '3px 7px',
+                background: 'transparent', color: C.text, border: '1px solid ' + C.border,
+                borderRadius: '3px'
+              }
+            }),
+            jsx('button', {
+              type: 'button',
+              onClick: () => onCheck(projectPath.trim()),
+              disabled: busy || !projectPath.trim(),
+              title: 'reads every lockfile under that directory and asks OSV about the pinned versions',
+              style: {
+                fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
+                cursor: busy || !projectPath.trim() ? 'default' : 'pointer',
+                color: busy || !projectPath.trim() ? C.faint : C.accent, background: 'transparent',
+                border: '1px solid ' + C.border, borderRadius: '3px'
+              }
+            }, 'check project'),
+            libraries.scope === 'project'
+              ? jsx('button', {
+                  type: 'button',
+                  onClick: () => onCheck(),
+                  disabled: busy,
+                  title: 'back to what this machine has installed',
+                  style: {
+                    fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: 'pointer',
+                    color: C.dim, background: 'transparent',
+                    border: '1px solid ' + C.border, borderRadius: '3px'
+                  }
+                }, 'machine-wide')
+              : null
+          ]),
+          libraries.scope === 'project' && libraries.project
+            ? jsxs('div', { style: { marginBottom: '5px' } }, [
+                jsx('div', { style: { fontSize: '0.6875rem', color: C.text } },
+                  'project: ' + libraries.project.root),
+                jsx('div', { style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
+                  Object.entries(libraries.project.files).map(([name, state]) => name + ' — ' + state).join(' · '))
+              ])
+            : null,
           jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '4px' } },
             (libraries.answer || '')
             + (readEcosystems.length ? ' · read: ' + readEcosystems.join(', ') : '')
@@ -1400,10 +1447,11 @@ export function PatchSentinel({ compact }) {
   }, [])
 
   // the language check hits the network and takes seconds: it runs when asked, never on open
-  const checkLibraries = useCallback(async () => {
+  const checkLibraries = useCallback(async (projectPath) => {
     setLibBusy(true)
     try {
-      setLibraries(await call('/libraries'))
+      const query = projectPath ? '?project=' + encodeURIComponent(projectPath) : ''
+      setLibraries(await call('/libraries' + query))
     } catch (err) {
       setLibraries({ answer: 'could not look: ' + (err && err.message ? err.message : err),
                      packages: [], vulnerable: [] })

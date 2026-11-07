@@ -120,7 +120,7 @@ class Gate(unittest.TestCase):
             result = apply_mod.apply(host_entry(), "fedora@127.0.0.1:2222", "fedora-lab",
                                      dry_run=False)
         self.assertFalse(result["applied"])
-        self.assertIn("no-prompt sudo", result["reason"])
+        self.assertIn("never asks for, holds or forwards a password", result["reason"])
         self.assertEqual(result["steps"], [])
 
     def test_a_real_apply_verifies_by_effect_and_records_it(self):

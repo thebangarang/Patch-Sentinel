@@ -120,15 +120,25 @@ CVE_LIBRARIES = {
         "queries api.osv.dev in one batch, and returns each vulnerable package with its advisory id, "
         "aliases (CVE ids among them), a severity band, the versions that fix it and the OSV link. "
         "Every ecosystem reports an outcome (ok / missing / unreadable) so a tool that is not "
-        "installed is never read as clean. NOT covered, and say so when asked about completeness: "
-        "per-project lockfiles, virtualenvs other than that interpreter, vendor directories, and "
-        "anything inside a container image."
+        "installed is never read as clean. Pass `project` with a directory to read that repository's "
+        "lockfiles instead of the machine: package-lock.json, yarn.lock, pnpm-lock.yaml, "
+        "requirements.txt, constraints.txt, poetry.lock, Pipfile.lock, go.sum, Cargo.lock, "
+        "composer.lock, Gemfile.lock and pubspec.lock are parsed, and only pinned exact versions "
+        "count (a `>=` range is reported as unverifiable, not guessed). NOT covered, and say so when "
+        "asked about completeness: virtualenvs other than that interpreter, vendor directories, "
+        "project manifests with no lockfile, and anything inside a container image."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "host": {"type": "string",
                      "description": "Host label. Omit for this machine."},
+            "project": {"type": "string",
+                        "description": ("A local directory to read instead of the machine: every "
+                                        "lockfile under it (npm, pip/poetry/Pipfile, Go, Cargo, "
+                                        "Composer, Bundler, Pub) up to three levels deep, skipping "
+                                        "node_modules/.venv/vendor/target. Local hosts only — a "
+                                        "remote project path is refused, not guessed.")},
         },
         "required": [],
     },
