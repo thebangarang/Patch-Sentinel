@@ -1034,28 +1034,27 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
         ? jsx('span', {
             style: {
               fontFamily: MONO, fontSize: '0.625rem',
-              color: findingsMine.length ? C.danger : C.faint
+              // red is for something to do: an exploited finding, or one with a command to run.
+              // A finding nobody has fixed yet is neutral — it is a fact, not a task.
+              color: findingsMine.some((v) => v.kev) ? C.danger
+                : commandCount ? C.warn : C.faint
             }
           },
             mine.length + ' package(s) · '
             + (findingsMine.length
-                ? findingsMine.length + ' finding(s) · ' + mineWithFix.length + ' with a fix · '
-                  + commandCount + ' command(s) to run'
+                ? (commandCount
+                    ? findingsMine.length + ' finding(s) · ' + mineWithFix.length + ' with a fix · '
+                      + commandCount + ' command(s) to run'
+                    : findingsMine.length + ' finding(s) · nothing to run — no published fix someone '
+                      + 'could install')
                 : 'nothing to upgrade'))
         : null,
       flagged && flagged.length && commandCount
         ? jsx(Copy, { text: fixText,
                       label: 'copy ' + commandCount + ' command' + (commandCount === 1 ? '' : 's') })
-        : libraries
-          ? jsx('span', {
-              style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint },
-              title: 'a finding whose fix is already installed, or which has no published fix, needs '
-                     + 'no command'
-            }, findingsMine.length
-                ? 'no commands to run — ' + findingsMine.length + ' finding(s) have no fix ahead of '
-                  + 'the installed version'
-                : 'no fix commands to copy')
-          : null,
+        // no second sentence: the header already says "nothing to run" and why. Saying it twice in
+        // the same row is how a screen with nothing to do reads like a to-do list.
+        : null,
       jsx('button', {
         type: 'button',
         onClick: () => onCheck(),
@@ -1134,10 +1133,11 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 ].join(' · '))
             : null,
           vulnerable.length
-            ? jsx('div', { style: { fontSize: '0.6875rem', color: C.dim, marginBottom: '4px', lineHeight: 1.45 } },
-                'A finding is a published advisory that names this exact version — one package can carry many, '
-                + 'which is why ' + findingsMine.length + ' findings sit on ' + flagged.length +
-                ' package(s). The fix column is the first version that closes it.')
+            ? jsx('div', {
+                style: { fontSize: '0.625rem', color: C.faint, marginBottom: '4px' },
+                title: 'One advisory per exact version; the fix column is the first version that closes it.'
+              }, findingsMine.length + ' finding(s) on ' + flagged.length
+                 + ' package(s) · one row per advisory, the fix column closes it')
             : null,
           (libraries.threat && libraries.threat.kev_count)
             ? jsx('div', {
@@ -1223,7 +1223,9 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                       : null
                   ])
                 : null,
-              found
+              // no arrow to a comment: a row whose only "command" is a sentence ("no published fix")
+              // used to print `→ # diskcache: …`, which reads like something to run and is not
+              found && !String(buildFixCommand(row, found)).startsWith('#')
                 ? jsx('div', {
                     style: {
                       fontFamily: MONO, fontSize: '0.5625rem', color: C.faint,

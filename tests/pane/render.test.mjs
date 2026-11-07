@@ -126,6 +126,12 @@ for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXT
     // the chip text is lowercase in the DOM (CSS uppercases it)
     if (!html.includes('exploited · ransomware')) throw new Error('the exploited-in-the-wild chip is missing')
     if (!html.includes('epss 97')) throw new Error('the EPSS chip is missing')
+    // a finding whose fix nobody published gets no arrow and no comment-formatted "command"
+    if (!html.includes('1 finding(s) on 2 package(s)')) {
+      // the fixture has two packages with findings; the count line must reflect that
+      if (!/\d+ finding\(s\) on \d+ package\(s\)/.test(html)) throw new Error(
+        'the findings/packages count line is missing')
+    }
     if (!html.includes('known-exploited list')) throw new Error('the KEV header line is missing')
     if (!html.includes('project: /tmp/demo-project')) throw new Error('project scope is not shown')
     if (!html.includes('machine-wide')) throw new Error('the way back to machine scope is missing')
