@@ -1133,7 +1133,10 @@ def cve_libraries(args: dict, **kwargs) -> str:
     # operator's to upgrade: the only lever is `hermes update`. Counting them with everything else
     # is what made "128 packages, 40 advisories" read as a broken alert list after an update.
     agent = [v for v in vulnerable if v.get("owner") == "hermes"]
-    mine = [v for v in vulnerable if v.get("owner") != "hermes"]
+    # packages the distribution owns are patched by the distribution: counting their PyPI advisories
+    # as the operator's findings is how a fresh Debian showed 118 of them, none actionable
+    distro = [v for v in vulnerable if v.get("owner") == "distro"]
+    mine = [v for v in vulnerable if v.get("owner") not in ("hermes", "distro")]
     # the population is the operator's packages, the same set the pane counts in its header —
     # "2 findings from 302 packages" next to "174 packages" was two different denominators
     readable = [c for c in components if c.get("owner") != "hermes"]
@@ -1144,6 +1147,9 @@ def cve_libraries(args: dict, **kwargs) -> str:
     if agent:
         answer_line += (f" · {len(agent)} more on {len({v['package'] for v in agent})} package(s) "
                         f"that ship with Hermes itself (lever: `hermes update`)")
+    if distro:
+        answer_line += (f" · {len(distro)} more on {len({v['package'] for v in distro})} package(s) "
+                        f"installed by the distribution — they are fixed by the distro, not by pip")
     if acked:
         answer_line += (f" · {len(acked)} acknowledged with a reason "
                         f"({', '.join(sorted({a['package'] for a in acked})[:3])})")
@@ -1165,6 +1171,9 @@ def cve_libraries(args: dict, **kwargs) -> str:
                   # says so on its own line instead of inside a sentence
                   "unversioned": [{"package": c.get("package"), "source": c.get("source")}
                                   for c in unversioned][:20],
+                  "distro_managed": {"advisories": len(distro),
+                                     "packages": len({v["package"] for v in distro}),
+                                     "names": sorted({v["package"] for v in distro})[:8]},
                   "advisories_examined": len(records),
                   "advisories_truncated": len(wanted) > MAX_ADVISORY_RECORDS,
                   "exit_code": exit_code,

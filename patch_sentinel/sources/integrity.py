@@ -87,6 +87,12 @@ def _section(text: str, mark: str, next_mark: str) -> list[str]:
 
 DEFAULT_EPHEMERAL = (32768, 60999)
 
+#: Paths the packaging system empties on purpose: apt cleans its cache, logs rotate, lists are rebuilt.
+#: `dpkg -V` reports them as `missing`, and counting that as tampering is how a fresh Debian accused
+#: itself of four deleted files that no package ever promised to keep.
+VOLATILE = ("/var/cache/", "/var/log/", "/var/lib/apt/lists/", "/var/lib/dpkg/info/",
+            "/var/lib/systemd/", "/run/", "/tmp/", "/var/tmp/")
+
 
 def read_listeners(lines: list[str]) -> list[dict]:
     """`tcp LISTEN 0 128 127.0.0.1:48997 0.0.0.0:* users:(("hermes",pid=1,fd=7))` → one record.
@@ -359,7 +365,8 @@ def parse(text: str, host: str, data_dir: str) -> dict:
         "tamper": {"state": tamper_state, "reason": tamper_reason, "tool": tamper["tool"],
                    "command": command,
                    "changed_count": len(changed), "conffile_count": len(tamper.get("conffiles") or []),
-                   "missing_count": len(missing), "unreadable_count": len(unreadable),
+                   "missing_count": len(missing), "missing": missing[:20],
+                   "unreadable_count": len(unreadable),
                    "changed": (changed + missing)[:12], "conffiles": (tamper.get("conffiles") or [])[:6],
                    "unreadable": unreadable[:6]},
         "preload": {"state": preload_state, "path": "/etc/ld.so.preload",
@@ -397,9 +404,58 @@ def collect(target: str | None, data_dir: str, host: str, timeout: int = 120) ->
         return {"state": "unmeasured",
                 "reason": f"the probe returned nothing (exit {code}) — integrity is unmeasured here"}
     try:
-        return parse(out, host, data_dir)
+        state = parse(out, host, data_dir)
     except Exception as err:  # a parser bug must not become a green tick
         return {"state": "unmeasured", "reason": f"the probe output could not be read: {err}"}
+    return _split_missing(state, target, timeout)
+
+
+def _split_missing(state: dict, target: str | None, timeout: int) -> dict:
+    """`dpkg -V` says `missing` for a directory it owns too — `/var/cache/apt/archives` on a cleaned
+    Debian, `/var/lib/apt/lists/partial` everywhere. A directory that is not there is not tampering; a
+    *file* that is not there is. One `test -d` per path settles it, and the reading stops contradicting
+    itself ("4 files no longer match" next to "0 files changed")."""
+    tamper = state.get("tamper") or {}
+    paths = list(tamper.get("missing") or [])
+    if not paths:
+        return state
+    volatile = [p for p in paths if p.startswith(VOLATILE)]
+    paths = [p for p in paths if not p.startswith(VOLATILE)]
+    tamper["missing_volatile"] = volatile[:20]
+    tamper["missing_volatile_count"] = len(volatile)
+    tamper["missing"] = paths
+    tamper["missing_count"] = len(paths)
+    if not paths:
+        # nothing left outside the packaging system's own scratch space
+        if not tamper.get("changed_count"):
+            tamper["state"] = "ok"
+        states = [tamper.get("state"), (state.get("listeners") or {}).get("state"),
+                  (state.get("preload") or {}).get("state")]
+        state["state"] = ("finding" if "finding" in states
+                          else "ok" if all(s in ("ok", "baseline") for s in states) else "unmeasured")
+        return state
+    quoted = " ".join("'" + p.replace("'", "'\\''") + "'" for p in paths)
+    command = (f"for p in {quoted}; do if [ -d \"$p\" ]; then echo DIR:$p; "
+               f"else echo FILE:$p; fi; done")
+    code, out = shell.run(command, target, timeout=timeout)
+    if not out.strip():
+        return state                     # the answer did not come; leave the finding as it was
+    dirs = [line[4:] for line in out.splitlines() if line.startswith("DIR:")]
+    files = [line[5:] for line in out.splitlines() if line.startswith("FILE:")]
+    tamper["missing"] = files
+    tamper["missing_count"] = len(files)
+    tamper["missing_dirs"] = dirs[:20]
+    tamper["missing_dir_count"] = len(dirs)
+    if files:
+        tamper["state"] = "finding"
+        tamper["changed"] = (tamper.get("changed") or []) + files[:12]
+    elif not tamper.get("changed_count"):
+        tamper["state"] = "ok"
+    states = [tamper.get("state"), (state.get("listeners") or {}).get("state"),
+              (state.get("preload") or {}).get("state")]
+    state["state"] = ("finding" if "finding" in states
+                      else "ok" if all(s in ("ok", "baseline") for s in states) else "unmeasured")
+    return state
 
 
 PARSERS = {"dpkg -V": parse_dpkg, "rpm -Va": parse_rpm, "apk audit": parse_apk}

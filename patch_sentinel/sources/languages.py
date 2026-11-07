@@ -481,6 +481,25 @@ def _locations(target: str | None, timeout: int) -> dict[str, str]:
             for name, entry in _distributions("python3", target, timeout).items()}
 
 
+def _owner_of(location: str, home: str) -> str:
+    """"hermes", "distro" or "machine" — because the three are patched by three different levers.
+
+    A Python package installed by apt/dnf lives under /usr/lib (dist-packages on Debian, site-packages
+    on Fedora) and is *maintained by the distribution*: its fixes arrive with the distro's security
+    updates, and Debian backports them, so asking PyPI for advisories against the old-looking version
+    produces a page of findings the operator cannot act on. Measured on a fresh Debian 12: 118
+    advisories across 13 packages, every one of them a distro python3-* package.
+    """
+    if not location:
+        return "machine"
+    if location.startswith(home):
+        return "hermes"
+    if location.startswith("/usr/lib") and ("dist-packages" in location
+                                           or "/site-packages" in location):
+        return "distro"
+    return "machine"
+
+
 def collect(target: str | None = None, timeout: int = 90) -> dict:
     """List the installed packages of every ecosystem whose tool exists on *host*.
 
@@ -551,7 +570,7 @@ def collect(target: str | None = None, timeout: int = 90) -> dict:
                 continue
             location = where.get(str(component["package"]).lower())
             if location:
-                component["owner"] = "hermes" if location.startswith(home) else "machine"
+                component["owner"] = _owner_of(location, home)
     truncated = len(components) > MAX_COMPONENTS
     if truncated:
         components = components[:MAX_COMPONENTS]

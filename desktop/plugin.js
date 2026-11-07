@@ -1263,6 +1263,13 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                   packages.filter((p) => p.owner === 'hermes').length + ' package(s) ship with the agent — '
                   + '`hermes update` is their lever, not counted above' })
               : null,
+            libraries.distro_managed && libraries.distro_managed.advisories
+              ? jsx(Line, { key: 'd', name: 'distro', children:
+                  libraries.distro_managed.advisories + ' advisory(ies) on '
+                  + libraries.distro_managed.packages + ' package(s) the distribution installed ('
+                  + (libraries.distro_managed.names || []).join(', ')
+                  + ') — fixed through apt/dnf, not by pip' })
+              : null,
             (libraries.unversioned || []).length
               ? jsx(Line, { key: 'u', name: 'not compared', children:
                   (libraries.unversioned || []).map((row) => row.package).slice(0, 4).join(', ')
