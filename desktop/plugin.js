@@ -855,20 +855,23 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   const [showHermes, setShowHermes] = useState(false)
   const answered = (libraries && libraries.packages) || []
   const vulnerable = (libraries && libraries.vulnerable) || []
+  // One key for everything below: ecosystem + package + *version*. Two environments carrying 8.4.2
+  // and 9.1.1 are two rows; merging them is how "2 packages" was reported as "12 findings".
+  const keyOf = (p) => (p.ecosystem || '') + '/' + p.package + '@' + (p.version || '')
   // if the payload carries findings but no inventory (an older backend, or a host that answered
   // nothing), the findings themselves are the list — a count with no rows is what the operator
   // rightly called broken
-  const seen = new Set(answered.map((p) => (p.ecosystem || '') + '/' + p.package))
+  const seen = new Set(answered.map(keyOf))
   const fromFindings = []
   for (const v of vulnerable) {
-    const key = (v.ecosystem || '') + '/' + v.package
+    const key = keyOf(v)
     if (!seen.has(key)) { seen.add(key); fromFindings.push({ ecosystem: v.ecosystem, package: v.package, version: v.version }) }
   }
   const packages = answered.length ? answered : fromFindings
   const RANK = { critical: 4, high: 3, moderate: 2, low: 1 }
   const foundByPackage = {}
   for (const v of vulnerable) {
-    const key = (v.ecosystem || '') + '/' + v.package
+    const key = keyOf(v)
     const severity = String(v.severity || '').split(' ')[0].toLowerCase()
     const entry = foundByPackage[key]
       || (foundByPackage[key] = { count: 0, severity: '', fixes: [], ids: [] })
@@ -894,7 +897,6 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   }
   const hit = new Set(Object.keys(foundByPackage))
   const needle = query.trim().toLowerCase()
-  const keyOf = (p) => (p.ecosystem || '') + '/' + p.package
   const ownerOf = (p) => (p && p.owner) || 'machine'
   const matchingAll = packages.filter((p) => !needle || (p.package || '').toLowerCase().includes(needle))
   // split by whose package it is, before the findings-first view is built
@@ -902,7 +904,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   const agentOwned = matchingAll.filter((p) => ownerOf(p) === 'hermes')
   const findingsOn = (list) => {
     const keys = new Set(list.map(keyOf))
-    return vulnerable.filter((v) => keys.has((v.ecosystem || '') + '/' + v.package))
+    return vulnerable.filter((v) => keys.has(keyOf(v)))
   }
   const findingsMine = findingsOn(mine)
   const findingsAgent = findingsOn(agentOwned)
@@ -928,6 +930,10 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
     return [key, { ...row, fix }]
   })).values())
   const fixText = fixBlock(actionableFixes(fixRows))
+  // how many lines a shell would actually run — the number the header quotes and the button shows
+  const commandCount = fixText
+    ? fixText.split('\n').filter((line) => line && !line.startsWith('#')).length
+    : 0
   // An advisory with an empty `fixed` list has no published fix yet, in any version. Saying that
   // separately is the difference between "you are behind" and "nobody has shipped a fix" — the operator
   // ran `hermes update` and saw 40 advisories either way, which reads as if the update did nothing.
@@ -947,16 +953,22 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
           },
             mine.length + ' package(s) · '
             + (findingsMine.length
-                ? findingsMine.length + ' finding(s), ' + mineWithFix.length + ' with a fix published'
+                ? findingsMine.length + ' finding(s) · ' + mineWithFix.length + ' with a fix · '
+                  + commandCount + ' command(s) to run'
                 : 'nothing to upgrade'))
         : null,
-      flagged && flagged.length
-        ? jsx(Copy, { text: fixText, label: 'copy fix commands' })
+      flagged && flagged.length && commandCount
+        ? jsx(Copy, { text: fixText,
+                      label: 'copy ' + commandCount + ' command' + (commandCount === 1 ? '' : 's') })
         : libraries
           ? jsx('span', {
               style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint },
-              title: 'the copy control appears when there is a command to copy'
-            }, 'no fix commands to copy')
+              title: 'a finding whose fix is already installed, or which has no published fix, needs '
+                     + 'no command'
+            }, findingsMine.length
+                ? 'no commands to run — ' + findingsMine.length + ' finding(s) have no fix ahead of '
+                  + 'the installed version'
+                : 'no fix commands to copy')
           : null,
       jsx('button', {
         type: 'button',
