@@ -44,7 +44,9 @@ PROBE = (
     "echo " + MARK_PRELOAD + "; "
     "if [ -s /etc/ld.so.preload ]; then cat /etc/ld.so.preload; else echo NO-PRELOAD; fi; "
     "echo " + MARK_LISTEN + "; "
-    "(ss -lntuH 2>/dev/null || ss -lntu 2>/dev/null || netstat -lntu 2>/dev/null) | head -300; "
+    "cat /proc/sys/net/ipv4/ip_local_port_range 2>/dev/null; "
+    "(ss -lntupH 2>/dev/null || ss -lntup 2>/dev/null || ss -lntuH 2>/dev/null "
+    "|| netstat -lntup 2>/dev/null) | head -300; "
     "echo " + MARK_TAMPER + "; "
     "if command -v dpkg >/dev/null 2>&1; then dpkg -V 2>/dev/null | head -400; "
     "elif command -v rpm >/dev/null 2>&1; then rpm -Va 2>/dev/null | head -400; "
@@ -79,13 +81,22 @@ def _section(text: str, mark: str, next_mark: str) -> list[str]:
     return out
 
 
-def parse_listeners(lines: list[str]) -> list[str]:
-    """`tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(...)` → `tcp:22`.
+DEFAULT_EPHEMERAL = (32768, 60999)
 
-    The address is reduced to the port on purpose: a baseline that broke when the machine moved from
-    `0.0.0.0` to `127.0.0.1` would report a finding for every service after any config change.
+
+def read_listeners(lines: list[str]) -> list[dict]:
+    """`tcp LISTEN 0 128 127.0.0.1:48997 0.0.0.0:* users:(("hermes",pid=1,fd=7))` → one record.
+
+    Three facts per socket, because a port alone cannot be judged:
+
+    * **id** — `tcp:22`, the identity the baseline compares;
+    * **scope** — `loopback` or `any`. A socket on `0.0.0.0`/`::` is reachable from the network and is a
+      door; one on `127.0.0.1` is only for this machine. That difference is the whole difference
+      between "someone opened a service" and "a local process found a free port";
+    * **owner** — the process name when this account is allowed to see it. It turns "tcp:4444" into
+      "tcp:4444 · python", which is the difference between a mystery and a decision.
     """
-    seen = set()
+    records: dict[str, dict] = {}
     for line in lines:
         parts = line.split()
         if len(parts) < 5:
@@ -99,11 +110,32 @@ def parse_listeners(lines: list[str]) -> list[str]:
         match = re.search(r"(\S+):(\d+)(?:\s|$)", line[len(parts[0]):])
         if not match:
             continue
-        port = match.group(2)
-        if not port.isdigit():
+        address, port_text = match.group(1), match.group(2)
+        if not port_text.isdigit():
             continue
-        seen.add(("tcp" if proto.startswith("tcp") else "udp") + ":" + port)
-    return sorted(seen, key=lambda s: (s.split(":")[0], int(s.split(":")[1])))
+        port = int(port_text)
+        owner = re.search(r'users:\(\("([^"]+)"', line)
+        loopback = (address.startswith("127.") or address in ("::1", "[::1]", "::1%lo")
+                    or "%lo" in address or address.startswith("[::ffff:127."))
+        key = ("tcp" if proto.startswith("tcp") else "udp") + ":" + str(port)
+        records[key] = {"id": key, "proto": key.split(":")[0], "port": port, "address": address,
+                        "scope": "loopback" if loopback else "any",
+                        "owner": owner.group(1) if owner else None}
+    return sorted(records.values(), key=lambda r: (r["proto"], r["port"]))
+
+
+def parse_listeners(lines: list[str]) -> list[str]:
+    """The ids only — kept for the baseline, which compares identities, not addresses."""
+    return [record["id"] for record in read_listeners(lines)]
+
+
+def ephemeral_range(text: str) -> tuple[int, int]:
+    """`32768\t60999` from /proc — the ports a machine hands out for a few seconds at a time."""
+    match = re.search(r"(\d{2,5})\s+(\d{2,5})", text or "")
+    if not match:
+        return DEFAULT_EPHEMERAL
+    low, high = int(match.group(1)), int(match.group(2))
+    return (low, high) if low < high else DEFAULT_EPHEMERAL
 
 
 def parse_dpkg(lines: list[str]) -> dict:
@@ -179,8 +211,18 @@ def _read_baseline(data_dir: str, host: str) -> dict | None:
     return record if isinstance(record, dict) else None
 
 
-def write_baseline(data_dir: str, host: str, listeners: list[str]) -> dict:
-    """Record the current listening set. Called on the first scan, and by an explicit re-baseline."""
+def write_baseline(data_dir: str, host: str, listeners) -> dict:
+    """Record the current listening set. Called on the first read, and by an explicit re-baseline.
+
+    Accepts socket records or bare ids. The scope is stored with each id: without it, a service that
+    moved from `127.0.0.1` to `0.0.0.0` keeps the same id and the change is invisible.
+    """
+    if listeners and isinstance(listeners[0], dict):
+        ids = [item["id"] for item in listeners]
+        scopes = {item["id"]: item.get("scope") or "any" for item in listeners}
+    else:
+        ids = list(listeners)
+        scopes = {key: "any" for key in ids}
     path = Path(data_dir or ".") / "integrity.json"
     try:
         payload = json.loads(path.read_text())
@@ -188,7 +230,7 @@ def write_baseline(data_dir: str, host: str, listeners: list[str]) -> dict:
             payload["hosts"] = {}
     except (OSError, ValueError):
         payload = {"hosts": {}}
-    record = {"listeners": sorted(listeners), "at": time.time(), "count": len(listeners)}
+    record = {"listeners": sorted(ids), "scopes": scopes, "at": time.time(), "count": len(ids)}
     payload["hosts"][str(host).lower()] = record
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
@@ -211,7 +253,11 @@ def parse(text: str, host: str, data_dir: str) -> dict:
     has_preload = not (len(preload_lines) == 1 and preload_lines[0].strip() == "NO-PRELOAD")
     preload_entries = [l.split()[0] for l in preload_lines if l.strip() and "NO-PRELOAD" not in l]
 
-    listeners = parse_listeners(_section(text, MARK_LISTEN, MARK_TAMPER))
+    listen_lines = _section(text, MARK_LISTEN, MARK_TAMPER)
+    range_lines = [l for l in listen_lines if re.fullmatch(r"\s*\d{2,5}\s+\d{2,5}\s*", l)]
+    ephemeral = ephemeral_range(range_lines[0] if range_lines else "")
+    sockets = read_listeners([l for l in listen_lines if l not in range_lines])
+    listeners = [s["id"] for s in sockets]
     tamper_raw = _section(text, MARK_TAMPER, MARK_END)
 
     if "dpkg" in tools:
@@ -248,22 +294,36 @@ def parse(text: str, host: str, data_dir: str) -> dict:
                 f"to cover them, or scan a host you reach as root over SSH.")
 
     baseline = _read_baseline(data_dir, host)
-    if not listeners:
+    exposed, stable_new, drift, widened = [], [], [], []
+    if not sockets:
         listen_state = "unmeasured"
         listen_reason = "no listening sockets were listed — `ss`/`netstat` unavailable or refused"
-        new_ports = []
     elif baseline is None:
-        record = write_baseline(data_dir, host, listeners)
+        record = write_baseline(data_dir, host, sockets)
         listen_state = "baseline"
-        listen_reason = (f"baseline recorded now with {len(listeners)} socket(s) — the next scan "
-                         f"compares against it, so a port that opens later is visible")
-        new_ports = []
+        listen_reason = (f"baseline recorded now with {len(sockets)} socket(s) — the next read "
+                         f"compares against it, so a socket that opens later is visible")
         baseline = record
     else:
         known = set(baseline.get("listeners") or [])
-        new_ports = [p for p in listeners if p not in known]
-        listen_state = "finding" if new_ports else "ok"
+        scopes = baseline.get("scopes") or {}
+        fresh = [s for s in sockets if s["id"] not in known]
+        # A socket reachable from the network is a door; a loopback socket on a port the kernel hands
+        # out for seconds at a time is a process finding a free port (the agent's own port, a browser's
+        # QUIC socket). Calling the second a finding is how a security panel teaches people to ignore
+        # it — so it is reported, counted, and not raised as a finding.
+        exposed = [s for s in fresh if s["scope"] == "any" or s["port"] < 1024]
+        drift = [s for s in fresh if s not in exposed
+                 and ephemeral[0] <= s["port"] <= ephemeral[1]]
+        stable_new = [s for s in fresh if s not in exposed and s not in drift]
+        # the same port, now reachable from outside: the change that matters most, and it is not a
+        # new id, so it would slip through a diff that compared ids only
+        widened = [s for s in sockets
+                   if s["id"] in known and scopes.get(s["id"]) == "loopback" and s["scope"] == "any"]
+        listen_state = "finding" if (exposed or stable_new or widened) else "ok"
         listen_reason = ""
+    new_ports = [s["id"] for s in (exposed + stable_new + widened)]
+    drift_ports = [s["id"] for s in drift]
 
     preload_state = "finding" if has_preload else "ok"
 
@@ -290,10 +350,24 @@ def parse(text: str, host: str, data_dir: str) -> dict:
                     "entries": preload_entries[:6],
                     "reason": ("a preloaded library is the first thing an injected library needs — "
                                "it is read at every process start") if has_preload else ""},
-        "listeners": {"state": listen_state, "reason": listen_reason,
-                      "count": len(listeners), "new": new_ports[:12], "set": listeners[:200],
-                      "baseline_at": (baseline or {}).get("at"),
-                      "baseline_count": (baseline or {}).get("count")},
+        "listeners": {
+            "state": listen_state, "reason": listen_reason,
+            "count": len(sockets), "new": new_ports[:12], "set": listeners[:200],
+            "records": sockets[:200],
+            "baseline_at": (baseline or {}).get("at"),
+            "baseline_count": (baseline or {}).get("count"),
+            # three buckets, because they mean three different things to the person reading them
+            "exposed": [{"id": s["id"], "address": s["address"], "owner": s["owner"]}
+                        for s in exposed[:12]],
+            "stable": [{"id": s["id"], "address": s["address"], "owner": s["owner"]}
+                       for s in stable_new[:12]],
+            "widened": [{"id": s["id"], "address": s["address"], "owner": s["owner"]}
+                        for s in widened[:12]],
+            "drift": [{"id": s["id"], "address": s["address"], "owner": s["owner"]}
+                      for s in drift[:12]],
+            "drift_count": len(drift),
+            "ephemeral_range": list(ephemeral),
+        },
     }
 
 
@@ -362,6 +436,15 @@ def merge_pasted(state: dict, output: str, now: float | None = None) -> dict:
                        + ("a finding" if parsed["changed"] else "coverage is complete"))}
 
 
+def _sockets(rows: list[dict]) -> str:
+    """`tcp:4444 (python), tcp:8080` — the port and, when it is visible, who owns it."""
+    names = []
+    for row in rows[:3]:
+        names.append(row["id"] + (f" ({row['owner']})" if row.get("owner") else ""))
+    more = len(rows) - len(names)
+    return ", ".join(names) + (f" and {more} more" if more > 0 else "")
+
+
 def save_result(data_dir: str, host: str, state: dict) -> dict:
     """Keep the last reading, so the pane can show it without paying 40 seconds again."""
     path = Path(data_dir or ".") / "integrity.json"
@@ -407,12 +490,26 @@ def summarise(state: dict) -> str:
                 + ", ".join(preload.get("entries") or []) + ") — a preloaded library runs in every "
                 "process; that is a hook, not a normal setting")
     elif listen.get("state") == "finding":
-        main = ("integrity: " + str(len(listen.get("new") or [])) + " listening socket(s) not in the "
-                "baseline — " + ", ".join(listen.get("new") or []))
+        parts = []
+        if listen.get("exposed"):
+            parts.append(_sockets(listen["exposed"]) + " reachable from the network")
+        if listen.get("widened"):
+            parts.append(_sockets(listen["widened"]) + " now reachable from the network, loopback before")
+        if listen.get("stable"):
+            parts.append(_sockets(listen["stable"]) + " on a local fixed port")
+        main = "integrity: " + "; ".join(parts) + " — none of these were listening when the baseline " \
+               "was taken"
+    elif listen.get("drift_count"):
+        main = ("integrity: no evidence of tampering in the surfaces read (package checksums, "
+                "preload hook, listening sockets)")
     else:
         main = ("integrity: no evidence of tampering in the surfaces read (package checksums, "
                 "preload hook, listening sockets)")
     # the state of the baseline is a fact about the reading, not a replacement for its verdict
+    if listen.get("drift_count"):
+        main += (f" · {listen['drift_count']} local socket(s) appeared on ephemeral ports "
+                 f"({listen.get('ephemeral_range', ['?', '?'])[0]}–"
+                 f"{listen.get('ephemeral_range', ['?', '?'])[1]}) — normal churn, not counted")
     if listen.get("state") == "baseline" and listen.get("reason"):
         main += " · " + str(listen["reason"])
     # the note is not repeated here: the pane prints it once, next to the command that lifts it, and
@@ -437,10 +534,44 @@ def answers(state: dict) -> list[dict]:
                  "detail": (", ".join(preload.get("entries") or [])
                             if preload.get("state") == "finding" else "/etc/ld.so.preload is empty"),
                  "items": []})
+    def shaped(bucket: str) -> list[str]:
+        return [row["id"] + " · " + ("reachable from the network" if row.get("address")
+                                     in ("0.0.0.0", "[::]", "::", "*") else row.get("address", "?"))
+                + (" · " + row["owner"] if row.get("owner") else "")
+                for row in (listen.get(bucket) or [])]
+
+    if listen.get("state") == "finding":
+        bits = []
+        if listen.get("exposed"):
+            bits.append(str(len(listen["exposed"])) + " reachable from the network")
+        if listen.get("widened"):
+            bits.append(str(len(listen["widened"])) + " now reachable, loopback before")
+        if listen.get("stable"):
+            bits.append(str(len(listen["stable"])) + " on a local fixed port")
+        if listen.get("drift_count"):
+            bits.append(str(listen["drift_count"]) + " local churn ignored")
+        detail = " · ".join(bits)
+        advice = ("Compare with what you deployed. If you did not open these, ask who owns them — "
+                  "`sudo ss -lntup | grep -F ':" + str((listen.get("exposed") or listen.get("stable")
+                                                        or listen.get("widened") or [{}])[0]
+                                                       .get("id", "0").split(":")[-1])
+                  + "'` — and only re-baseline ports you meant to open.")
+        items = shaped("exposed") + shaped("widened") + shaped("stable")
+    elif listen.get("state") == "baseline":
+        detail = listen.get("reason") or ""
+        advice = ""
+        items = []
+    elif listen.get("state") == "unmeasured":
+        detail = listen.get("reason") or ""
+        advice = ""
+        items = []
+    else:
+        detail = f"{listen.get('count', 0)} socket(s), all in the baseline"
+        if listen.get("drift_count"):
+            detail += (f" · {listen['drift_count']} local socket(s) appeared on ephemeral ports and "
+                       f"went away again — reported, not counted")
+        advice = ""
+        items = []
     rows.append({"check": "listening sockets", "state": listen.get("state"),
-                 "detail": (listen.get("reason") or
-                            (f"{len(listen.get('new') or [])} not in the baseline"
-                             if listen.get("state") == "finding"
-                             else f"{listen.get('count', 0)} socket(s), all in the baseline")),
-                 "items": listen.get("new") or []})
+                 "detail": detail, "items": items, "advice": advice})
     return rows

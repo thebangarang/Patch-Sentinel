@@ -1205,7 +1205,9 @@ def cve_integrity(args: dict, **kwargs) -> str:
             and (state.get("listeners") or {}).get("set") is not None):
         # re-baselining is an explicit act: it accepts today's sockets as the known set, and the
         # previous set is not lost — it is replaced, so the pane says the baseline was renewed now
-        record = integrity.write_baseline(data_dir, host["label"], state["listeners"]["set"])
+        record = integrity.write_baseline(data_dir, host["label"],
+                                          state["listeners"].get("records")
+                                          or state["listeners"]["set"])
         state["listeners"].update(state="baseline", new=[], baseline_at=record.get("at"),
                                   baseline_count=record.get("count"),
                                   reason=f"baseline renewed now with {record.get('count')} socket(s)")

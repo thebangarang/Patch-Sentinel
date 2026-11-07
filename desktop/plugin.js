@@ -71,6 +71,15 @@ function call(path, options) {
   return REST(path, options)
 }
 
+/** A sentence with `a command` in it, rendered so the command is what you would paste. */
+function withCode(text) {
+  return String(text || '').split('`').map((part, index) => (
+    index % 2
+      ? jsx('span', { key: index, style: { fontFamily: MONO, color: C.accent } }, part)
+      : jsx('span', { key: index }, part)
+  ))
+}
+
 /** `read_at` is an epoch second, `ago` takes an age. Mixing them printed "20765 d ago". */
 function agoAt(epoch) {
   if (!epoch) return null
@@ -1551,11 +1560,12 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
             }
           }, answers.map((row, index) => jsxs('div', {
             key: index,
-            style: {
-              display: 'flex', gap: '8px', alignItems: 'baseline', padding: '2px 0',
-              borderTop: index ? '1px solid ' + C.border : 'none'
-            }
+            style: { padding: '2px 0', borderTop: index ? '1px solid ' + C.border : 'none' }
           }, [
+            jsxs('div', {
+              key: 'line',
+              style: { display: 'flex', gap: '8px', alignItems: 'baseline' }
+            }, [
             jsx('span', {
               key: 'chip',
               style: {
@@ -1572,15 +1582,18 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
               style: { flex: 1, fontSize: '0.75rem', color: C.dim, wordBreak: 'break-word' }
             }, (row.detail || '')
                + ((row.items || []).length ? ' — ' + row.items.slice(0, 4).join(', ') : ''))
+            ]),
+            row.advice
+              ? jsx('div', {
+                  key: 'advice',
+                  style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px', lineHeight: 1.55 }
+                }, withCode(row.advice))
+              : null
           ]))),
           reading.integrity && reading.integrity.note
             ? jsx('div', {
                 style: { fontSize: '0.75rem', color: C.warn, marginTop: '4px', lineHeight: 1.55 }
-              }, String(reading.integrity.note).split('`').map((part, index) => (
-                index % 2
-                  ? jsx('span', { key: index, style: { fontFamily: MONO, color: C.accent } }, part)
-                  : jsx('span', { key: index }, part)
-              )))
+              }, withCode(reading.integrity.note))
             : null,
           // a reading only root can take: the operator runs the command, the pane reads the paste.
           // Labelled as theirs — this is coverage the plugin did not measure itself.

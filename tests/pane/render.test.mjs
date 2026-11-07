@@ -32,7 +32,10 @@ const integrityFinding = {
   answers: [
     { check: 'package checksums', state: 'finding', detail: '1 file(s) changed, 2 conffile(s) edited by the operator', items: ['/usr/bin/ssh'] },
     { check: 'preload hook', state: 'ok', detail: '/etc/ld.so.preload is empty', items: [] },
-    { check: 'listening sockets', state: 'finding', detail: '1 not in the baseline', items: ['tcp:4444'] }
+    { check: 'listening sockets', state: 'finding', detail: '1 reachable from the network',
+      items: ['tcp:4444 · reachable from the network · python'],
+      advice: "Compare with what you deployed. If you did not open these, ask who owns them — "
+              + "`sudo ss -lntup | grep -F ':4444'` — and only re-baseline ports you meant to open." }
   ],
   answer: 'integrity: 1 package-managed file(s) no longer match (or are gone) — first: /usr/bin/ssh'
 }
@@ -42,6 +45,10 @@ const integrityHtml = renderToStaticMarkup(
 if (!integrityHtml.includes('package checksums')) throw new Error('the integrity rows are missing')
 if (!integrityHtml.includes('tcp:4444')) throw new Error('the new socket is not named')
 if (!integrityHtml.includes('what this cannot see')) throw new Error('the limits toggle is missing')
+// the finding must say what to do next, with a command that can be pasted
+if (!integrityHtml.includes('only re-baseline ports you meant to open')) throw new Error(
+  'the socket finding carries no advice')
+if (!integrityHtml.includes('ss -lntup')) throw new Error('the advice names no command')
 if (!integrityHtml.includes('could not be read')) throw new Error('the non-root caveat is missing')
 if (integrityHtml.includes('not compromised<')) throw new Error('the panel claimed a host is not compromised')
 const integrityEmpty = renderToStaticMarkup(

@@ -117,6 +117,77 @@ class TheThreeStates(unittest.TestCase):
         self.assertEqual(state["state"], "unmeasured")
 
 
+class SocketsAreClassifiedBeforeTheyAreAccused(unittest.TestCase):
+    """A port is not a verdict. The four decisions this pins are the difference between a panel people
+    read and one they learn to ignore.
+
+    The operator's own machine produced `tcp:48997, udp:45709, udp:45753, udp:60365` on one read and
+    none of them two minutes later — the agent's own loopback port and a browser's QUIC sockets. All
+    reported as "not in the baseline" is technically true and useless.
+    """
+
+    BASE = "\n".join([
+        "tcp  LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:((\"sshd\",pid=1,fd=3))",
+        "tcp  LISTEN 0 511 [::]:443 [::]:* users:((\"nginx\",pid=2,fd=4))",
+        "udp  UNCONN 0 0 127.0.0.53%lo:53 0.0.0.0:* users:((\"systemd-resolve\",pid=3,fd=5))",
+    ])
+
+    def read(self, tmp, extra="", first=False):
+        return integrity.parse(probe(listeners=self.BASE + ("\n" + extra if extra else "")),
+                               "beelink", tmp)
+
+    def test_an_ephemeral_loopback_socket_is_reported_not_raised(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.read(tmp)
+            state = self.read(tmp, "tcp LISTEN 0 2048 127.0.0.1:48997 0.0.0.0:* "
+                                   "users:((\"hermes\",pid=9,fd=7))")
+            self.assertEqual(state["listeners"]["state"], "ok",
+                             "the agent's own ephemeral port was raised as a finding")
+            self.assertEqual(state["listeners"]["drift_count"], 1)
+            self.assertEqual(state["listeners"]["new"], [])
+            self.assertIn("normal churn", integrity.summarise(state))
+
+    def test_a_socket_reachable_from_anywhere_is_a_finding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.read(tmp)
+            state = self.read(tmp, "tcp LISTEN 0 128 0.0.0.0:4444 0.0.0.0:* "
+                                   "users:((\"python\",pid=77,fd=3))")
+            self.assertEqual(state["listeners"]["state"], "finding")
+            self.assertEqual([s["id"] for s in state["listeners"]["exposed"]], ["tcp:4444"])
+            self.assertIn("reachable from the network", integrity.summarise(state))
+            self.assertIn("python", integrity.summarise(state))
+
+    def test_a_new_loopback_socket_on_a_fixed_port_is_a_finding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.read(tmp)
+            state = self.read(tmp, "tcp LISTEN 0 128 127.0.0.1:8080 0.0.0.0:*")
+            self.assertEqual(state["listeners"]["state"], "finding")
+            self.assertEqual([s["id"] for s in state["listeners"]["stable"]], ["tcp:8080"])
+
+    def test_the_same_port_moving_to_the_network_is_a_finding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.read(tmp, "tcp LISTEN 0 128 127.0.0.1:9000 0.0.0.0:*")
+            state = self.read(tmp, "tcp LISTEN 0 128 0.0.0.0:9000 0.0.0.0:*")
+            self.assertEqual(state["listeners"]["state"], "finding")
+            self.assertEqual([s["id"] for s in state["listeners"]["widened"]], ["tcp:9000"],
+                             "a port that opened to the network kept the same id and slipped through")
+
+    def test_the_owner_is_kept_when_the_process_is_visible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = self.read(tmp)
+            owners = {(s["id"], s["owner"]) for s in state["listeners"]["records"]}
+            self.assertIn(("tcp:22", "sshd"), owners)
+            self.assertIn(("udp:53", "systemd-resolve"), owners)
+
+    def test_the_advice_names_the_port_to_look_at(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.read(tmp)
+            state = self.read(tmp, "tcp LISTEN 0 128 0.0.0.0:4444 0.0.0.0:*")
+            row = [r for r in integrity.answers(state) if r["check"] == "listening sockets"][0]
+            self.assertIn("ss -lntup", row["advice"])
+            self.assertIn("4444", row["advice"])
+
+
 class TheRootReadingComesBackAsAPaste(unittest.TestCase):
     """The pane cannot elevate, so the operator runs the command and the pane reads the paste.
 
@@ -185,7 +256,8 @@ class TheBaselineIsAFact(unittest.TestCase):
             state = integrity.parse(probe(listeners=LISTENERS), "beelink", tmp)
             saved = integrity.save_result(tmp, "beelink", state)
             read = integrity.read_result(tmp, "beelink")
-            self.assertAlmostEqual(read["at"], saved["at"], places=3)
+            # the two calls take their own `time.time()`; what matters is that the time is kept
+            self.assertLess(abs(read["at"] - saved["at"]), 2)
             self.assertEqual(read["state"]["state"], state["state"])
 
     def test_rows_are_the_three_readings(self):
