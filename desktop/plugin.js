@@ -653,6 +653,33 @@ function UpdatesPanel({ entry, hostLabel }) {
           entry.where.ssh ? jsx('span', { style: { fontFamily: MONO, color: C.dim } }, ' · ' + entry.where.ssh) : null
         ])
       : null,
+    // a release the vendor stopped patching: "nothing pending" there is not a healthy host
+    entry && entry.support && entry.support.state === 'end-of-life'
+      ? jsxs('div', {
+          style: {
+            borderLeft: '2px solid ' + C.danger, background: C.panel, padding: '5px 8px',
+            marginBottom: '6px', borderRadius: '3px'
+          }
+        }, [
+          jsx('div', { style: { fontSize: '0.6875rem', color: C.danger, fontWeight: 600 } },
+            'this release is past standard support (ended ' + entry.support.ends + ')'),
+          jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
+            'No new fixes are published for it, so an empty pending list here means nobody is going to '
+            + 'publish one — not that the machine is patched.'
+            + (entry.support.pro && entry.support.pro.outcome === 'ok' && (entry.support.pro.enabled || []).length
+                ? ' Ubuntu Pro is attached (' + entry.support.pro.enabled.join(', ') + '), which may still '
+                  + 'carry fixes.'
+                : ''))
+        ])
+      : null,
+    // subscribed to the pocket that carries a fix? a configuration fact, not a vendor delay
+    entry && entry.pockets && entry.pockets.outcome === 'ok'
+      && !(entry.pockets.pockets || {}).security
+      ? jsx('div', {
+          style: { fontSize: '0.625rem', color: C.warn, marginBottom: '5px' }
+        }, 'no security pocket is enabled on this host — a fix the vendor published may not be '
+           + 'delivered here at all')
+      : null,
     // whose feed answered, and how old it is: SUSE's OVAL for a release that left support stops
     // moving, and a stopped feed is not a vendor delay
     entry && entry.vendor_feed && entry.vendor_feed.stale
@@ -791,6 +818,8 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
     if (!entry.severity || (RANK[severity] || 0) > (RANK[entry.severity] || 0)) entry.severity = severity
     for (const fix of v.fixed || []) if (fix && !entry.fixes.includes(fix)) entry.fixes.push(fix)
     if (v.id) entry.ids.push(v.id)
+    // why is it still open: nobody published a fix, or the vendor declined
+    if (!entry.fixState || entry.fixState === 'fixed') entry.fixState = v.fix_state || entry.fixState
     // the vendor's own workaround, when the advisory carries one: what to do while the patch is not
     // installed yet (disable a feature, validate input, set a flag)
     if (!entry.workaround && v.workaround) entry.workaround = v.workaround
@@ -1004,8 +1033,11 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                   found
                     ? found.count + ' advisor' + (found.count === 1 ? 'y' : 'ies')
                       + (found.severity ? ' · ' + found.severity : '')
-                      + (fix ? ' · fix ' + fix : ' · no fix listed')
-                    : 'clean')
+                      + (fix ? ' · fix ' + fix
+                             : found.fixState === "won't-fix" ? ' · vendor declined to fix'
+                             : found.fixState === 'unknown' ? ' · fix state unknown'
+                             : ' · no fix published')
+                    : 'clean'),
               ]),
               found && (found.kev || found.epss !== undefined)
                 ? jsxs('div', { style: { display: 'flex', gap: '5px', marginTop: '3px', flexWrap: 'wrap' } }, [

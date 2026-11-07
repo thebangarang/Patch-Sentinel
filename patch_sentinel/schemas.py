@@ -200,6 +200,24 @@ CVE_IMAGE = {
     },
 }
 
+CVE_SBOM = {
+    "name": "cve_sbom",
+    "description": (
+        "Export what this scan holds as a CycloneDX 1.5 JSON document — the interchange format Grype, "
+        "OSV-Scanner and Dependency-Track read — and return the path it was written to. Use it when "
+        "someone asks for an SBOM, a software bill of materials, or wants the inventory in a portable "
+        "format. It carries every language package the machine was read for, every virtualenv, jars on "
+        "disk and the host's pending OS updates, and it states in metadata.properties that the full "
+        "installed OS package set is NOT included: this plugin reads the update list, not the whole "
+        "package database."),
+    "parameters": {
+        "type": "object",
+        "properties": {"host": {"type": "string",
+                                "description": "Host label. Omit for this machine."}},
+        "required": [],
+    },
+}
+
 SCHEMAS = {schema["name"]: schema
            for schema in (CVE_SCAN, CVE_PLAN, CVE_EXPLAIN, CVE_COVERAGE, CVE_LIBRARIES,
-                          CVE_IMAGE, CVE_APPLY)}
+                          CVE_IMAGE, CVE_SBOM, CVE_APPLY)}

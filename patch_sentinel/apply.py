@@ -26,7 +26,7 @@ import time
 
 from . import store
 from .plan import COMMANDS as PLAN_COMMANDS
-from .sources import dispatch, shell
+from .sources import dispatch, services, shell
 
 STAGE_TIMEOUT = 300
 APPLY_TIMEOUT = 900
@@ -195,10 +195,16 @@ def apply(host_entry: dict, target: str | None, confirm: str, dry_run: bool = Tr
         why = "applied and re-measured"
     else:
         why = "the apply command failed — see steps[].output; the host was re-measured"
+    # The transaction succeeding is not the same as the machine being patched: a reboot the packaging
+    # system recorded, or a service still mapping a replaced library, means the fix is on disk and not
+    # in effect. Both are read again here, after the run.
+    effect = services.collect(target, timeout=90)
     receipt = _receipt({**base, "after": after}, steps, why, False, applied=applied_ok)
-    return {**base, "applied": applied_ok, "reason": why, "after": after,
-            "verified_by": "uname -r + the package manager's pending list, re-measured",
-            "reboot_required": after.get("kernel_verdict") == "kernel-reboot-needed",
+    return {**base, "applied": applied_ok, "reason": why, "after": after, "effect": effect,
+            "verified_by": "uname -r, the package manager's pending list, and the reboot/service state, "
+                           "all re-measured",
+            "reboot_required": (after.get("kernel_verdict") == "kernel-reboot-needed"
+                                or bool(effect.get("reboot_required"))),
             "steps": steps, "preflight": check, "receipt": receipt}
 
 

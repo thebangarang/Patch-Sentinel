@@ -152,6 +152,42 @@ def workaround(record: dict) -> str | None:
     return section[:700] or None
 
 
+#: What a database writes when it is refusing, rather than waiting. Matched case-insensitively against
+#: the values a record carries in `database_specific` / `ecosystem_specific`.
+REFUSALS = ("won't fix", "wontfix", "won't-fix", "ignored", "not planned", "no fix planned",
+            "will not fix")
+
+
+def fix_state(record: dict, ecosystem: str, package: str) -> str:
+    """``fixed`` | ``not-fixed`` | ``won't-fix`` | ``unknown`` for this package.
+
+    The distinction an operator needs is not "is there a CVE" but "why is it still open": nobody has
+    published a fix yet (**not-fixed**), the vendor has decided not to (**won't-fix**), a fix exists
+    (**fixed**), or we could not read the record at all (**unknown**). Folding a refusal into a delay
+    is what makes a "still vulnerable" list unactionable.
+    """
+    if not record:
+        return "unknown"
+    fixed = fixed_versions(record, ecosystem, package)
+    if fixed:
+        return "fixed"
+    for affected in record.get("affected") or []:
+        name = ((affected.get("package") or {}).get("name") or "").lower()
+        if name and name != (package or "").lower():
+            continue
+        for section in ("database_specific", "ecosystem_specific"):
+            values = affected.get(section) or {}
+            for value in values.values() if isinstance(values, dict) else []:
+                if str(value).strip().lower() in REFUSALS:
+                    return "won't-fix"
+    for section in ("database_specific", "ecosystem_specific"):
+        values = record.get(section) or {}
+        for value in values.values() if isinstance(values, dict) else []:
+            if str(value).strip().lower() in REFUSALS:
+                return "won't-fix"
+    return "not-fixed"
+
+
 def summarise(record: dict, ecosystem: str, package: str) -> dict:
     """The four things a person needs: what it is, how bad, what fixes it, what else it is called.
 
@@ -165,6 +201,7 @@ def summarise(record: dict, ecosystem: str, package: str) -> dict:
         "severity": severity(record),
         "published": record.get("published"),
         "fixed": fixed_versions(record, ecosystem, package),
+        "fix_state": fix_state(record, ecosystem, package),
         "workaround": workaround(record),
         "url": f"https://osv.dev/vulnerability/{record.get('id')}" if record.get("id") else None,
     }

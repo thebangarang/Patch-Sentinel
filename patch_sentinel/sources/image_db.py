@@ -206,6 +206,49 @@ def save_image(image: str, target: str | None, path: str, timeout: int) -> tuple
     return proc.returncode, (proc.stderr or b"").decode("utf-8", "replace").strip()
 
 
+OSV_SCANNER = "osv-scanner scan image --format json {image}"
+
+
+def osv_scanner_fallback(image: str, target: str | None, timeout: int = 300) -> dict:
+    """Use `osv-scanner`, if the operator installed it, where this plugin cannot read an image.
+
+    The plugin is stdlib-only on purpose, and an rpm database is sqlite: rather than pretend, it checks
+    for a tool the operator may already have and reports `could-not-look` when there is none. A missing
+    binary is an outcome, never an empty result.
+    """
+    from . import shell
+
+    code, out = shell.run("command -v osv-scanner", target, timeout=30,
+                          path_prefix=shell.SYSTEM_PATH_PREFIX)
+    if code != 0 or not (out or "").strip():
+        return {"outcome": "unavailable",
+                "why": "osv-scanner is not installed here, and this plugin has no rpm database reader "
+                       "of its own — the image's rpm packages are unmeasured, not clean"}
+    code, payload = shell.run(OSV_SCANNER.format(image=shell_quote(image)), target, timeout=timeout,
+                              path_prefix=shell.SYSTEM_PATH_PREFIX)
+    if code not in (0, 1) or not (payload or "").strip():
+        return {"outcome": "unmeasured",
+                "why": f"osv-scanner answered rc={code} with no JSON — nothing was measured"}
+    try:
+        data = json.loads(payload)
+    except ValueError:
+        return {"outcome": "unmeasured", "why": "osv-scanner answered something that is not JSON"}
+    findings = []
+    for result in data.get("results") or []:
+        for group in result.get("packages") or []:
+            package = group.get("package") or {}
+            for vuln in group.get("vulnerabilities") or []:
+                findings.append({"package": package.get("name"), "version": package.get("version"),
+                                 "id": vuln.get("id"), "summary": (vuln.get("summary") or "")[:200],
+                                 "fixed": sorted({event.get("fixed") for affected in
+                                                  (vuln.get("affected") or [])
+                                                  for rng in (affected.get("ranges") or [])
+                                                  for event in (rng.get("events") or [])
+                                                  if event.get("fixed")}),
+                                 "source": f"osv-scanner:{image}"})
+    return {"outcome": "ok", "findings": findings, "tool": "osv-scanner"}
+
+
 def report(state: dict) -> dict:
     """Add the ecosystem the packages should be checked against, and a sentence for the pane."""
     ecosystem = ecosystem_for(state.get("os") or {})

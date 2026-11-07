@@ -17,11 +17,12 @@ import functools
 import json
 import os
 import re
+from pathlib import Path
 
 from . import apply as apply_mod
 from . import plan, schemas, store, verdict
 from .sources import (cve_tracker, dispatch, distro_lag, environments, image_db, jars, languages,
-                      osv, projects, services, shell, threat, usn)
+                      osv, projects, repos, sbom, services, shell, support, threat, usn)
 from .sources import vendor as vendor_lag
 from .sources import hosts as inventory_module
 
@@ -187,6 +188,23 @@ def _summarise(host: dict) -> str:
     elif kernel.get("verdict") == "kernel-reboot-needed":
         kernel_line += f" (installed {kernel.get('installed')}, not running)"
     parts.append(kernel_line)
+    support_state = host.get("support") or {}
+    if support_state.get("state") == "end-of-life":
+        pro = support_state.get("pro") or {}
+        attached = (" — Ubuntu Pro is attached and enabled: " + ", ".join(pro.get("enabled") or [])
+                    if pro.get("outcome") == "ok" and pro.get("enabled") else "")
+        parts.append(f"this release is past standard support ({support_state.get('ends')})"
+                     + attached + ": no new fixes are published for it")
+    elif support_state.get("state") == "unknown":
+        parts.append("release support state unknown (no lifecycle recorded) — not assumed supported")
+    pockets = host.get("pockets") or {}
+    if pockets.get("outcome") == "ok" and not (pockets.get("pockets") or {}).get("security"):
+        parts.append("no security pocket is enabled on this host — a published fix may not be "
+                     "delivered here at all")
+    exploited_pending = sum(1 for row in (host.get("pending") or []) if row.get("kev"))
+    if exploited_pending:
+        parts.append(f"{exploited_pending} of these update(s) close a CVE in CISA's known-exploited "
+                     f"list — those are the ones to install first")
     effect = host.get("services") or {}
     if effect.get("reboot_required"):
         owed = effect.get("reboot_packages") or []
@@ -349,7 +367,13 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
                 advisory_source = ("Bodhi" if (os_id or "").lower() == "fedora"
                                    else "SUSE's OVAL")
                 outcomes["advisories"] = "ok"
-                named = [p for p in pending if p.get("advisory")]
+
+        # An exploited CVE outranks everything else: the plan is *ordered* by it, not merely
+        # annotated with it, because the first line of a plan is the one an operator runs.
+        if pending and any(entry.get("advisory_cves") for entry in pending):
+            threat.annotate_rows(pending, field="advisory_cves")
+        pending.sort(key=lambda row: (0 if row.get("kev") else 1, -(row.get("epss") or 0)))
+        named = [p for p in pending if p.get("advisory")]
 
         if outcomes["kernel"] == "unmeasured":
             blind.append({"host": label, "class": "kernel",
@@ -371,6 +395,23 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
         effect = services.collect(result.get("target"), timeout=int(_settings.get("timeout") or 180))
         if effect.get("reboot_required") or effect.get("services"):
             findings += 1
+
+        # Is this release still receiving fixes at all? An end-of-life host with nothing pending is
+        # not a patched host, it is a host nobody will publish a fix for again.
+        # the adapter reports a *codename* on Ubuntu; the lifecycle table is keyed by version
+        release_for_support = str(host_release or "")
+        if not release_for_support[:1].isdigit():
+            release_for_support = distro_lag._version_id(result.get("target"),
+                                                         int(_settings.get("timeout") or 180))
+        support_state = support.state(str(os_id or ""), release_for_support)
+        if support_state.get("state") == "end-of-life":
+            findings += 1
+            if str(os_id or "").lower() == "ubuntu":
+                support_state["pro"] = support.pro_status(result.get("target"))
+        # And is this host even subscribed to the pocket that carries a fix? Two different causes of
+        # "there is an update but I do not get it" used to read the same.
+        pockets = repos.collect(result.get("target"), str(result.get("family") or ""),
+                                timeout=int(_settings.get("timeout") or 180))
 
         lag_rows = (vendor_state or {}).get("vendor_lag") or []
         if pending or rebuilt or lag_rows or result.get("kernel") in ("kernel-update-available",
@@ -409,6 +450,8 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             # whose feed answered, and how old it is: a stale feed is not a vendor delay
             "vendor_feed": (vendor_state or {}).get("feed"),
             "services": effect,
+            "support": support_state,
+            "pockets": pockets,
             # the commands that would fix this host, and where they belong — the pane must never
             # offer a list of packages as if a package named "1.2.3" were something you can paste
             "commands": _commands_for(result.get("family")),
@@ -537,8 +580,21 @@ def cve_image(args: dict, **kwargs) -> str:
             "layers": state.get("layers"), "ecosystem": state.get("ecosystem"),
             "summary": state.get("summary")}
     if not state.get("packages"):
-        return _json({**base, "outcome": state.get("outcome"), "exit_code": 2,
-                      **_refusal(state.get("outcome") or "nothing was read from the image")})
+        # The reader could not understand this image (an rpm database, a foreign layout). If the
+        # operator installed osv-scanner, use it; if not, say the image is unmeasured and why.
+        fallback = image_db.osv_scanner_fallback(image, target, timeout=300)
+        if fallback.get("outcome") == "ok":
+            findings = fallback["findings"]
+            threat_summary = threat.annotate(findings)
+            answer_line = (f"{image} on {host_label}: {len(findings)} advisory match(es), read by "
+                           f"osv-scanner ({state.get('os_label')}) — this plugin's own reader could "
+                           f"not open the image ({state.get('outcome')})")
+            return _json({**base, "answer": answer_line, "engine": "osv-scanner",
+                          "vulnerable": findings[:MAX_PENDING], "vulnerable_count": len(findings),
+                          "threat": threat_summary, "exit_code": 1 if findings else 0})
+        return _json({**base, "outcome": state.get("outcome"), "fallback": fallback, "exit_code": 2,
+                      **_refusal((state.get("outcome") or "nothing was read from the image")
+                                 + f" — and {fallback.get('why')}")})
     if not state.get("ecosystem"):
         return _json({**base, "outcome": "unsupported",
                       "reason": (f"the image runs {state.get('os_label')}, and this plugin has no "
@@ -580,6 +636,41 @@ def cve_image(args: dict, **kwargs) -> str:
     return _json({**base, "answer": answer_line, "vulnerable": vulnerable[:MAX_PENDING],
                   "vulnerable_count": len(vulnerable), "threat": threat_summary,
                   "exit_code": 1 if vulnerable else 0})
+
+
+def cve_sbom(args: dict, **kwargs) -> str:
+    """Export what this scan holds as a CycloneDX 1.5 document, and say what it does not hold."""
+    host_label = str(args.get("host") or "").strip() or _local_label()
+    entry = next((h for h in _inventory() if h["label"] == host_label), None)
+    if entry is None:
+        return _json({"tool": "cve_sbom", "host": host_label,
+                      **_refusal(f"there is no host called {host_label!r} in this inventory")})
+    timeout = int(_settings.get("timeout") or 180)
+    target = entry.get("target") or None
+    collected = languages.collect(host_label if False else target)
+    components = list(collected.get("components") or [])
+    for extra in (environments.collect(target, timeout=timeout),
+                  jars.collect(target, timeout=timeout)):
+        components.extend(extra.get("components") or [])
+    stored = store.load_scan() or {}
+    host_entry = ((stored.get("hosts") or {}).get(host_label)) or {}
+    document = sbom.build(components, host_label,
+                          os_label=" ".join(filter(None, [(host_entry.get("os") or {}).get("id"),
+                                                          (host_entry.get("os") or {}).get("version_id")])) or None,
+                          pending=host_entry.get("pending") or [],
+                          extra_properties={"release_support": (host_entry.get("support") or {}).get("state")})
+    directory = Path(store.data_dir())
+    directory.mkdir(parents=True, exist_ok=True)
+    stamp = _now().replace(":", "").replace("-", "")
+    path = directory / f"sbom-{host_label}-{stamp}.json"
+    path.write_text(json.dumps(document, indent=2))
+    return _json({"tool": "cve_sbom", "host": host_label, "path": str(path),
+                  "format": "CycloneDX 1.5", "components": len(document["components"]),
+                  "complete": False,
+                  "not_included": ["the full installed OS package set (this plugin reads the update "
+                                   "list, not the whole package database)",
+                                   "node_modules and vendor/ directories"],
+                  "exit_code": 0})
 
 
 def cve_apply(args: dict, **kwargs) -> str:
@@ -1049,9 +1140,10 @@ HANDLERS = {
     "cve_libraries": cve_libraries,
     "cve_apply": cve_apply,
     "cve_image": cve_image,
+    "cve_sbom": cve_sbom,
 }
 
 __all__ = ["HANDLERS", "SCHEMAS", "configure", "cve_scan", "cve_plan", "cve_explain",
-           "cve_coverage", "cve_libraries", "cve_image", "cve_apply"]
+           "cve_coverage", "cve_libraries", "cve_image", "cve_sbom", "cve_apply"]
 
 SCHEMAS = schemas.SCHEMAS
