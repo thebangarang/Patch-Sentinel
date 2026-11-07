@@ -298,6 +298,10 @@ function VerdictBar({ status }) {
   const exploited = (status.threat && status.threat.exploited) || []
   const blind = (status.blind || []).length
   const kernelWaiting = hosts.filter((entry) => (entry.kernel || {}).verdict === 'kernel-reboot-needed').length
+  // installed is not in effect: the packaging system asked for a reboot, or a service is still
+  // mapping a library that was replaced on disk
+  const restartOwed = hosts.some((entry) => (entry.services || {}).reboot_required)
+  const stuckServices = hosts.reduce((total, entry) => total + ((entry.services || {}).services || []).length, 0)
   return jsxs('div', {
     style: {
       display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '12px',
@@ -310,6 +314,12 @@ function VerdictBar({ status }) {
     lag ? chip(lag + ' vendor-lag', C.warn, 'a fix exists upstream, the archive does not carry it yet') : null,
     exploited.length ? chip(exploited.length + ' exploited', C.danger,
                             'CISA KEV: ' + exploited.join(', ')) : null,
+    restartOwed ? chip('reboot owed', C.warn,
+                       'the packaging system recorded a reboot-required flag — the update is installed, '
+                       + 'not in effect') : null,
+    stuckServices ? chip(stuckServices + ' service(s) stale', C.warn,
+                         'services still mapping a library that has been replaced on disk — they run '
+                         + 'the old code until restarted') : null,
     kernelWaiting ? chip(kernelWaiting + ' reboot needed', C.warn,
                          'a kernel was installed but the running one is older') : null,
     blind ? chip(blind + ' could not look', C.danger, 'see gaps — this is a fact about the scan') : null,

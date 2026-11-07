@@ -21,7 +21,7 @@ import re
 from . import apply as apply_mod
 from . import plan, schemas, store, verdict
 from .sources import (cve_tracker, dispatch, distro_lag, environments, image_db, jars, languages,
-                      osv, projects, shell, threat, usn)
+                      osv, projects, services, shell, threat, usn)
 from .sources import vendor as vendor_lag
 from .sources import hosts as inventory_module
 
@@ -187,6 +187,15 @@ def _summarise(host: dict) -> str:
     elif kernel.get("verdict") == "kernel-reboot-needed":
         kernel_line += f" (installed {kernel.get('installed')}, not running)"
     parts.append(kernel_line)
+    effect = host.get("services") or {}
+    if effect.get("reboot_required"):
+        owed = effect.get("reboot_packages") or []
+        parts.append("a reboot is owed"
+                     + (f" ({', '.join(owed[:4])})" if owed else "")
+                     + " — installed is not in effect until the machine restarts")
+    if effect.get("services"):
+        parts.append(f"{len(effect['services'])} service(s) still map a replaced library — restart: "
+                     + ", ".join(effect["services"][:3]))
     if host.get("images_outcome") == "not-applicable":
         parts.append("no container images on this host")
     elif host.get("images_outcome") == "unreadable":
@@ -356,6 +365,13 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
                                     f"({unknown[0].get('answer', 'no reason given')[:80]})",
                           "detail": "a refused registry is not a clean image"})
 
+        # Is the patch in effect? The kernel comparison answers that for the kernel; this answers it
+        # for userland — a reboot the packaging system recorded, or a service still mapping a library
+        # that has been replaced on disk.
+        effect = services.collect(result.get("target"), timeout=int(_settings.get("timeout") or 180))
+        if effect.get("reboot_required") or effect.get("services"):
+            findings += 1
+
         lag_rows = (vendor_state or {}).get("vendor_lag") or []
         if pending or rebuilt or lag_rows or result.get("kernel") in ("kernel-update-available",
                                                                       "kernel-reboot-needed"):
@@ -392,6 +408,7 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             "vendor_threat": (vendor_state or {}).get("threat"),
             # whose feed answered, and how old it is: a stale feed is not a vendor delay
             "vendor_feed": (vendor_state or {}).get("feed"),
+            "services": effect,
             # the commands that would fix this host, and where they belong — the pane must never
             # offer a list of packages as if a package named "1.2.3" were something you can paste
             "commands": _commands_for(result.get("family")),
