@@ -21,7 +21,7 @@ import datetime as dt
 import json
 import os
 import sys
-import json
+from pathlib import Path
 
 from . import shell
 
@@ -154,10 +154,25 @@ INVENTORIES["PyPI"]["candidates"] += [
 # happens to be on the inherited PATH: measured on one machine, the same scan reported 130 packages in
 # one process and 4 in another, and the user's three findings came from this environment. It needs no
 # pip — the agent's venv has none — and it is local by definition, so it never runs on a remote host.
+def _plugin_python() -> tuple[str, str]:
+    """The interpreter this plugin runs on, and what to call it.
+
+    On the operator's own machine that is the agent's environment; on a host where the plugin is run
+    by the system python (a test harness, a script) calling it "Hermes's own environment" would be a
+    lie, and it would tell the operator to `hermes update` a package that apt owns.
+    """
+    executable = sys.executable or "python3"
+    agent = str(Path.home() / ".hermes")
+    if executable.startswith(agent) or "/.hermes/" in executable:
+        return executable, "Hermes's own environment"
+    return executable, f"the python this plugin runs on ({executable})"
+
+
+_PYTHON, _PYTHON_LABEL = _plugin_python()
 INVENTORIES["PyPI"]["candidates"].insert(0, {
     "detect": "true",
-    "command": f"'{sys.executable}' -c \"{_METADATA_PROGRAM}\" 2>/dev/null",
-    "label": "Hermes's own environment", "parser": "metadata", "local_only": True})
+    "command": f"'{_PYTHON}' -c \"{_METADATA_PROGRAM}\" 2>/dev/null",
+    "label": _PYTHON_LABEL, "parser": "metadata", "local_only": True})
 
 # Gradle keeps the same kind of machine-wide artifact cache as Maven, one directory deeper:
 # files-2.1/<group>/<artifact>/<version>/<sha1>/<artifact>-<version>.jar
@@ -182,6 +197,9 @@ UPGRADE: dict[tuple[str, str], tuple[str, str] | None] = {
     ("PyPI", "uv's tool store"): ("uv", "{tool} tool upgrade {pkg}"),
     # the agent's own environment: nothing here is upgraded one package at a time
     ("PyPI", "Hermes's own environment"): None,
+    # a python this plugin merely runs on (not the agent's): its packages are usually the distro's,
+    # and a per-package pip upgrade is exactly what breaks a system python
+    ("PyPI", _PYTHON_LABEL): None,
     ("Packagist", "composer's global vendor"): ("composer", "{tool} global require {spec}"),
     ("RubyGems", "gem's local list"): ("gem", "{tool} update {pkg}"),
     ("crates.io", "cargo's installed binaries"): ("cargo", "{tool} install {pkg}"),

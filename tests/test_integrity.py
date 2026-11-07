@@ -207,6 +207,32 @@ class SocketsAreClassifiedBeforeTheyAreAccused(unittest.TestCase):
             self.assertIn("4444", row["advice"])
 
 
+class ArchSaysBackupFile(unittest.TestCase):
+    """Real `pacman -Qkk` output from a fresh Arch install: 11 size mismatches and 11 checksum
+    mismatches, every one of them a `backup file:` (a conffile), plus 12 files this account could not
+    read. Reading that as 22 tampered files would have accused a clean machine."""
+
+    SAMPLE = [
+        "warning: audit: /etc/libaudit.conf (failed to calculate SHA256 checksum)",
+        "warning: filesystem: /etc/resolv.conf (File type mismatch)",
+        "backup file: filesystem: /etc/fstab (Size mismatch)",
+        "backup file: filesystem: /etc/fstab (SHA256 checksum mismatch)",
+        "backup file: filesystem: /etc/group (Modification time mismatch)",
+        "warning: bash: /usr/bin/bash (Size mismatch)",
+    ]
+
+    def test_a_conffile_that_differs_is_not_tampering(self):
+        parsed = integrity.parse_pacman(self.SAMPLE)
+        self.assertEqual(parsed["changed"], ["/usr/bin/bash"],
+                         "a pacman backup file was counted as tampered")
+        self.assertIn("/etc/fstab", parsed["conffiles"])
+        self.assertIn("/etc/resolv.conf", parsed["conffiles"])
+
+    def test_a_file_it_could_not_read_is_unreadable(self):
+        parsed = integrity.parse_pacman(self.SAMPLE)
+        self.assertEqual(parsed["unreadable"], ["/etc/libaudit.conf"])
+
+
 class TheRootReadingComesBackAsAPaste(unittest.TestCase):
     """The pane cannot elevate, so the operator runs the command and the pane reads the paste.
 

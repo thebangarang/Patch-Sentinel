@@ -41,7 +41,7 @@ MARK_END = "--ps-end--"
 PROBE = (
     "echo " + MARK_DB + "; "
     "echo WHOAMI=$(id -un 2>/dev/null) UID=$(id -u 2>/dev/null); "
-    "for t in dpkg rpm apk; do command -v $t >/dev/null 2>&1 && echo HAVE-$t; done; "
+    "for t in dpkg rpm apk pacman; do command -v $t >/dev/null 2>&1 && echo HAVE-$t; done; "
     "echo " + MARK_PRELOAD + "; "
     "if [ -s /etc/ld.so.preload ]; then cat /etc/ld.so.preload; else echo NO-PRELOAD; fi; "
     "echo " + MARK_LISTEN + "; "
@@ -55,6 +55,7 @@ PROBE = (
     "if command -v dpkg >/dev/null 2>&1; then dpkg -V 2>/dev/null | head -400; "
     "elif command -v rpm >/dev/null 2>&1; then rpm -Va 2>/dev/null | head -400; "
     "elif command -v apk >/dev/null 2>&1; then apk audit --system 2>/dev/null | head -400; "
+    "elif command -v pacman >/dev/null 2>&1; then pacman -Qkk 2>&1 | head -400; "
     "else echo NO-PACKAGE-DB; fi; "
     "echo " + MARK_END
 )
@@ -64,7 +65,7 @@ PRIVATE_DIRS = ("/etc/", "/root/", "/usr/sbin/", "/usr/bin/", "/boot/")
 #: The whole set needs the account that can read every packaged file. The pane is one process and does
 #: not elevate, so it hands the command over rather than claiming a reading it could not take.
 FULL_COMMAND = {"dpkg -V": "sudo dpkg -V", "rpm -Va": "sudo rpm -Va",
-                "apk audit": "sudo apk audit --system"}
+                "apk audit": "sudo apk audit --system", "pacman -Qkk": "sudo pacman -Qkk"}
 
 #: A conffile is marked `c` by dpkg/rpm: it is expected to differ after an operator edits it.
 CONFFILE = re.compile(r"^(\S+)\s+c?\s*(/.*)$")
@@ -206,6 +207,39 @@ def parse_rpm(lines: list[str]) -> dict:
             "missing": [], "tool": "rpm -Va"}
 
 
+def parse_pacman(lines: list[str]) -> dict:
+    """`pacman -Qkk` → changed files, with the three reasons that are not tampering kept apart.
+
+    Arch prefixes the two kinds differently, which is the whole trick:
+
+    * `backup file: filesystem: /etc/group (SHA256 checksum mismatch)` — a **conffile** pacman's
+      package marks as `backup`. It is *meant* to differ; every image build changes fstab, group,
+      shadow. Counted apart, never called tampering.
+    * `warning: audit: /etc/libaudit.conf (failed to calculate SHA256 checksum)` — the file could not
+      be read by this account. Unreadable, not changed.
+    * `warning: x: /usr/bin/y (Size mismatch)` / `(SHA256 checksum mismatch)` — a packaged file whose
+      content no longer matches. That is the finding.
+    """
+    changed, conffiles, unreadable = set(), set(), set()
+    for line in lines:
+        text = line.strip()
+        match = re.search(r"(/\S+)\s*\(([^)]*)\)$", text)
+        if not match:
+            continue
+        where, reason = match.group(1), match.group(2).lower()
+        if "failed to calculate" in reason or "permission denied" in reason:
+            unreadable.add(where)
+        elif text.startswith("backup file:"):
+            conffiles.add(where)
+        elif ("modification time" in reason or "file type mismatch" in reason
+              or "uid mismatch" in reason or "gid mismatch" in reason):
+            conffiles.add(where)      # rebuilt timestamps, and the symlink drift /etc/resolv.conf has
+        elif "size mismatch" in reason or "checksum mismatch" in reason:
+            changed.add(where)
+    return {"changed": sorted(changed - conffiles), "conffiles": sorted(conffiles),
+            "unreadable": sorted(unreadable), "missing": [], "tool": "pacman -Qkk"}
+
+
 def parse_apk(lines: list[str]) -> dict:
     """`apk audit` prints one path per line for a file that no longer matches its package."""
     changed = [l.strip() for l in lines if l.strip().startswith("/")]
@@ -258,7 +292,7 @@ def parse(text: str, host: str, data_dir: str) -> dict:
     who = " ".join(db)
     account = re.search(r"WHOAMI=(\S+)", who)
     uid_zero = "UID=0" in who
-    tools = {name for name in ("dpkg", "rpm", "apk") if f"HAVE-{name}" in who}
+    tools = {name for name in ("dpkg", "rpm", "apk", "pacman") if f"HAVE-{name}" in who}
 
     preload_lines = [l for l in _section(text, MARK_PRELOAD, MARK_LISTEN) if l.strip()]
     has_preload = not (len(preload_lines) == 1 and preload_lines[0].strip() == "NO-PRELOAD")
@@ -282,6 +316,8 @@ def parse(text: str, host: str, data_dir: str) -> dict:
         tamper = parse_rpm(tamper_raw)
     elif "apk" in tools:
         tamper = parse_apk(tamper_raw)
+    elif "pacman" in tools:
+        tamper = parse_pacman(tamper_raw)
     else:
         tamper = {"changed": [], "conffiles": [], "tool": None}
 
@@ -458,7 +494,8 @@ def _split_missing(state: dict, target: str | None, timeout: int) -> dict:
     return state
 
 
-PARSERS = {"dpkg -V": parse_dpkg, "rpm -Va": parse_rpm, "apk audit": parse_apk}
+PARSERS = {"dpkg -V": parse_dpkg, "rpm -Va": parse_rpm, "apk audit": parse_apk,
+           "pacman -Qkk": parse_pacman}
 
 
 def merge_pasted(state: dict, output: str, now: float | None = None,
