@@ -312,6 +312,56 @@ def collect(target: str | None, data_dir: str, host: str, timeout: int = 120) ->
         return {"state": "unmeasured", "reason": f"the probe output could not be read: {err}"}
 
 
+PARSERS = {"dpkg -V": parse_dpkg, "rpm -Va": parse_rpm, "apk audit": parse_apk}
+
+
+def merge_pasted(state: dict, output: str, now: float | None = None) -> dict:
+    """Take a reading the operator ran as root and paste-read it.
+
+    The plugin cannot elevate, so the full set is one command away and out of its reach. Reading that
+    output is still worth doing — and it is labelled for what it is: *pasted by the operator*, not
+    measured by this process. A clean paste covers the files the plugin could not read; a paste that
+    names changed files is a finding, because the evidence is right there.
+    """
+    tool = (state.get("tamper") or {}).get("tool")
+    parser = PARSERS.get(tool or "")
+    if parser is None:
+        return {"ok": False,
+                "reason": "this reading did not come from a package database this plugin knows, so a "
+                          "pasted output cannot be placed against it"}
+    text = str(output or "")
+    if not text.strip():
+        # an empty `dpkg -V` is the clean result; an empty *paste* is indistinguishable from it, and
+        # saying so is better than accepting a blank as a clean host
+        return {"ok": False,
+                "reason": "the paste is empty — note that a clean `dpkg -V` also prints nothing, so "
+                          "press paste only after a run that produced no lines at all"}
+    parsed = parser([line for line in text.splitlines() if line.strip()])
+    reading = {"at": now or time.time(), "tool": tool, "source": "pasted by the operator",
+               "changed_count": len(parsed["changed"]), "conffile_count": len(parsed["conffiles"]),
+               "unreadable_count": len(parsed.get("unreadable") or []),
+               "changed": parsed["changed"][:20], "conffiles": parsed["conffiles"][:10]}
+    state["root_reading"] = reading
+    tamper = state.setdefault("tamper", {})
+    if parsed["changed"] or parsed.get("missing"):
+        # a root run that names mismatches is evidence, and it outranks the limited reading
+        tamper.update(state="finding", covered=False)
+        tamper["changed_count"] = len(parsed["changed"]) + len(parsed.get("missing") or [])
+        tamper["changed"] = (parsed["changed"] + (parsed.get("missing") or []))[:12]
+        state["state"] = "finding"
+    else:
+        tamper["covered"] = True
+        state["note"] = (
+            f"coverage completed by a root reading pasted on "
+            f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(reading['at']))}: "
+            f"0 file(s) changed, {len(parsed['conffiles'])} conffile(s) edited by the operator. "
+            f"That part of the reading was run by you, not by this plugin.")
+    return {"ok": True, "root_reading": reading,
+            "answer": (f"pasted root reading: {len(parsed['changed'])} file(s) changed, "
+                       f"{len(parsed['conffiles'])} conffile(s) edited — "
+                       + ("a finding" if parsed["changed"] else "coverage is complete"))}
+
+
 def save_result(data_dir: str, host: str, state: dict) -> dict:
     """Keep the last reading, so the pane can show it without paying 40 seconds again."""
     path = Path(data_dir or ".") / "integrity.json"

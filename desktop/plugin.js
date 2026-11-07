@@ -1497,8 +1497,10 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
  * never run silently: the section shows the last reading with its age, and a button takes a fresh one.
  * Three rows, each either measured or saying why not — and the section never prints "not compromised".
  */
-function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline }) {
+function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport }) {
   const [open, setOpen] = useState(false)
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasteText, setPasteText] = useState('')
   const state = reading && reading.integrity
   const answers = (reading && reading.answers) || []
   const age = agoAt(reading && reading.read_at)
@@ -1579,6 +1581,84 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline }) {
                   ? jsx('span', { key: index, style: { fontFamily: MONO, color: C.accent } }, part)
                   : jsx('span', { key: index }, part)
               )))
+            : null,
+          // a reading only root can take: the operator runs the command, the pane reads the paste.
+          // Labelled as theirs — this is coverage the plugin did not measure itself.
+          reading.integrity && reading.integrity.tamper && reading.integrity.tamper.command
+            ? (pasteOpen
+                ? jsxs('div', { style: { marginTop: '5px' } }, [
+                    jsx('div', {
+                      key: 'hint',
+                      style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '3px' }
+                    }, 'Paste what ' + reading.integrity.tamper.command + ' printed — even a run that '
+                       + 'printed nothing. The pane reads it and says what it found; it never runs '
+                       + 'sudo itself.'),
+                    jsx('textarea', {
+                      key: 'box',
+                      value: pasteText,
+                      onChange: (event) => setPasteText(event.target.value),
+                      rows: 4,
+                      spellCheck: false,
+                      placeholder: '??5?????? c /etc/default/ufw',
+                      style: {
+                        width: '100%', fontFamily: MONO, fontSize: '0.6875rem', padding: '4px 6px',
+                        background: 'transparent', color: C.text, border: '1px solid ' + C.border,
+                        borderRadius: '3px', resize: 'vertical'
+                      }
+                    }),
+                    jsxs('div', {
+                      key: 'row', style: { display: 'flex', gap: '5px', marginTop: '4px' }
+                    }, [
+                      jsx('button', {
+                        key: 'go', type: 'button', disabled: busy || !pasteText.trim(),
+                        onClick: async () => {
+                          const answer = await onImport(pasteText)
+                          if (answer !== false) { setPasteOpen(false); setPasteText('') }
+                        },
+                        style: {
+                          fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 8px',
+                          cursor: pasteText.trim() ? 'pointer' : 'default',
+                          color: pasteText.trim() ? C.accent : C.faint, background: 'transparent',
+                          border: '1px solid ' + C.border, borderRadius: '3px'
+                        }
+                      }, 'read the paste'),
+                      jsx('button', {
+                        key: 'x', type: 'button',
+                        onClick: () => { setPasteOpen(false); setPasteText('') },
+                        style: {
+                          fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 8px',
+                          cursor: 'pointer', color: C.dim, background: 'transparent',
+                          border: '1px solid ' + C.border, borderRadius: '3px'
+                        }
+                      }, 'cancel')
+                    ])
+                  ])
+                : jsxs('div', {
+                    style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }
+                  }, [
+                    jsx('button', {
+                      key: 'paste',
+                      type: 'button',
+                      onClick: () => setPasteOpen(true),
+                      title: 'the pane cannot elevate; paste the output of the command above and it '
+                             + 'will read it, labelled as a run you made',
+                      style: {
+                        fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px', cursor: 'pointer',
+                        color: (reading.integrity.tamper.covered ? C.ok : C.dim),
+                        background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
+                      }
+                    }, reading.integrity.tamper.covered
+                      ? 'paste another root reading'
+                      : 'paste the root output'),
+                    reading.integrity.root_reading
+                      ? jsx('span', {
+                          key: 'when', style: { fontSize: '0.6875rem', color: C.faint }
+                        }, 'root reading pasted ' + (agoAt(reading.integrity.root_reading.at)
+                          || 'earlier') + ': ' + reading.integrity.root_reading.changed_count
+                          + ' file(s) changed, ' + reading.integrity.root_reading.conffile_count
+                          + ' conffile(s)')
+                      : null
+                  ]))
             : null,
           jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '5px' } }, [
             jsx('button', {
@@ -2117,6 +2197,20 @@ export function PatchSentinel({ compact }) {
     }
   }, [integrityBusy, selected, loadIntegrity])
 
+  // a paste is parsed by the backend and merged into the stored reading; false means "not read"
+  const importIntegrity = useCallback(async (output) => {
+    try {
+      const answer = await call('/integrity', {
+        method: 'POST', body: { host: selected, action: 'import', output }
+      })
+      if (answer && answer.exit_code === 2) return false
+      await loadIntegrity(selected)
+      return answer
+    } catch (err) {
+      return false
+    }
+  }, [selected, loadIntegrity])
+
   const load = useCallback(async () => {
     try {
       const [nextStatus, nextCoverage, nextHealth] = await Promise.all([
@@ -2316,7 +2410,8 @@ export function PatchSentinel({ compact }) {
                         hostLabel: selected }),
     jsx(IntegrityPanel, { reading: integrity, busy: integrityBusy, seconds: integritySeconds,
                           onRead: () => readIntegrity('check'),
-                          onRebaseline: () => readIntegrity('baseline') }),
+                          onRebaseline: () => readIntegrity('baseline'),
+                          onImport: importIntegrity }),
     jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }),
     jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning,
                         libraryFindings: (libraries && libraries.vulnerable || [])

@@ -278,6 +278,11 @@ def integrity_start(body: dict | None = None) -> dict:
         args["host"] = body["host"]
     if isinstance(body, dict) and body.get("action"):
         args["action"] = body["action"]
+    if isinstance(body, dict) and body.get("output") is not None:
+        args["output"] = body["output"]
+    if args.get("action") in ("import", "paste"):
+        # a paste is a parse, not a 40-second probe: answer in the request
+        return _payload(tools.cve_integrity, args)
     return _start("integrity", tools.cve_integrity, args)
 
 

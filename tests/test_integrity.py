@@ -117,6 +117,62 @@ class TheThreeStates(unittest.TestCase):
         self.assertEqual(state["state"], "unmeasured")
 
 
+class TheRootReadingComesBackAsAPaste(unittest.TestCase):
+    """The pane cannot elevate, so the operator runs the command and the pane reads the paste.
+
+    What must stay true: it is labelled as theirs, a mismatch found that way is still a finding, and a
+    blank paste is refused (a clean run prints nothing, so a blank is indistinguishable from a misfire).
+    """
+
+    def state(self, tmp):
+        return integrity.parse(probe(dpkg="?????????   /etc/sudoers", listeners=LISTENERS),
+                               "beelink", tmp)
+
+    def test_a_clean_root_run_completes_the_coverage_claim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = self.state(tmp)
+            self.assertIn("could not be read", state["note"])
+            merged = integrity.merge_pasted(state, "??5?????? c /etc/default/ufw\n"
+                                                  "??5?????? c /etc/apt/sources.list.d/x.list")
+            self.assertTrue(merged["ok"])
+            self.assertEqual(merged["root_reading"]["changed_count"], 0)
+            self.assertEqual(merged["root_reading"]["conffile_count"], 2)
+            self.assertIn("coverage completed by a root reading", state["note"])
+            self.assertIn("run by you", state["note"])
+            self.assertTrue(state["tamper"]["covered"])
+            self.assertEqual(state["state"], "ok")
+
+    def test_a_mismatch_in_the_paste_is_a_finding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = self.state(tmp)
+            merged = integrity.merge_pasted(state, "??5??????   /usr/bin/ssh")
+            self.assertTrue(merged["ok"])
+            self.assertEqual(state["state"], "finding")
+            self.assertEqual(state["tamper"]["changed"], ["/usr/bin/ssh"])
+            self.assertIn("a finding", merged["answer"])
+
+    def test_a_blank_paste_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = self.state(tmp)
+            for blank in ("", "   \n\n "):
+                merged = integrity.merge_pasted(state, blank)
+                self.assertFalse(merged["ok"])
+                self.assertIn("empty", merged["reason"])
+
+    def test_a_host_with_no_package_database_refuses_a_paste(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = integrity.parse(probe(tools="", listeners=LISTENERS), "unknown", tmp)
+            merged = integrity.merge_pasted(state, "??5?????? /usr/bin/ssh")
+            self.assertFalse(merged["ok"])
+
+    def test_the_paste_is_kept_with_its_source_and_time(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = self.state(tmp)
+            integrity.merge_pasted(state, "??5?????? c /etc/default/ufw", now=1_800_000_000)
+            self.assertEqual(state["root_reading"]["source"], "pasted by the operator")
+            self.assertEqual(state["root_reading"]["at"], 1_800_000_000)
+
+
 class TheBaselineIsAFact(unittest.TestCase):
     def test_the_baseline_file_is_private(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1179,9 +1179,29 @@ def cve_integrity(args: dict, **kwargs) -> str:
     if host is None:
         return _json({"tool": "cve_integrity", **_not_in_inventory(requested)})
     data_dir = str(_settings.get("data_dir") or store.data_dir())
+    action = str(args.get("action") or "").strip().lower()
+
+    # A reading the operator ran as root, pasted back. The plugin cannot elevate, so this is the only
+    # way the files it could not read get covered — and the paste is labelled as theirs, not ours.
+    if action in ("import", "paste"):
+        saved = integrity.read_result(data_dir, host["label"])
+        if not saved:
+            return _json({"tool": "cve_integrity", "exit_code": 2,
+                          "reason": "there is no reading to attach this to — take an integrity reading "
+                                    "first, then paste the root run of the command it names"})
+        state = saved["state"]
+        merged = integrity.merge_pasted(state, str(args.get("output") or ""))
+        if not merged.get("ok"):
+            return _json({"tool": "cve_integrity", "exit_code": 2, "reason": merged.get("reason")})
+        integrity.save_result(data_dir, host["label"], state)
+        return _json({"tool": "cve_integrity",
+                      "host": {"label": host["label"], "target": host.get("target") or "local"},
+                      "integrity": state, "answers": integrity.answers(state),
+                      "answer": merged.get("answer"), "read_at": time.time(), "exit_code": 0})
+
     state = integrity.collect(host.get("target"), data_dir, host["label"],
                               timeout=int(_settings.get("timeout") or 180))
-    if (str(args.get("action") or "").strip().lower() in ("baseline", "rebase")
+    if (action in ("baseline", "rebase")
             and (state.get("listeners") or {}).get("set") is not None):
         # re-baselining is an explicit act: it accepts today's sockets as the known set, and the
         # previous set is not lost — it is replaced, so the pane says the baseline was renewed now

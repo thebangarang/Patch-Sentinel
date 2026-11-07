@@ -265,10 +265,17 @@ CVE_INTEGRITY = {
         "properties": {
             "host": {"type": "string",
                      "description": "Host label from the inventory. Omit for this machine."},
-            "action": {"type": "string", "enum": ["check", "baseline"],
+            "action": {"type": "string", "enum": ["check", "baseline", "import"],
                        "description": "'check' (default) reads and compares; 'baseline' accepts the "
                                       "current sockets as the known set (use after a deliberate "
-                                      "change, e.g. a new service was deployed)."},
+                                      "change, e.g. a new service was deployed); 'import' reads a "
+                                      "root run the operator pasted into `output`, covering the "
+                                      "files a non-root reading could not read."},
+            "output": {"type": "string",
+                       "description": "With action 'import': the text the operator pasted, exactly as "
+                                      "their root run printed it (e.g. the output of `sudo dpkg -V`). "
+                                      "An empty paste is refused, because a clean run also prints "
+                                      "nothing and the two cannot be told apart."},
         },
         "required": [],
     },
