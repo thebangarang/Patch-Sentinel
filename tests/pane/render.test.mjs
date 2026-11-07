@@ -44,9 +44,13 @@ const FIXTURE = {
       manager: { tool: 'pip3', path: '/opt/py/bin/pip3', upgrade: null, owner: 'hermes',
                  why: "part of Hermes's own environment — upgraded by `hermes update`" } }
   ],
+  threat: { kev_state: 'measured', kev_catalog: 1769, kev_count: 1,
+            exploited: ['CVE-5000-1'], ransomware: ['CVE-5000-1'], scored: 3 },
   vulnerable: [
     { ecosystem: 'PyPI', package: 'urllib3', version: '1.24.1', id: 'CVE-5000-1',
-      severity: 'high', fixed: ['1.26.5'], workaround: 'pin urllib3<2 in the embedding app' },
+      severity: 'high', fixed: ['1.26.5'], workaround: 'pin urllib3<2 in the embedding app',
+      epss: 0.97, kev: { cves: ['CVE-5000-1'], name: 'fixture', added: '2026-01-01',
+                          ransomware: true } },
     { ecosystem: 'npm', package: 'lodash', version: '4.17.4', id: 'CVE-5000-2',
       severity: 'critical', fixed: ['4.17.21'], workaround: null },
     { ecosystem: 'PyPI', package: 'filelock', version: '3.12.0', id: 'CVE-5000-3',
@@ -64,6 +68,10 @@ for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXT
     if (!html.includes('npm install -g lodash@4.17.21')) throw new Error('no npm fix command')
     // React escapes the apostrophe in text nodes, so assert on the fragment before it
     if (!html.includes('belong to Hermes')) throw new Error('agent-owned block missing')
+    // the chip text is lowercase in the DOM (CSS uppercases it)
+    if (!html.includes('exploited · ransomware')) throw new Error('the exploited-in-the-wild chip is missing')
+    if (!html.includes('epss 97')) throw new Error('the EPSS chip is missing')
+    if (!html.includes('known-exploited list')) throw new Error('the KEV header line is missing')
     if (html.includes('/opt/py/bin/pip3 install -U \'filelock')) throw new Error(
       "the agent's own package was given a pip command")
   }

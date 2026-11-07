@@ -77,14 +77,37 @@ class HostRoutes(unittest.TestCase):
         app.include_router(self.api.router, prefix="/api/plugins/patch-sentinel")
         self.client = TestClient(app)
         self._probe = dispatch.probe
+        # the route checks reachability before probing; here that must not leave the machine
+        from patch_sentinel.sources import diagnose
+        self._diagnose = diagnose.diagnose
+        diagnose.diagnose = lambda target: {"ok": True, "stage": "ok", "reason": "", "hint": "",
+                                            "fix": ""}
 
     def tearDown(self):
         dispatch.probe = self._probe
+        from patch_sentinel.sources import diagnose
+        diagnose.diagnose = self._diagnose
         self.tmp.cleanup()
 
     def test_the_list_starts_from_the_configured_inventory(self):
         answer = self.client.get(BASE + "/hosts").json()
         self.assertEqual(answer["hosts"], [{"label": "beelink", "target": "local"}])
+
+    def test_an_unreachable_host_reports_the_stage_it_stopped_at(self):
+        from patch_sentinel.sources import diagnose
+        diagnose.diagnose = lambda target: {
+            "ok": False, "stage": "auth",
+            "reason": "debian@10.0.0.9: Permission denied (publickey).",
+            "hint": "the host answered but rejected the key",
+            "fix": "ssh-copy-id -i ~/.ssh/id_ed25519.pub debian@10.0.0.9"}
+        called = []
+        dispatch.probe = lambda *a, **k: called.append(a) or {"ok": True}
+        answer = self.client.post(BASE + "/hosts/test",
+                                  json={"label": "vps", "target": "debian@10.0.0.9"}).json()
+        self.assertFalse(answer["ok"])
+        self.assertEqual(answer["stage"], "auth")
+        self.assertIn("ssh-copy-id", answer["fix"])
+        self.assertEqual(called, [], "a host that is not reachable must not be probed")
 
     def test_a_bad_target_is_refused_before_any_probe(self):
         called = []

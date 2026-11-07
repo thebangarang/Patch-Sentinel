@@ -171,7 +171,13 @@ def hosts_test(body: dict | None = None) -> dict:
     target = str(payload.get("target") or "").strip()
     ok, reason = inventory_module.validate(label, target)
     if not ok:
-        return {"ok": False, "reason": reason}
+        return {"ok": False, "stage": "format", "reason": reason}
+    # One stage at a time, before the full scan: which hop failed decides what the user does next.
+    from patch_sentinel.sources import diagnose
+    reach = diagnose.diagnose(None if inventory_module.is_local(target) else target)
+    if not reach["ok"]:
+        return {"ok": False, "stage": reach["stage"], "reason": reach["reason"],
+                "hint": reach.get("hint") or "", "fix": reach.get("fix") or ""}
     result = dispatch.probe(label, None if inventory_module.is_local(target) else target,
                             timeout=int(tools._settings.get("timeout") or 180))
     if not result.get("ok"):

@@ -20,7 +20,7 @@ import re
 
 from . import apply as apply_mod
 from . import plan, schemas, store, verdict
-from .sources import cve_tracker, dispatch, distro_lag, languages, osv, shell, usn
+from .sources import cve_tracker, dispatch, distro_lag, languages, osv, shell, threat, usn
 from .sources import vendor as vendor_lag
 from .sources import hosts as inventory_module
 
@@ -294,6 +294,10 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
                             "index_fresh": assessed.get("index_fresh"),
                             "index_note": assessed.get("index_note") or ""}
 
+        if vendor_state and vendor_state.get("vendor_lag"):
+            # "fixed upstream, not here yet" is bad; "…and it is being exploited" is the reason to act
+            vendor_state["threat"] = threat.annotate_rows(vendor_state["vendor_lag"])
+
         if outcomes["kernel"] == "unmeasured":
             blind.append({"host": label, "class": "kernel",
                           "reason": result.get("kernel_reason") or "kernel state not measurable",
@@ -341,12 +345,19 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             "vendor_reason": (vendor_state or {}).get("reason") or "",
             "vendor_index_fresh": (vendor_state or {}).get("index_fresh"),
             "vendor_index_note": (vendor_state or {}).get("index_note") or "",
+            "vendor_threat": (vendor_state or {}).get("threat"),
         }
         host_payload["summary"] = _summarise(host_payload)
         hosts_payload[label] = host_payload
 
     exit_code = 2 if blind else (1 if findings else 0)
     answer = " | ".join(h["summary"] for h in hosts_payload.values())
+    # one line the model will actually relay: exploited beats severe
+    exploited = sorted({cve for h in hosts_payload.values()
+                        for cve in ((h.get("vendor_threat") or {}).get("exploited") or [])})
+    if exploited:
+        answer += (f" | EXPLOITED IN THE WILD (CISA KEV): {len(exploited)} — "
+                   + ", ".join(exploited[:4]))
     if blind:
         answer += " | COULD NOT LOOK: " + "; ".join(
             f"{b['host']}/{b['class']}: {b.get('reason')}" for b in blind)
@@ -359,6 +370,10 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
         "hosts": hosts_payload,
         "blind": blind,
         "findings": findings,
+        "threat": {"exploited": exploited,
+                   "kev_state": ("measured" if any((h.get("vendor_threat") or {}).get("kev_state")
+                                                   == "measured" for h in hosts_payload.values())
+                                 else "unmeasured")},
         "exit_code": exit_code,
         "limits": {"pending_listed_at_most": MAX_PENDING,
                    "in_image_cves": "not measured (needs an image scanner)",
@@ -775,14 +790,24 @@ def cve_libraries(args: dict, **kwargs) -> str:
                                "package": component["package"],
                                "version": component["version"], **item})
 
+    # Is any of this being exploited right now? KEV and EPSS are the two public feeds that answer it,
+    # and they are what turns a list of CVEs into a decision.
+    threat_summary = threat.annotate(vulnerable)
+
     unreadable = [eco for eco, state in collected["outcomes"].items() if state == "unreadable"]
     exit_code = 2 if unreadable else (1 if vulnerable else 0)
     answer_line = (f"{host['label']}: {len(vulnerable)} advisory match(es) across "
                    f"{len({(v['ecosystem'], v['package']) for v in vulnerable})} package(s), "
                    f"from {len(components)} installed language package(s) checked"
                    if components else f"{host['label']}: nothing measurable")
+    # An exploited CVE outranks a critical one that nobody is using. Say it in the answer, not only in
+    # a field a pane might forget to render.
+    if threat_summary["kev_count"]:
+        answer_line += (f" — {threat_summary['kev_count']} of them are in CISA's known-exploited "
+                        f"list: {', '.join(threat_summary['exploited'][:3])}")
     return _json({**base, "answer": answer_line, "vulnerable": vulnerable[:MAX_PENDING],
                   "vulnerable_count": len(vulnerable),
+                  "threat": threat_summary,
                   "advisories_examined": len(records),
                   "advisories_truncated": len(wanted) > MAX_ADVISORY_RECORDS,
                   "exit_code": exit_code,

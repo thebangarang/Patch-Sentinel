@@ -186,6 +186,18 @@ function dot(level) {
   })
 }
 
+/** A small status pill. Colour carries the meaning; the text never relies on colour alone. */
+function chip(text, colour, title) {
+  return jsx('span', {
+    title: title || text,
+    style: {
+      fontFamily: MONO, fontSize: '0.5625rem', letterSpacing: '0.08em', textTransform: 'uppercase',
+      padding: '1px 6px', borderRadius: '8px', whiteSpace: 'nowrap',
+      color: colour, border: '1px solid ' + colour, background: 'transparent'
+    }
+  }, text)
+}
+
 function label(text, extra) {
   return jsx('div', {
     style: {
@@ -223,12 +235,12 @@ function Copy({ text, what, label }) {
 // --------------------------------------------------------------------------- HOSTS
 
 /** Add or remove a server. Addresses only — never a credential. */
-function HostsPanel({ onChanged, startOpen }) {
+function HostsPanel({ onChanged, startOpen, initialTest }) {
   const [hosts, setHosts] = useState(null)
   const [open, setOpen] = useState(!!startOpen)
   const [newLabel, setNewLabel] = useState('')
   const [newTarget, setNewTarget] = useState('')
-  const [test, setTest] = useState(null)
+  const [test, setTest] = useState(initialTest || null)
   const [busy, setBusy] = useState(false)
   const [removing, setRemoving] = useState(null)
   const [typed, setTyped] = useState('')
@@ -406,13 +418,37 @@ function HostsPanel({ onChanged, startOpen }) {
               'addresses only — the key stays in ssh')
           ]),
           test
-            ? jsx('div', {
-                style: { marginTop: '6px', fontSize: '0.625rem', color: test.ok ? C.ok : C.danger, lineHeight: 1.4 }
-              }, test.ok
-                ? 'reached it: ' + (test.adapter || '?') + ' · ' + ((test.os && test.os.id) || '?') + '/'
-                  + ((test.os && test.os.codename) || '?') + ' · kernel '
-                  + ((test.kernel && test.kernel.verdict) || '?') + ' · ' + (test.pending || 0) + ' pending'
-                : (test.reason || 'could not reach it') + (test.detail ? ' — ' + test.detail : ''))
+            ? jsxs('div', { style: { marginTop: '6px' } }, [
+                test.ok
+                  ? jsx('div', { style: { fontSize: '0.625rem', color: C.ok, lineHeight: 1.4 } },
+                      'reached it: ' + (test.adapter || '?') + ' · ' + ((test.os && test.os.id) || '?') + '/'
+                      + ((test.os && test.os.codename) || '?') + ' · kernel '
+                      + ((test.kernel && test.kernel.verdict) || '?') + ' · ' + (test.pending || 0) + ' pending')
+                  : jsxs('div', {}, [
+                      jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline' } }, [
+                        chip('stopped at ' + (test.stage || 'unknown'), C.danger,
+                             'the stage ssh failed at, in the order it tries them'),
+                        jsx('span', { style: { fontSize: '0.625rem', color: C.dim } },
+                          test.reason || 'the host did not answer')
+                      ]),
+                      test.hint
+                        ? jsx('div', { style: { fontSize: '0.625rem', color: C.text, marginTop: '3px', lineHeight: 1.45 } },
+                            test.hint)
+                        : null,
+                      test.fix
+                        ? jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline', marginTop: '4px' } }, [
+                            jsx('code', {
+                              style: {
+                                fontFamily: MONO, fontSize: '0.5625rem', color: C.accent,
+                                background: C.panel, padding: '2px 6px', borderRadius: '3px',
+                                border: '1px solid ' + C.border, wordBreak: 'break-all'
+                              }
+                            }, test.fix),
+                            jsx(Copy, { text: test.fix, label: 'copy' })
+                          ])
+                        : null
+                    ])
+              ])
             : null
         ])
       : null
@@ -623,6 +659,16 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
     // the vendor's own workaround, when the advisory carries one: what to do while the patch is not
     // installed yet (disable a feature, validate input, set a flag)
     if (!entry.workaround && v.workaround) entry.workaround = v.workaround
+    // evidence of exploitation outranks severity: a critical nobody uses is less urgent than a
+    // moderate that is in ransomware campaigns today
+    if (v.kev) {
+      entry.kev = entry.kev || v.kev
+      entry.kevCount = (entry.kevCount || 0) + 1
+      if (v.kev.ransomware) entry.ransomware = true
+    }
+    if (typeof v.epss === 'number' && (entry.epss === undefined || v.epss > entry.epss)) {
+      entry.epss = v.epss
+    }
   }
   const hit = new Set(Object.keys(foundByPackage))
   const needle = query.trim().toLowerCase()
@@ -709,6 +755,13 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 + 'which is why ' + findingsMine.length + ' findings sit on ' + flagged.length +
                 ' package(s). The fix column is the first version that closes it.')
             : null,
+          (libraries.threat && libraries.threat.kev_count)
+            ? jsx('div', {
+                style: { fontSize: '0.6875rem', color: C.danger, marginBottom: '4px', fontWeight: 600 }
+              }, libraries.threat.kev_count + ' advisory(ies) here are in CISA\'s known-exploited list'
+                + (libraries.threat.ransomware && libraries.threat.ransomware.length
+                    ? ' — ' + libraries.threat.ransomware.length + ' used in ransomware campaigns' : ''))
+            : null,
           !Array.isArray(libraries.packages)
             ? jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, marginBottom: '4px' } },
                 'this answer carries no package list — the backend behind this pane is older than the pane. '
@@ -766,6 +819,20 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                       + (fix ? ' · fix ' + fix : ' · no fix listed')
                     : 'clean')
               ]),
+              found && (found.kev || found.epss !== undefined)
+                ? jsxs('div', { style: { display: 'flex', gap: '5px', marginTop: '3px', flexWrap: 'wrap' } }, [
+                    found.kev
+                      ? chip(found.ransomware ? 'exploited · ransomware' : 'exploited in the wild',
+                             C.danger,
+                             'CISA KEV: ' + (found.kev.cves || []).join(', ')
+                             + (found.kev.added ? ' (added ' + found.kev.added + ')' : ''))
+                      : null,
+                    found.epss !== undefined
+                      ? chip('epss ' + (found.epss * 100).toFixed(1) + '%', C.warn,
+                             'probability of exploitation in the next 30 days (FIRST EPSS)')
+                      : null
+                  ])
+                : null,
               found
                 ? jsx('div', {
                     style: {
