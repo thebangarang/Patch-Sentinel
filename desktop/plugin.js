@@ -194,6 +194,26 @@ function buildFixCommand(row, found) {
   return fixCommandFor(row, fix)
 }
 
+/** Numeric-segment comparison, the same ordering the pane uses to pick the newest fix. */
+function compareVersions(left, right) {
+  const key = (value) => String(value || '').split(/[.\-+]/).map((part) => parseInt(part, 10) || 0)
+  const a = key(left)
+  const b = key(right)
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) - (b[i] || 0)
+  }
+  return 0
+}
+
+/**
+ * Only rows whose named fix is *ahead* of what is installed. An advisory that says "fixed in 9.0.3"
+ * against an installed 9.1.1 is not an upgrade — proposing it would be a downgrade, and the honest
+ * reading is that the advisory's range and its fix disagree.
+ */
+function actionableFixes(rows) {
+  return (rows || []).filter((row) => row.fix && compareVersions(row.fix, row.version) > 0)
+}
+
 /**
  * One block for the copy control: a finding per *package*, not per advisory and not per environment.
  * The old list repeated `pillow` nine times because it mapped every advisory row, and every
@@ -231,6 +251,42 @@ function dot(level) {
       boxShadow: level === 'green' ? '0 0 6px ' + LEVEL_COLOUR.green : 'none'
     }
   })
+}
+
+/**
+ * A scan that takes 20-60 s needs to look like it is working. These are CSS animations injected once
+ * with the pane: a sweeping line while a measurement runs, and a breathing dot on the control that
+ * started it. No dependency, no canvas, nothing that runs when nothing is being measured.
+ */
+const SCAN_CSS = `
+@keyframes ps-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(320%); } }
+@keyframes ps-breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes ps-spin { to { transform: rotate(360deg); } }
+.ps-scan-track { position: relative; overflow: hidden; height: 2px; border-radius: 2px;
+  background: rgba(255,255,255,0.06); }
+.ps-scan-track::after { content: ''; position: absolute; top: 0; left: 0; height: 2px; width: 32%;
+  background: linear-gradient(90deg, transparent, #4de3d0, transparent); animation: ps-sweep 1.15s
+  cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+.ps-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4de3d0;
+  margin-right: 6px; animation: ps-breathe 1.2s ease-in-out infinite; }
+.ps-ring { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%;
+  border: 1px solid transparent; border-top-color: #4de3d0; border-right-color: #4de3d0;
+  animation: ps-spin 0.8s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ps-scan-track::after, .ps-dot, .ps-ring { animation: none; }
+}`
+
+/** The sweeping line, shown while any measurement is running. */
+function ScanLine({ label }) {
+  return jsxs('div', { style: { marginBottom: '10px' } }, [
+    jsx('div', { className: 'ps-scan-track' }),
+    label
+      ? jsx('div', {
+          style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.dim, marginTop: '4px',
+                   letterSpacing: '0.06em' }
+        }, label)
+      : null
+  ])
 }
 
 /** A small status pill. Colour carries the meaning; the text never relies on colour alone. */
@@ -869,7 +925,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
     const key = row.package + '|' + row.version + '|' + (row.source || '')
     return [key, { ...row, fix }]
   })).values())
-  const fixText = fixBlock(fixRows)
+  const fixText = fixBlock(actionableFixes(fixRows))
   // An advisory with an empty `fixed` list has no published fix yet, in any version. Saying that
   // separately is the difference between "you are behind" and "nobody has shipped a fix" — the operator
   // ran `hermes update` and saw 40 advisories either way, which reads as if the update did nothing.
@@ -910,7 +966,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
           color: busy ? C.faint : C.accent, background: 'transparent',
           border: '1px solid ' + C.border, borderRadius: '3px'
         }
-      }, busy ? 'checking…' : libraries ? 're-check' : 'check')
+      }, busy ? [jsx('span', { key: 'dot', className: 'ps-dot' }), 'checking'] : libraries ? 're-check' : 'check')
     ]),
     libraries
       ? jsxs('div', {}, [
@@ -1033,7 +1089,9 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                   found
                     ? found.count + ' advisor' + (found.count === 1 ? 'y' : 'ies')
                       + (found.severity ? ' · ' + found.severity : '')
-                      + (fix ? ' · fix ' + fix
+                      + (fix && compareVersions(fix, row.version) <= 0
+                            ? ' · installed is past the named fix — the advisory disagrees with itself'
+                         : fix ? ' · fix ' + fix
                              : found.fixState === "won't-fix" ? ' · vendor declined to fix'
                              : found.fixState === 'unknown' ? ' · fix state unknown'
                              : ' · no fix published')
@@ -1556,7 +1614,7 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
 // --------------------------------------------------------------------------- root
 
 export { VerdictBar, HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate,
-         buildFixCommand, fixBlock, SECTIONS }
+         buildFixCommand, fixBlock, actionableFixes, SECTIONS }
 
 export function PatchSentinel({ compact }) {
   const [status, setStatus] = useState(null)
@@ -1747,8 +1805,21 @@ export function PatchSentinel({ compact }) {
           color: busy ? C.faint : '#06090c', background: busy ? 'transparent' : C.accent,
           border: '1px solid ' + (busy ? C.border : C.accent), borderRadius: '4px'
         }
-      }, busy ? 'scanning…' + (scanSeconds ? ' ' + Math.round(scanSeconds) + ' s' : '') : 'rescan all')
+      }, busy
+        ? [jsx('span', { key: 'ring', className: 'ps-ring' }),
+           'scanning ' + (scanSeconds ? Math.round(scanSeconds) + ' s' : '…')]
+        : 'rescan all')
     ]),
+    // the stylesheet is always mounted; the line appears only while something is being measured
+    jsx('style', {}, SCAN_CSS),
+    busy || libBusy
+      ? jsx(ScanLine, {
+          label: busy
+            ? 'measuring every server — packages, kernel, images, advisories, and whether each patch '
+              + 'is in effect'
+            : 'reading the language stores, every virtualenv and the jars on disk'
+        })
+      : null,
     scanError
       ? jsx('div', { style: { fontSize: '0.6875rem', color: C.danger, marginBottom: '8px' } }, scanError)
       : null,

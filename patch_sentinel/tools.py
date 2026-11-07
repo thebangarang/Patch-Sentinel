@@ -1030,8 +1030,10 @@ def cve_libraries(args: dict, **kwargs) -> str:
             "packages": [{"ecosystem": c.get("ecosystem"), "package": c.get("package"),
                           "version": c.get("version"), "source": c.get("source"),
                           "owner": c.get("owner") or "machine",
-                          "manager": collected.get("installers", {}).get(c.get("ecosystem"), {})
-                          .get(c.get("source"))}
+                          # the component's own manager first: a package read out of a project
+                          # virtualenv knows its venv's pip, which no ecosystem-level table can name
+                          "manager": c.get("manager") or collected.get("installers", {})
+                          .get(c.get("ecosystem"), {}).get(c.get("source"))}
                          for c in components[:MAX_PENDING]],
             # How many of those packages belong to the agent's own environment. They are real
             # advisories, but they are not the user's to upgrade one by one: the agent ships them.

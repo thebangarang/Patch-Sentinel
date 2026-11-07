@@ -26,6 +26,12 @@ const gapsAt = html.lastIndexOf('gaps')
 if (!(planAt < shortcutAt)) throw new Error('the apply shortcut is rendered before the plan')
 if (!(shortcutAt < gapsAt)) throw new Error('the apply shortcut is rendered after the gaps')
 
+// the animations are shipped with the page, and they respect a reduced-motion preference
+if (!html.includes('ps-sweep')) throw new Error('the scanning keyframes are missing from the page')
+if (!html.includes('prefers-reduced-motion')) throw new Error(
+  'the scanning animation ignores a reduced-motion preference')
+if (!html.includes('ps-scan-track')) throw new Error('the scanning line styles are missing')
+
 // no second copy of the upgrade commands on a page whose plan is not open
 if (html.split('sudo apt-get -y full-upgrade').length > 2) throw new Error(
   'the apply commands are duplicated on the page')

@@ -1,7 +1,7 @@
 // The string a user pastes into a shell. Its failure mode is silent: a wrong path installs into the
 // wrong environment, or fails with "No module named pip" and no clue why.
 import assert from 'node:assert'
-import { buildFixCommand, fixBlock } from './pane.mjs' 
+import { buildFixCommand, fixBlock, actionableFixes } from './pane.mjs' 
 
 const pip = { tool: 'pip3', path: '/home/u/.hermes/tools/python/bin/pip3',
               upgrade: '{tool} install -U {spec}' }
@@ -62,6 +62,15 @@ assert.equal(headers.length, 2, 'one header per package\n' + block)
 assert.ok(block.includes("# pillow 12.3.0 → 13.0.0 — 2 places carry it"), block)
 assert.ok(block.includes('/home/u/projects/a/.venv/bin/pip install -U \'pillow>=13.0.0\''), block)
 assert.ok(block.includes('uv pip install --python /home/u/projects/b/.venv/bin/python \'pillow>=13.0.0\''), block)
+
+// 10. an advisory whose named fix is *behind* the installed version is not an upgrade. The pane read
+// "pytest 9.1.1 → 9.0.3" and a paste of that would have been a downgrade.
+const downgrades = actionableFixes([
+  { package: 'pytest', version: '9.1.1', fix: '9.0.3' },
+  { package: 'pillow', version: '12.3.0', fix: '13.0.0' },
+  { package: 'msgpack', version: '1.2.2', fix: null }
+])
+assert.deepEqual(downgrades.map((row) => row.package), ['pillow'], JSON.stringify(downgrades))
 
 // 8. no placeholder survives into the output, ever
 const out = buildFixCommand({ ecosystem: 'PyPI', package: 'urllib3', manager: pip }, { fixes: ['1.26.5'] })
