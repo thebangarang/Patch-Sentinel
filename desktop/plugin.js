@@ -1337,20 +1337,40 @@ function ApplyGate({ hostLabel, entry, initialResult }) {
               }, [
                 jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } }, [
                   jsx('span', { style: { fontSize: '0.625rem', color: C.dim } },
-                    'run it yourself — these, in this order:'),
+                    'run it yourself — ' + ((result.handoff.where && result.handoff.where.how) || 'by hand')),
                   jsx('span', { style: { flex: 1 } }),
                   jsx(Copy, { text: result.handoff.commands.join('\n'), label: 'copy both' })
                 ]),
-                result.handoff.commands.map((command, index) => jsx('div', {
+                result.handoff.where && result.handoff.where.ssh
+                  ? jsx('div', {
+                      style: {
+                        fontFamily: MONO, fontSize: '0.5625rem', color: C.text, marginTop: '3px',
+                        wordBreak: 'break-all'
+                      }
+                    }, 'connect: ' + result.handoff.where.ssh)
+                  : null,
+                result.handoff.commands.map((command, index) => jsxs('div', {
                   key: index,
                   style: {
                     fontFamily: MONO, fontSize: '0.5625rem', color: C.accent, marginTop: '3px',
                     wordBreak: 'break-all'
                   }
-                }, command)),
+                }, [String(index + 1) + '. ', command])),
+                result.handoff.verify
+                  ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.dim, marginTop: '3px', wordBreak: 'break-all' } },
+                      'then check: ' + result.handoff.verify)
+                  : null,
+                result.handoff.reversal
+                  ? jsx('div', { style: { fontSize: '0.5625rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
+                      'to undo: ' + result.handoff.reversal)
+                  : null,
                 result.handoff.note
                   ? jsx('div', { style: { fontSize: '0.5625rem', color: C.faint, marginTop: '3px', lineHeight: 1.45 } },
                       result.handoff.note)
+                  : null,
+                result.handoff.where && result.handoff.where.note
+                  ? jsx('div', { style: { fontSize: '0.5625rem', color: C.warn, marginTop: '2px', lineHeight: 1.45 } },
+                      result.handoff.where.note)
                   : null
               ])
             : null

@@ -148,6 +148,14 @@ feed that cannot be read is reported as **unmeasured**, never as clean.
 Not wired, and named as gaps in the pane: Fedora's Bodhi updates, SUSE's CSAF/VEX documents, and any
 form of image scanning (Trivy-class) — the plugin does not pretend to see inside a container.
 
+## When APPLY refuses
+
+APPLY runs as the account Hermes runs as, with `sudo -n` — an agent tool call cannot answer a password
+prompt. When that account cannot patch unattended the gate refuses and hands you the commands, with
+the ssh line and the check to run afterwards. The full walkthrough, local and remote, is in
+**[docs/apply-by-hand.md](docs/apply-by-hand.md)** — including the one rule the plugin will not break:
+it never asks for, holds or forwards a password.
+
 ## Why a scan does not answer instantly
 
 A scan of two servers takes 40-60 seconds: an ssh round trip, `dpkg` for every package an advisory

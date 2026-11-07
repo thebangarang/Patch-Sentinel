@@ -50,7 +50,8 @@ class SudoRefusal(unittest.TestCase):
             return 0, ""
 
         with mock.patch.object(apply_mod.shell, "run", side_effect=fake_run):
-            result = apply_mod.apply(host_entry(adapter="apt"), None, "fedora-lab", dry_run=True)
+            result = apply_mod.apply(host_entry(adapter="apt"), "debian@10.0.0.9:2223",
+                                    "fedora-lab", dry_run=True)
 
         self.assertFalse(result["applied"])
         self.assertIn("cannot run sudo without a password", result["reason"])
@@ -58,6 +59,25 @@ class SudoRefusal(unittest.TestCase):
         self.assertIn("apt-get update", result["handoff"]["commands"][0])
         self.assertIn("full-upgrade", result["handoff"]["commands"][1])
         self.assertIn("never sees it", result["handoff"]["note"])
+        # where to type them: a remote handoff carries the ssh line, a local one names the account
+        self.assertEqual(result["handoff"]["where"]["kind"], "remote")
+        self.assertIn("ssh", result["handoff"]["where"]["ssh"])
+        self.assertIn("apt-get -s dist-upgrade", result["handoff"]["verify"])
+        self.assertIn("apt-get install", result["handoff"]["reversal"])
+
+    def test_a_local_handoff_names_the_account_the_plugin_runs_as(self):
+        def fake_run(command, target=None, timeout=0, path_prefix=None):
+            if command.startswith("sudo -n true"):
+                return 1, "sudo: a password is required"
+            return 0, ""
+
+        with mock.patch.object(apply_mod.shell, "run", side_effect=fake_run):
+            result = apply_mod.apply(host_entry(adapter="apt"), None, "fedora-lab", dry_run=True)
+
+        where = result["handoff"]["where"]
+        self.assertEqual(where["kind"], "local")
+        self.assertTrue(where["runs_as"])
+        self.assertIn("not yours", where["note"])
 
 
 class Gate(unittest.TestCase):

@@ -90,11 +90,18 @@ const refused = renderToStaticMarkup(createElement(ApplyGate, {
                    reason: 'this user cannot run sudo without a password on that host',
                    handoff: { commands: ['sudo apt-get update && sudo apt-get -y --download-only full-upgrade',
                                          'sudo apt-get -y full-upgrade'],
-                              note: 'run these in this order' } }
+                              note: 'run these in this order',
+                              verify: "apt-get -s dist-upgrade | grep '^Inst '",
+                              reversal: 're-install the recorded versions',
+                              where: { kind: 'remote',
+                                       how: 'on debian@10.0.0.9, in a terminal there',
+                                       ssh: 'ssh -p 2223 debian@10.0.0.9' } } }
 }))
 if (!refused.includes('run it yourself')) throw new Error('the handoff block is missing')
 if (!refused.includes('apt-get -y full-upgrade')) throw new Error('the handoff commands are missing')
 if (!refused.includes('copy both')) throw new Error('the handoff copy control is missing')
+if (!refused.includes('connect: ssh -p 2223 debian@10.0.0.9')) throw new Error('the handoff does not say where')
+if (!refused.includes('then check: apt-get -s dist-upgrade')) throw new Error('the verify command is missing')
 
 const gaps = renderToStaticMarkup(createElement(GapsPanel, {
   selected: 'beelink',

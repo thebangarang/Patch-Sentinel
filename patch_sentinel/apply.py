@@ -18,10 +18,14 @@ reachable, and stops. Applying for real needs ``dry_run=false`` *and* the typed 
 """
 from __future__ import annotations
 
+import getpass
+import socket
+
 import datetime as dt
 import time
 
 from . import store
+from .plan import COMMANDS as PLAN_COMMANDS
 from .sources import dispatch, shell
 
 STAGE_TIMEOUT = 300
@@ -45,6 +49,22 @@ def _step(action: str, command: str, target: str | None, timeout: int,
     return {"action": action, "command": command, "rc": code,
             "duration_s": round(time.monotonic() - started, 1),
             "output": _tail(out), "ok": code in ok_codes}
+
+
+def _where(target: str | None, label: str) -> dict:
+    """Where the handoff commands belong — the one thing a refusal must never leave as a riddle."""
+    if not target:
+        return {"kind": "local", "machine": socket.gethostname(),
+                "runs_as": getpass.getuser(),
+                "how": "a terminal on this machine",
+                "note": (f"this plugin runs as {getpass.getuser()!r} on this machine, so its sudo is "
+                         f"not yours: run these as yourself in your own terminal")}
+    host, port = shell.split_target(target)
+    ssh = "ssh" + (f" -p {port}" if port else "") + f" {host}"
+    return {"kind": "remote", "machine": host, "runs_as": host.split("@")[0] if "@" in host else "",
+            "how": f"on {host}, in a terminal there",
+            "ssh": ssh,
+            "note": f"either open a session here — `{ssh}` — or prefix each command with `{ssh} `"}
 
 
 def preflight(target: str | None) -> dict:
@@ -131,14 +151,19 @@ def apply(host_entry: dict, target: str | None, confirm: str, dry_run: bool = Tr
     check = preflight(target)
     steps = []
     if not check["ok"]:
-        # The refusal is the honest answer, but not the end of the job: hand over the exact commands
-        # so the operator can run them in their own terminal, where sudo is allowed to ask them.
+        # The refusal is the honest answer, but not the end of the job: hand over the exact commands,
+        # and say *where* they belong. "Run the plan by hand" without that is a riddle.
         wanted = COMMANDS.get(family) or {}
+        # the human-facing verify/undo text lives in plan.py — one source of truth for what to type
+        text = PLAN_COMMANDS.get(family) or {}
         handoff = [cmd for cmd in (wanted.get("stage"), wanted.get("apply")) if cmd]
         receipt = _receipt(base, steps, check["why"], dry_run)
         return {**base, "reason": check["why"], "preflight": check, "receipt": receipt,
                 "handoff": {"commands": handoff,
-                            "note": "run these in this order on that machine (or over ssh): sudo will "
+                            "verify": text.get("verify") or "",
+                            "reversal": text.get("reversal") or "",
+                            "where": _where(target, label),
+                            "note": "run these in this order, as a user allowed to patch; sudo will "
                                     "ask you for your password there, and this plugin never sees it"}}
 
     # 2. the stage, always
