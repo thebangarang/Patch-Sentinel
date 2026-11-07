@@ -935,10 +935,54 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   // a list of 130 rows where 127 say "clean" buries the three that matter: findings first, the rest
   // behind an explicit "show all" — the count of what was checked is still on screen either way
   const [showAll, setShowAll] = useState(false)
+  // findings nobody has fixed are collapsed: they are facts, not tasks. An acknowledgement needs a
+  // reason, so it is a two-step control (click, type, confirm) rather than a mute button.
+  const [showNoFix, setShowNoFix] = useState(false)
+  const [ackFor, setAckFor] = useState(null)
+  const [ackReason, setAckReason] = useState('')
+  const [ackBusy, setAckBusy] = useState(false)
+  const [showAcked, setShowAcked] = useState(false)
   // the agent's own dependencies are packages, but they are not the user's to upgrade one by one:
   // they are separated out and collapsed instead of counting as findings against this machine
   const [showHermes, setShowHermes] = useState(false)
   const answered = (libraries && libraries.packages) || []
+  const acknowledged = (libraries && libraries.acknowledged) || []
+  const hostLabel = (libraries && libraries.host && libraries.host.label) || ''
+
+  // recording an acknowledgement: it needs a reason, it expires, and it names one advisory
+  const recordAck = async (row) => {
+    setAckBusy(true)
+    try {
+      await call('/ack', {
+        method: 'POST',
+        body: { host: hostLabel, ecosystem: row.ecosystem, package: row.package,
+                version: row.version, advisory: row.id, reason: ackReason.trim() }
+      })
+      setAckFor(null)
+      setAckReason('')
+      await onCheck()
+    } catch (err) {
+      setAckFor(null)
+    } finally {
+      setAckBusy(false)
+    }
+  }
+
+  const reopenAck = async (row) => {
+    setAckBusy(true)
+    try {
+      await call('/ack', {
+        method: 'POST',
+        body: { host: hostLabel, ecosystem: row.ecosystem, package: row.package,
+                version: row.version, advisory: row.id, reason: 'released', action: 'release' }
+      })
+      await onCheck()
+    } catch (err) {
+      // a failed release leaves the row acknowledged, which is the safe direction
+    } finally {
+      setAckBusy(false)
+    }
+  }
   const vulnerable = (libraries && libraries.vulnerable) || []
   // One key for everything below: ecosystem + package + *version*. Two environments carrying 8.4.2
   // and 9.1.1 are two rows; merging them is how "2 packages" was reported as "12 findings".
@@ -995,8 +1039,16 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   const findingsAgent = findingsOn(agentOwned)
   const matching = mine
   const flagged = mine.filter((p) => hit.has(keyOf(p)))
+  // Which findings nobody has published a fix for? Those are facts, not tasks: they leave the
+  // default list and sit under one line that says so, so the screen shows what can be done.
+  const noFixRows = flagged.filter((row) => {
+    const found = foundByPackage[keyOf(row)]
+    return !(found && Array.isArray(found.fixes) && found.fixes.length)
+  })
+  const noFixKeys = new Set(noFixRows.map(keyOf))
   // nothing flagged? then the clean list IS the answer, so show it rather than an empty box
   const rows = (showAll || !flagged.length ? matching : flagged)
+    .filter((row) => showAll || showNoFix || !noFixKeys.has(keyOf(row)))
     .slice()
     .sort((a, b) => (hit.has(keyOf(b)) ? 1 : 0) - (hit.has(keyOf(a)) ? 1 : 0)
                     || String(a.package).localeCompare(String(b.package)))
@@ -1238,12 +1290,131 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                     style: { fontSize: '0.5625rem', color: C.warn, marginTop: '2px', lineHeight: 1.4 }
                   }, 'workaround, from the advisory: ' + found.workaround.slice(0, 260)
                      + (found.workaround.length > 260 ? '…' : ''))
+                : null,
+              noFixKeys.has(keyOf(row))
+                ? (ackFor === keyOf(row)
+                    ? jsxs('div', {
+                        style: { display: 'flex', gap: '4px', marginTop: '3px', alignItems: 'center' }
+                      }, [
+                        jsx('input', {
+                          key: 'reason',
+                          value: ackReason,
+                          onChange: (event) => setAckReason(event.target.value),
+                          placeholder: 'why is this accepted? (required, kept with the record)',
+                          style: {
+                            flex: 1, fontFamily: MONO, fontSize: '0.5625rem', padding: '2px 6px',
+                            background: 'transparent', color: C.text,
+                            border: '1px solid ' + C.border, borderRadius: '3px'
+                          }
+                        }),
+                        jsx('button', {
+                          key: 'ok', type: 'button', disabled: ackBusy || !ackReason.trim(),
+                          onClick: () => recordAck(row),
+                          style: {
+                            fontFamily: MONO, fontSize: '0.5625rem', padding: '2px 7px',
+                            cursor: ackReason.trim() ? 'pointer' : 'default',
+                            color: ackReason.trim() ? C.accent : C.faint,
+                            background: 'transparent', border: '1px solid ' + C.border,
+                            borderRadius: '3px'
+                          }
+                        }, 'record'),
+                        jsx('button', {
+                          key: 'no', type: 'button',
+                          onClick: () => { setAckFor(null); setAckReason('') },
+                          style: {
+                            fontFamily: MONO, fontSize: '0.5625rem', padding: '2px 7px',
+                            cursor: 'pointer', color: C.dim, background: 'transparent',
+                            border: '1px solid ' + C.border, borderRadius: '3px'
+                          }
+                        }, 'cancel')
+                      ])
+                    : jsx('button', {
+                        type: 'button',
+                        onClick: () => { setAckFor(keyOf(row)); setAckReason('') },
+                        title: 'records this advisory as accepted, with your reason, for 90 days',
+                        style: {
+                          marginTop: '3px', fontFamily: MONO, fontSize: '0.5625rem',
+                          padding: '1px 7px', cursor: 'pointer', color: C.dim,
+                          background: 'transparent', border: '1px solid ' + C.border,
+                          borderRadius: '3px'
+                        }
+                      }, 'acknowledge'))
                 : null
             ])
           })),
+          // an acknowledgement is a record, not a filter: it stays on screen with its reason and its
+          // end date, and it can be reopened. Nothing is ever deleted by it.
+          acknowledged.length
+            ? jsxs('div', { style: { marginTop: '4px' } }, [
+                jsx('button', {
+                  key: 'toggle',
+                  type: 'button',
+                  onClick: () => setShowAcked((current) => !current),
+                  style: {
+                    fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 7px', cursor: 'pointer',
+                    color: showAcked ? C.accent : C.faint, background: 'transparent',
+                    border: '1px solid ' + C.border, borderRadius: '3px'
+                  }
+                }, (showAcked ? 'hide ' : 'show ') + acknowledged.length + ' acknowledged'),
+                showAcked
+                  ? jsx('div', { style: { marginTop: '3px' } }, acknowledged.map((row, index) => {
+                      const ack = row.ack || {}
+                      const until = ack.until
+                        ? new Date(ack.until * 1000).toISOString().slice(0, 10) : 'no end date'
+                      return jsxs('div', {
+                        key: index,
+                        style: {
+                          display: 'flex', gap: '6px', alignItems: 'baseline',
+                          fontSize: '0.5625rem', color: C.faint, marginBottom: '2px'
+                        }
+                      }, [
+                        jsx('span', { key: 'id', style: { fontFamily: MONO, color: C.dim } },
+                          row.package + '@' + row.version + ' · ' + row.id),
+                        jsx('span', { key: 'why', style: { flex: 1 } },
+                          '“' + (ack.reason || 'no reason recorded') + '” · until ' + until),
+                        jsx('button', {
+                          key: 'reopen',
+                          type: 'button',
+                          onClick: () => reopenAck(row),
+                          title: 'puts the finding back into the count',
+                          style: {
+                            fontFamily: MONO, fontSize: '0.5625rem', padding: '0 6px',
+                            cursor: 'pointer', color: C.dim, background: 'transparent',
+                            border: '1px solid ' + C.border, borderRadius: '3px'
+                          }
+                        }, 'reopen')
+                      ])
+                    }))
+                  : null
+              ])
+            : null,
+          noFixKeys.size && !showAll
+            ? jsxs('div', {
+                style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }
+              }, [
+                jsx('button', {
+                  key: 'toggle',
+                  type: 'button',
+                  onClick: () => setShowNoFix((current) => !current),
+                  title: 'an advisory with no fixed version cannot be installed — the operator can '
+                         + 'record it as accepted, with a reason and an end date',
+                  style: {
+                    fontFamily: MONO, fontSize: '0.625rem', padding: '2px 8px', cursor: 'pointer',
+                    color: showNoFix ? C.accent : C.dim, background: 'transparent',
+                    border: '1px solid ' + (showNoFix ? C.accent : C.border), borderRadius: '3px'
+                  }
+                }, (showNoFix ? 'hide ' : 'show ') + noFixKeys.size + ' package(s) / '
+                   + noFixRows.length + ' advisory(ies) with no published fix'),
+                jsx('span', { key: 'why', style: { fontSize: '0.5625rem', color: C.faint } },
+                  'nothing to run — the advisory names no fixed version')
+              ])
+            : null,
           !rows.length
             ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint } },
-                needle ? 'nothing matches the filter' : 'nothing was read')
+                needle ? 'nothing matches the filter'
+                  : noFixKeys.size ? 'no finding here has a fix to install — the line above lists the '
+                                     + 'ones that do not'
+                  : 'nothing was read')
             : null,
           // "3 packages, 0 findings" with no explanation is the empty state that reads as broken
           libraries && mine.length && !flagged.length

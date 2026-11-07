@@ -21,8 +21,8 @@ from pathlib import Path
 
 from . import apply as apply_mod
 from . import plan, schemas, store, verdict
-from .sources import (cve_tracker, dispatch, distro_lag, environments, image_db, jars, languages,
-                      osv, projects, repos, sbom, services, shell, support, threat, usn)
+from .sources import (acks, cve_tracker, dispatch, distro_lag, environments, image_db, jars,
+                      languages, osv, projects, repos, sbom, services, shell, support, threat, usn)
 from .sources import vendor as vendor_lag
 from .sources import hosts as inventory_module
 
@@ -1102,6 +1102,11 @@ def cve_libraries(args: dict, **kwargs) -> str:
             seen_findings[key] = row
             vulnerable.append(row)
 
+    # An acknowledgement is a record, not a filter: the row leaves the count, keeps its reason and its
+    # end date, and comes back by itself. A new advisory against the same version is never covered.
+    state_dir = str(_settings.get("data_dir") or store.data_dir())
+    vulnerable, acked = acks.split(state_dir, host["label"], vulnerable)
+
     # Is any of this being exploited right now? KEV and EPSS are the two public feeds that answer it,
     # and they are what turns a list of CVEs into a decision.
     threat_summary = threat.annotate(vulnerable)
@@ -1125,6 +1130,9 @@ def cve_libraries(args: dict, **kwargs) -> str:
     if agent:
         answer_line += (f" · {len(agent)} more on {len({v['package'] for v in agent})} package(s) "
                         f"that ship with Hermes itself (lever: `hermes update`)")
+    if acked:
+        answer_line += (f" · {len(acked)} acknowledged with a reason "
+                        f"({', '.join(sorted({a['package'] for a in acked})[:3])})")
     if unversioned:
         answer_line += (f" · {len(unversioned)} package(s) at version 0.0.0 were not compared "
                         f"(an in-tree install has no published version to match): "
@@ -1137,10 +1145,33 @@ def cve_libraries(args: dict, **kwargs) -> str:
     return _json({**base, "answer": answer_line, "vulnerable": vulnerable[:MAX_PENDING],
                   "vulnerable_count": len(vulnerable),
                   "threat": threat_summary,
+                  "acknowledged": acked[:MAX_PENDING],
+                  "acknowledged_count": len(acked),
                   "advisories_examined": len(records),
                   "advisories_truncated": len(wanted) > MAX_ADVISORY_RECORDS,
                   "exit_code": exit_code,
                   "limits": LIBRARY_LIMITS})
+
+
+def cve_ack(args: dict, **kwargs) -> str:
+    """Record "I know, and I accept it" against one advisory, with a reason and an end date."""
+    action = str(args.get("action") or "ack").strip().lower()
+    host = str(args.get("host") or _local_label()).strip()
+    package = str(args.get("package") or "").strip()
+    advisory = str(args.get("advisory") or args.get("id") or "").strip()
+    if not package or not advisory:
+        return _json({"tool": "cve_ack", "exit_code": 2,
+                      "reason": "an acknowledgement needs `package` and `advisory` — it names one "
+                                "advisory, never a whole package"})
+    state_dir = str(_settings.get("data_dir") or store.data_dir())
+    common = dict(host=host, ecosystem=str(args.get("ecosystem") or ""), package=package,
+                  version=str(args.get("version") or ""), advisory=advisory)
+    if action in ("release", "reopen", "undo"):
+        result = acks.release(state_dir, **common)
+    else:
+        result = acks.acknowledge(state_dir, reason=str(args.get("reason") or ""),
+                                  days=int(args.get("days") or acks.DEFAULT_DAYS), **common)
+    return _json({"tool": "cve_ack", **result, "exit_code": 0 if result.get("ok") else 2})
 
 
 HANDLERS = {
@@ -1152,6 +1183,7 @@ HANDLERS = {
     "cve_apply": cve_apply,
     "cve_image": cve_image,
     "cve_sbom": cve_sbom,
+    "cve_ack": cve_ack,
 }
 
 __all__ = ["HANDLERS", "SCHEMAS", "configure", "cve_scan", "cve_plan", "cve_explain",

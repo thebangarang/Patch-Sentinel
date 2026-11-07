@@ -25,7 +25,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 _ROOT = Path(__file__).resolve().parent.parent
 _PKG = _ROOT / "patch_sentinel"
@@ -253,6 +253,13 @@ def libraries(project: str | None = None, host: str | None = None) -> dict:
     if host:
         args["host"] = host
     return _payload(tools.cve_libraries, args)
+
+
+@router.post("/ack")
+async def ack_route(request: Request) -> dict:
+    """Record or release one acknowledgement. The reason is required; nothing is ever deleted."""
+    body = await request.json()
+    return _payload(tools.cve_ack, body if isinstance(body, dict) else {})
 
 
 @router.get("/coverage")

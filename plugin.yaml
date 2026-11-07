@@ -34,6 +34,7 @@ provides_tools:
   - cve_image
   - cve_sbom
   - cve_apply
+  - cve_ack
 provides_hooks: []
 config_schema:
   hosts:

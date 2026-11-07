@@ -142,6 +142,24 @@ own staleness as a vendor delay.
 Where an advisory carries a Workarounds section, the finding also shows the vendor's own temporary
 mitigation — quoted, never invented.
 
+## "There is a fix for nobody" — and how to live with it
+
+Some advisories have no fixed version at all. `diskcache 5.6.3` carries two, and no release closes
+them. A list that keeps reprinting that is a list people stop reading, so the pane does two things:
+
+* **collapses them**: the default view is what can be done. Findings with no published fix sit behind
+  one line — `show 1 package(s) / 2 advisory(ies) with no published fix` — and the header still counts
+  them, so nothing is hidden from the count.
+* **lets you record a decision**: `acknowledge` asks for a reason, then stores `{host, package,
+  version, advisory, reason, until}` in `~/.hermes/patch-sentinel/acks.json` (mode 0600). The record
+  names **one advisory id**, not a package — a new advisory against the same version reappears at once
+  — and it **expires** (90 days by default, 365 at most). Acknowledged rows stay in the payload with
+  their reason and their end date, they are listed under `show N acknowledged`, and `reopen` puts one
+  back. Nothing is ever deleted, and no acknowledgement can cover something that has a fix.
+
+The same record is a tool, so the agent can write one: `cve_ack` with `package`, `advisory`, `reason`,
+optional `days`, and `action: release` to reopen.
+
 ## Where the answers come from
 
 Every claim the plugin makes is traceable to one of these feeds. Nothing is inferred from memory, and a

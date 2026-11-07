@@ -218,6 +218,36 @@ CVE_SBOM = {
     },
 }
 
+CVE_ACK = {
+    "name": "cve_ack",
+    "description": (
+        "Record an operator's decision about one advisory: 'I know, and I accept it'. It names a "
+        "single advisory id, not a package, carries a reason, and expires (90 days by default, 365 "
+        "at most) — the finding then comes back by itself, and a new advisory against the same "
+        "version is never covered by the record. Use it when a finding has no published fix and the "
+        "operator has decided to live with it; never use it to silence something that has a fix. "
+        "`action: release` reopens the row. Nothing is deleted: the row travels in the payload with "
+        "its reason so the next reader can see the decision."),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "package": {"type": "string", "description": "Package name, exactly as the finding shows it."},
+            "advisory": {"type": "string",
+                         "description": "Advisory id (e.g. GHSA-w8v5-vhqr-4h9v or CVE-2026-1234)."},
+            "ecosystem": {"type": "string", "description": "Ecosystem of the finding, e.g. PyPI."},
+            "version": {"type": "string", "description": "Installed version the advisory names."},
+            "host": {"type": "string", "description": "Host label. Omit for this machine."},
+            "reason": {"type": "string",
+                       "description": "Why it is accepted. Required — an acknowledgement with no "
+                                      "reason is just a hidden finding."},
+            "days": {"type": "integer", "description": "Days before it comes back (default 90, max 365)."},
+            "action": {"type": "string", "enum": ["ack", "release"],
+                       "description": "'ack' (default) records it; 'release' reopens it."},
+        },
+        "required": ["package", "advisory", "reason"],
+    },
+}
+
 SCHEMAS = {schema["name"]: schema
            for schema in (CVE_SCAN, CVE_PLAN, CVE_EXPLAIN, CVE_COVERAGE, CVE_LIBRARIES,
-                          CVE_IMAGE, CVE_SBOM, CVE_APPLY)}
+                          CVE_IMAGE, CVE_SBOM, CVE_APPLY, CVE_ACK)}
