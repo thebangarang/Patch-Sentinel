@@ -55,6 +55,32 @@ its own verdict, not "patched". A registry that answered `429` is *unverified*, 
 The adapter is chosen from the host's own `/etc/os-release`; every claim below was read off a real
 machine, not written from documentation.
 
+### Every distro was tested the same way
+
+`scripts/portability_probe.py` is copied to a freshly booted machine, imports the plugin with that
+machine's own python, and runs every user-facing tool: scan, machine-wide libraries, a project with
+eight kinds of lockfile, a virtualenv, two integrity readings, plan, coverage, SBOM, image and a
+dry-run apply. No venv, no Hermes, no configuration beyond one host line.
+
+| machine | how it was run | what came back |
+|---|---|---|
+| **Ubuntu 26.04** (this one) | the plugin as shipped, inside Hermes | the whole pane; scan, libraries, integrity, plan, apply handover — the reference build |
+| **Debian 12 bookworm** (fresh VM, python 3.11) | clone + `python3`, nothing installed | `apt`: 0 pending, 3 vendor-lag rows, release supported · libraries: 40 distro packages (118 advisories, counted apart) + a 2-package venv (38 findings, all real) · 8/8 lockfile kinds read · integrity **ok** (4 unreadable, 1 volatile path excluded) · SBOM 42 components · image: "no container runtime", exit 2 · apply: "nothing to apply" |
+| **Fedora 45** (fresh VM, python 3.15) | same | `dnf`: **109 pending**, `kernel-update-available`, Bodhi measured, 0 lag · libraries: 30 packages · integrity **ok** (24 conffiles, 370 files it could not verify) · plan: 3 steps · apply dry run: nothing executed · image: no container runtime |
+| **Arch** (fresh VM, python 3.14) | same | `pacman`: 0 pending, kernel current · integrity **ok** via `pacman -Qkk` (0 changed, 13 conffiles, 12 unreadable) · libraries: distro packages tagged, venv found · apply: refused, Arch has no apply plan |
+| **openSUSE Leap 15.6** | command-level only | the `zypper`/`rpm` probe and parsers run against the real host; **the plugin itself cannot run on Leap's system python 3.6** (it needs the interpreter Hermes ships, 3.10+), so this family is not verified end to end |
+
+### What is *not* verified, and says so in the pane
+
+| surface | state |
+|---|---|
+| **Alpine** | the `apk` adapter is written and unregistered: Alpine's cloud image never created an account, so no live host has been read. An Alpine host answers `unsupported`, not "patched" |
+| **RHEL / Rocky / Alma** | `dnf` is proven on Fedora; the RHEL family shares it, but no RHEL host exists in this lab |
+| **macOS / Windows** | not measured. The probe is a POSIX shell block; Windows needs a PowerShell transport before it is a claim |
+| **rpm-based container images** | `cve_image` reads dpkg and apk images; an rpm image says `unmeasured` rather than clean |
+| **APPLY without passwordless sudo** | refused, with the commands handed over — by design, never a password |
+| **Kubernetes / Helm** | not read at all; no manifest parser |
+
 ### Language runtimes
 
 `cve_libraries` lists what each toolchain reports as installed **machine-wide**, then asks OSV (the
@@ -72,9 +98,12 @@ same database osv.dev serves) for advisories naming those exact versions:
 | Maven | every `*.pom` under `~/.m2/repository` | proven (container capture, 227 artifacts) |
 | Go | `go version -m` on each binary in `GOPATH/bin` | proven (container capture, golang:alpine) |
 
-A toolchain that is not installed reports **`missing`**, never "zero findings". Project-local
-dependency files (`package-lock.json`, `composer.json`, `Cargo.toml`, `go.mod`, `*.csproj`) are
-**not** read, and that is stated in `cve_coverage` on every run.
+A toolchain that is not installed reports **`missing`**, never "zero findings".
+
+Project lockfiles *are* read (local only — a project path is a path on this machine): `package-lock.json`
+(v1/v2/v3), `yarn.lock`, `pnpm-lock.yaml`, `requirements.txt`, `constraints.txt`, `poetry.lock`,
+`Pipfile.lock`, `go.sum`, `Cargo.lock`, `composer.lock`, `Gemfile.lock`, `pubspec.lock`. Exact
+versions only: a `>=` range is counted as unverifiable, never turned into a finding.
 
 Where an advisory carries one, the finding also shows the **vendor's own workaround** — the temporary
 mitigation (disable a feature, validate input, set a flag) you can apply while the patched version is
@@ -292,6 +321,14 @@ pending → three ordered steps with their reversals), and the refusal (an unrea
 
 The pane's palette is also a skin: `docs/theme/patch-sentinel.yaml` → copy it to
 `~/.hermes/skins/`, then pick **patch-sentinel** in Settings → Appearance.
+
+## Requirements
+
+* the Python interpreter Hermes runs on (3.10+) — the plugin itself is **stdlib only**, no
+  dependencies, no `pip install`;
+* a POSIX shell on every host it reads (macOS and Windows are not measured);
+* `sudo` without a password prompt only if you want APPLY; without it the plugin hands the commands
+  over instead of asking for a password.
 
 ## Install and try it
 

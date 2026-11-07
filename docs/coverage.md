@@ -25,12 +25,21 @@ Two rules decide inclusion:
 | apt | `apt-get -s dist-upgrade`, `dpkg-query` | this machine (Ubuntu 26.04) and a Debian 12 VM |
 | dnf | `dnf -q check-update`, `rpm -qa` | a Fedora 45 VM |
 | pacman | `pacman -Q`, `pacman -Qu` | an Arch VM |
-| zypper | `zypper -q lu`, `rpm -qf` | an openSUSE Leap 15.6 VM |
+| zypper | `zypper -q lu`, `rpm -qf` | an openSUSE Leap 15.6 VM — **command-level only**: Leap ships python 3.6 and the plugin needs the interpreter Hermes runs on, so the family is not verified end to end. As a normal user `zypper -q lu` exits 0 having built nothing; that is now reported as `unmeasured`, not "0 pending" |
 
-Alpine (`apk`) is registered; its cloud image needed the `nocloud_` variant before it would take a
-cloud-init seed (the plain one booted to a login prompt with no user), and once it did, `apk` answered.
-The VM was recreated later and its `authorized_keys` no longer holds this machine's lab key, so the
-*inventory* reading is proven and the *vendor-lag* reading is not.
+Alpine (`apk`) is **not registered**: the adapter is written and unit-tested against captured `apk`
+output, but every attempt to read a live Alpine host has failed at the account — the `nocloud_` image
+takes the seed, cloud-init finishes, and sshd still refuses the key (three seeds tried: bash, ash, and
+an explicit provisioning runcmd). An Alpine host therefore answers `unsupported`, which is the honest
+answer, and `dispatch.family_for("alpine")` returns nothing.
+
+### Integrity per family (fresh machines, 2026-11-07)
+
+| family | command | reading on a clean host |
+|---|---|---|
+| apt (Debian 12) | `dpkg -V` | 0 changed · 2 operator-edited conffiles · 4 files unreadable as the normal user · 1 volatile path (`/var/cache/apt`) not counted |
+| rpm (Fedora 45) | `rpm -Va` | 0 changed · 24 conffiles · 370 files it could not verify without root |
+| pacman (Arch) | `pacman -Qkk` | 0 changed · 13 `backup file:` conffiles · 12 files it could not read. Reading `backup file:` as tampering would have accused a clean machine of 22 modified files |
 
 ## Vendor lag: "fixed upstream, not in this archive yet"
 
