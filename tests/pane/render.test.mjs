@@ -86,6 +86,21 @@ if (!agentExploited.includes('sit in packages Hermes itself ships')) throw new E
   'an exploited advisory in the agent env is not named')
 if (!agentExploited.includes('hermes update')) throw new Error('the agent lever is not stated')
 
+// Every server row carries a device shape: the machine Hermes runs on, a LAN server, a remote host.
+const now = renderToStaticMarkup(createElement(NowPanel, {
+  status: { hosts: {
+    beelink: { label: 'beelink', target: 'local', adapter: 'apt', pending_count: 0,
+               os: { id: 'ubuntu', codename: 'resolute' }, status: { exit_code: 0 } },
+    nas: { label: 'nas', target: 'root@192.168.1.20:22', adapter: 'apt', pending_count: 2,
+           os: { id: 'debian', codename: 'bookworm' }, status: { exit_code: 1 } },
+    vps: { label: 'vps', target: 'root@203.0.113.9', adapter: 'apt', pending_count: 0,
+           os: { id: 'ubuntu', codename: 'noble' }, status: { exit_code: 0 } }
+  }, blind: [], note: '' }, onRefresh: noop, busy: false }))
+if ((now.match(/<svg/g) || []).length < 3) throw new Error('a server row has no device icon')
+if (!now.includes('the machine Hermes runs on')) throw new Error('the hermes machine icon is missing')
+if (!now.includes('a server on the local network')) throw new Error('the LAN server icon is missing')
+if (!now.includes('a remote server')) throw new Error('the remote server icon is missing')
+
 for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXTURE],
                                  ['libs (nothing read)', null]]) {
   const html = renderToStaticMarkup(createElement(LanguagesPanel, { libraries, onCheck: noop,

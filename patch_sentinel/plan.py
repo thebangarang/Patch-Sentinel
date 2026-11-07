@@ -33,6 +33,7 @@ def _kernel_facts(host: dict) -> dict:
 # `apt-get` on Fedora is worse than no plan: it is wrong *and* it looks authoritative.
 COMMANDS = {
     "apt": {
+        "refresh": "sudo apt-get update",
         "stage": "sudo apt-get update && sudo apt-get -y --download-only full-upgrade",
         "apply": "sudo apt-get -y full-upgrade",
         "verify": "apt-get -s dist-upgrade | grep '^Inst ' || echo 'nothing pending'",
@@ -41,6 +42,7 @@ COMMANDS = {
                     "recorded versions with apt-get install <pkg>=<version>",
     },
     "dnf": {
+        "refresh": "sudo dnf -q makecache",
         "stage": "sudo dnf -y check-upgrade --refresh",
         "apply": "sudo dnf -y upgrade --refresh",
         "verify": "dnf check-upgrade >/dev/null; echo rc=$?   # 100 = still updates, 0 = none",
@@ -48,6 +50,11 @@ COMMANDS = {
                      "mirror, and the list is re-read from the repo rather than from a cache.",
         "reversal": "dnf history undo last   (the transaction id is in dnf history)",
     },
+    # the other three families are scanned but have no plan yet; the refresh command is still what a
+    # stale-index warning needs to name, so it is here rather than invented in the pane
+    "zypper": {"refresh": "sudo zypper refresh"},
+    "pacman": {"refresh": "sudo pacman -Sy"},
+    "apk": {"refresh": "sudo apk update"},
 }
 
 

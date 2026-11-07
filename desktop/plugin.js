@@ -128,6 +128,78 @@ const SECTIONS = [
 ]
 const SECTION = SECTIONS.reduce((acc, section) => { acc[section.key] = section; return acc }, {})
 
+/** Every section gets the legend's slim bar, so the pane reads as blocks instead of a wall. */
+const SECTION_BAR = {
+  servers: '#7a8b99', overview: '#4de3d0', packages: '#e3b341', libs: '#8ab4f8',
+  plan: '#4de3d0', gaps: '#e06c75'
+}
+
+function sectionStyle(key) {
+  return {
+    marginBottom: '20px', paddingLeft: '11px',
+    borderLeft: '2px solid ' + (SECTION_BAR[key] || '#3a4550')
+  }
+}
+
+/**
+ * Four device shapes: the machine Hermes runs on, a server on the local network, a remote host, and
+ * anything whose address says neither. The shape is a hint; the label is still the truth.
+ */
+function deviceKind(entry) {
+  const target = String((entry && entry.target) || '')
+  if (!target || target === 'local') return 'hermes'
+  const host = target.split('@').pop().split(':')[0]
+  if (!host) return 'hermes'
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(host)
+      || host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local')
+      || host.endsWith('.lan') || host.endsWith('.internal')) return 'lan'
+  return 'remote'
+}
+
+const DEVICE_COLOUR = { hermes: '#4de3d0', lan: '#8ab4f8', remote: '#e3b341', other: '#7a8b99' }
+
+function deviceIcon(kind, size = 12) {
+  const colour = DEVICE_COLOUR[kind] || DEVICE_COLOUR.other
+  const common = { width: size, height: size, viewBox: '0 0 16 16', fill: 'none',
+                   stroke: colour, strokeWidth: 1.3, strokeLinecap: 'round',
+                   strokeLinejoin: 'round', 'aria-hidden': 'true',
+                   style: { flex: '0 0 auto', marginRight: '6px', verticalAlign: '-2px' } }
+  const title = { hermes: 'the machine Hermes runs on', lan: 'a server on the local network',
+                  remote: 'a remote server', other: 'another device' }[kind] || 'device'
+  if (kind === 'hermes') {
+    // a terminal window with a prompt: this is the box the agent lives in
+    return jsxs('svg', { ...common, role: 'img' }, [
+      jsx('title', { key: 't' }, title),
+      jsx('rect', { key: 'r', x: 1.5, y: 2.5, width: 13, height: 11, rx: 2 }),
+      jsx('path', { key: 'p1', d: 'M4.5 6.5l2 1.5-2 1.5' }),
+      jsx('path', { key: 'p2', d: 'M8.5 10h3' })
+    ])
+  }
+  if (kind === 'lan') {
+    // a rack unit: two shelves and a status dot
+    return jsxs('svg', { ...common, role: 'img' }, [
+      jsx('title', { key: 't' }, title),
+      jsx('rect', { key: 'a', x: 2, y: 3, width: 12, height: 4, rx: 1 }),
+      jsx('rect', { key: 'b', x: 2, y: 9, width: 12, height: 4, rx: 1 }),
+      jsx('circle', { key: 'c', cx: 12, cy: 5, r: 0.7, fill: colour, stroke: 'none' })
+    ])
+  }
+  if (kind === 'remote') {
+    // a globe: somewhere else, reached over the network
+    return jsxs('svg', { ...common, role: 'img' }, [
+      jsx('title', { key: 't' }, title),
+      jsx('circle', { key: 'a', cx: 8, cy: 8, r: 6 }),
+      jsx('path', { key: 'b', d: 'M2 8h12' }),
+      jsx('path', { key: 'c', d: 'M8 2c2.5 2.6 2.5 9.4 0 12M8 2c-2.5 2.6-2.5 9.4 0 12' })
+    ])
+  }
+  return jsxs('svg', { ...common, role: 'img' }, [
+    jsx('title', { key: 't' }, title),
+    jsx('rect', { key: 'a', x: 3, y: 3, width: 10, height: 10, rx: 2 }),
+    jsx('path', { key: 'b', d: 'M8 6.5v3M8 11.2v.1' })
+  ])
+}
+
 /** `env:/home/x/projects/api/.venv` → `projects/api/.venv` — enough to recognise the project. */
 function envName(source) {
   if (!source || source.indexOf('env:') !== 0) return ''
@@ -168,9 +240,18 @@ function fixCommandFor(row, fix) {
   const manager = row.manager || null
   // the exact first-fixed version, not ">= that": a `>=` spec let pip install 4.2.9 where 4.2.1 was
   // the fix, and a major jump inside a project is a breakage the operator did not ask for
+  // "no fix published" must never become a command that names a version: `pkg==latest` is not a
+  // version and pip rejects it. A manager whose command takes no version at all (pipx upgrades the
+  // tool to whatever is current) is still a real action, so the guard is about `{spec}`.
+  if (!fix && manager && String(manager.upgrade || '').includes('{spec}')) {
+    return '# ' + row.package + ': no published fix for this advisory yet — nothing to install'
+  }
+  if (!fix && !manager) {
+    return '# ' + row.package + ': no published fix for this advisory yet — nothing to install'
+  }
   const spec = eco === 'npm'
-    ? row.package + '@' + (fix || 'latest')
-    : "'" + row.package + '==' + (fix || 'latest') + "'"
+    ? row.package + '@' + fix
+    : "'" + row.package + '==' + fix + "'"
   if (row.owner === 'hermes') {
     return '# ' + row.package + ': part of Hermes\'s own environment — upgraded with `hermes update`, '
       + 'not by hand'
@@ -461,7 +542,7 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
     }
   }, [typed, onChanged])
 
-  return jsxs('section', { style: { marginBottom: '16px' } }, [
+  return jsxs('section', { style: sectionStyle('servers') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.servers.title),
       jsx('span', { style: { flex: 1 } }),
@@ -627,7 +708,8 @@ function NowPanel({ status }) {
     }, [
       dot(level.level),
       jsxs('div', {}, [
-        jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline' } }, [
+        jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
+          deviceIcon(deviceKind(entry)),
           jsx('span', { style: { fontWeight: 600, fontSize: '0.8125rem' } }, entry.label),
           jsx('span', { fontFamily: MONO, fontSize: '0.5625rem', color: C.accent },
             (entry.adapter || '?') + ' · ' + ((entry.os && entry.os.id) || '?') + '/' + ((entry.os && entry.os.codename) || '?')),
@@ -654,7 +736,7 @@ function NowPanel({ status }) {
     ])
   })
 
-  return jsxs('section', { style: { marginBottom: '18px' } }, [
+  return jsxs('section', { style: sectionStyle('overview') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.overview.title),
       jsx('span', { style: { flex: 1 } }),
@@ -689,7 +771,7 @@ function UpdatesPanel({ entry, hostLabel }) {
     ? [commands.stage, commands.apply].filter(Boolean).join('\n')
     : ''
 
-  return jsxs('section', { style: { marginBottom: '18px' } }, [
+  return jsxs('section', { style: sectionStyle('packages') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.packages.title),
       jsx('span', { style: { flex: 1 } }),
@@ -772,10 +854,20 @@ function UpdatesPanel({ entry, hostLabel }) {
             entry.vendor_reason || 'the vendor-lag check did not run here')
         ])
       : null,
+    // only when it can change an answer: no pending rows and no lag rows means the stale index is
+    // hiding nothing, so it is not shown at all
     entry && entry.vendor_index_fresh === false
-      ? jsx('div', {
+      && ((entry.pending || []).length || (entry.vendor_lag || []).length)
+      ? jsxs('div', {
           style: { fontSize: '0.625rem', color: C.warn, marginBottom: '4px', lineHeight: 1.45 }
-        }, entry.vendor_index_note || 'the archive index on this host is stale')
+        }, [
+          jsx('span', {}, (entry.vendor_index_note
+            || 'the archive index on this host is older than 48 h') + ' — '),
+          entry.commands && entry.commands.refresh
+            ? jsx('span', { style: { fontFamily: MONO, color: C.accent } }, entry.commands.refresh)
+            : null,
+          jsx('span', {}, ' then rescan')
+        ])
       : null,
     (entry && entry.vendor_lag || []).length
       ? jsxs('div', {
@@ -940,7 +1032,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   const withFix = (rows) => rows.filter((v) => Array.isArray(v.fixed) && v.fixed.length)
   const mineWithFix = withFix(findingsMine)
 
-  return jsxs('section', { style: { marginBottom: '18px' } }, [
+  return jsxs('section', { style: sectionStyle('libs') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.libs.title),
       jsx('span', { style: { flex: 1 } }),
@@ -1219,7 +1311,7 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where, libra
         : 'run them in a terminal on this machine, as yourself (the plugin\'s own sudo is not yours)')
     : ''
 
-  return jsxs('section', { style: { marginBottom: '18px' } }, [
+  return jsxs('section', { style: sectionStyle('plan') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.plan.title),
       jsx('span', { style: { flex: 1 } }),
@@ -1357,7 +1449,7 @@ function GapsPanel({ coverage, selected }) {
   const blocked = mine.filter((gap) => gap.kind === 'blocked')
   const limits = mine.filter((gap) => gap.kind !== 'blocked')
 
-  return jsxs('section', {}, [
+  return jsxs('section', { style: sectionStyle('gaps') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.gaps.title),
       jsx('span', { style: { flex: 1 } }),

@@ -138,7 +138,8 @@ def _commands_for(family) -> dict:
     """The pasteable sequence for an adapter family — empty when there is none, never a guess."""
     from .plan import COMMANDS
     entry = COMMANDS.get(str(family or "")) or {}
-    return {key: entry.get(key) or "" for key in ("stage", "apply", "verify", "reversal")}
+    return {key: entry.get(key) or ""
+            for key in ("refresh", "stage", "apply", "verify", "reversal")}
 
 
 def _where_for(target, label) -> dict:
@@ -1109,9 +1110,12 @@ def cve_libraries(args: dict, **kwargs) -> str:
     # is what made "128 packages, 40 advisories" read as a broken alert list after an update.
     agent = [v for v in vulnerable if v.get("owner") == "hermes"]
     mine = [v for v in vulnerable if v.get("owner") != "hermes"]
+    # the population is the operator's packages, the same set the pane counts in its header —
+    # "2 findings from 302 packages" next to "174 packages" was two different denominators
+    readable = [c for c in components if c.get("owner") != "hermes"]
     answer_line = (f"{host['label']}: {len(mine)} advisory match(es) across "
-                   f"{len({(v['ecosystem'], v['package']) for v in mine})} package(s), "
-                   f"from {len(components)} package(s) {where}"
+                   f"{len({(v['ecosystem'], v['package'], v['version']) for v in mine})} package(s), "
+                   f"from {len(readable)} package(s) of yours {where}"
                    if components else f"{host['label']}: nothing measurable")
     if agent:
         answer_line += (f" · {len(agent)} more on {len({v['package'] for v in agent})} package(s) "

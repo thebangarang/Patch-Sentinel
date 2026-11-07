@@ -72,6 +72,15 @@ const downgrades = actionableFixes([
 ])
 assert.deepEqual(downgrades.map((row) => row.package), ['pillow'], JSON.stringify(downgrades))
 
+// 11. "no fix published" must not become an install command: the pane printed
+// `uv pip install ... 'diskcache==latest'` under a row that said "no fix published"
+const noFix = buildFixCommand({ ecosystem: 'PyPI', package: 'diskcache',
+                                manager: { tool: 'uv', path: '/u/uv',
+                                           upgrade: '{tool} pip install --python {python} {spec}' } },
+                              { fixes: [] })
+assert.ok(noFix.startsWith('# diskcache: no published fix'), noFix)
+assert.ok(!noFix.includes('=='), 'a version was invented for a package with no fix: ' + noFix)
+
 // 8. no placeholder survives into the output, ever
 const out = buildFixCommand({ ecosystem: 'PyPI', package: 'urllib3', manager: pip }, { fixes: ['1.26.5'] })
 assert.ok(!out.includes('{'), 'an unfilled placeholder reached the user: ' + out)
