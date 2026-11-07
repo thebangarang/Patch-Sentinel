@@ -80,6 +80,38 @@ def parse(paths: list[str]) -> list[dict]:
     return components
 
 
+#: Which installer owns this environment? A venv built by `uv venv` has no pip at all, and telling the
+#: operator to run a pip that is not there is the same class of bug as a fix command naming no store.
+PIP_PROBE = ("for d in {stores}; do if [ -x \"$d/bin/pip\" ]; then echo \"pip $d/bin/pip\"; "
+             "elif [ -x \"$d/bin/python\" ]; then echo \"uv $d/bin/python\"; fi; done")
+
+
+def _installers(stores: list[str], target: str | None, timeout: int) -> dict[str, dict]:
+    """``{store: manager}`` — the command that actually upgrades a package in that environment."""
+    from . import shell
+
+    if not stores:
+        return {}
+    quoted = " ".join("'" + store.replace("'", "'\\''") + "'" for store in stores)
+    code, out = shell.run(PIP_PROBE.format(stores=quoted), target, timeout=timeout,
+                          path_prefix=shell.SYSTEM_PATH_PREFIX)
+    found: dict[str, dict] = {}
+    for line in (out or "").splitlines():
+        parts = line.split()
+        if len(parts) != 2 or not parts[1].startswith("/"):
+            continue
+        store = parts[1].rsplit("/bin/", 1)[0]
+        if parts[0] == "pip":
+            found[store] = {"tool": "pip", "path": parts[1],
+                            "upgrade": "{tool} install -U {spec}"}
+        else:
+            # uv-made venvs ship an interpreter, not a pip: `uv pip install --python` uses that one
+            found[store] = {"tool": "uv", "path": "uv",
+                            "upgrade": "uv pip install --python {python} {spec}",
+                            "why": "this environment has no pip of its own (it was made by uv)"}
+    return found
+
+
 def collect(target: str | None = None, timeout: int = 120) -> dict:
     """Walk the machine (or a remote host) once and read every environment it can name.
 
@@ -91,10 +123,19 @@ def collect(target: str | None = None, timeout: int = 120) -> dict:
     code, out = shell.run(FIND, target, timeout=timeout, path_prefix=shell.SYSTEM_PATH_PREFIX)
     paths = [line for line in (out or "").splitlines() if line.strip()]
     components = parse(paths)
+    stores = sorted({c["source"][4:] for c in components})
+    installers = _installers(stores, target, timeout)
+    for component in components:
+        store = component["source"][4:]
+        manager = installers.get(store)
+        if manager:
+            component["manager"] = manager
+            component["installer"] = manager["tool"]
     directories = len({c["source"] for c in components})
     if not paths:
         outcome = f"no environment found (rc={code})" if code == 0 else f"unreadable (rc={code})"
     else:
         outcome = f"ok: {directories} environment(s), {len(components)} package(s)"
     return {"components": components, "dirs": directories,
-            "outcomes": {"venvs": outcome}, "truncated": len(paths) >= MAX_DIST_INFO}
+            "outcomes": {"venvs": outcome}, "installers": installers,
+            "truncated": len(paths) >= MAX_DIST_INFO}

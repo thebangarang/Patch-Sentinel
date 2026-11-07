@@ -48,8 +48,8 @@ class DashboardRoutes(unittest.TestCase):
         # pinned on purpose: a tool that quietly disappears from the pane's health is a pane that
         # silently loses a surface. cve_apply is the gate — it must be here.
         self.assertEqual(sorted(body["tools"]),
-                         ["cve_apply", "cve_coverage", "cve_explain", "cve_libraries",
-                          "cve_plan", "cve_scan"])
+                         ["cve_apply", "cve_coverage", "cve_explain", "cve_image",
+                          "cve_libraries", "cve_plan", "cve_scan"])
 
     def test_health_reports_which_build_of_the_pane_is_served(self):
         body = self.client.get(self.base + "/health").json()

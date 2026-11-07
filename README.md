@@ -44,6 +44,7 @@ its own verdict, not "patched". A registry that answered `429` is *unverified*, 
 | `cve_plan` | `host` | the ranked, reversible plan for what `cve_scan` found. Never executes |
 | `cve_explain` | `cve_id` | the vendor record for one CVE, plus our measured state and any tracker/measurement disagreement |
 | `cve_coverage` | — | what answered and when, and the standing gaps. Never empty, never green |
+| `cve_image` | `image`, `host?` | what is inside one container image — distro, packages read from its layers, CVEs with fixing versions. Never starts the image |
 
 ## Coverage — what is proven, and on which machine
 

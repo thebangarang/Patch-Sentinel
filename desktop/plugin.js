@@ -156,29 +156,70 @@ function newestVersion(list) {
  * be upgraded by pip in any case. When the backend says there is no machine-wide command, this says
  * so instead of inventing one. Exported because a string a user will paste deserves its own tests.
  */
-function buildFixCommand(row, found) {
-  const fix = found && found.fixes && found.fixes.length ? newestVersion(found.fixes) : null
+/**
+ * The command that upgrades one row, or a comment saying why there is none.
+ *
+ * A row read from a project environment carries that environment's own installer (`<venv>/bin/pip`,
+ * or `uv pip install --python <venv>/bin/python` for a uv-made venv with no pip). A row with no
+ * manager is a comment — never a command that cannot run.
+ */
+function fixCommandFor(row, fix) {
   const eco = String(row.ecosystem || '').toLowerCase()
   const manager = row.manager || null
   const spec = eco === 'npm'
     ? row.package + '@' + (fix || 'latest')
-    : (fix ? "'" + row.package + '>=' + fix + "'" : row.package)
+    : "'" + row.package + '>=' + (fix || 'latest') + "'"
   if (row.owner === 'hermes') {
     return '# ' + row.package + ': part of Hermes\'s own environment — upgraded with `hermes update`, '
       + 'not by hand'
   }
   if (!manager) {
-    return '# ' + row.package + ': upgrade it to ' + (fix || 'the fixed version')
-      + ' where it is pinned — this scan did not find the store that owns it'
+    return '# ' + row.package + ': no store on this machine owns it — nothing to run here'
   }
   if (!manager.upgrade) {
     return '# ' + row.package + ': ' + (manager.why || 'no machine-wide command upgrades it')
   }
+  const store = String(row.source || '').replace(/^env:/, '')
   return String(manager.upgrade)
     .split('{tool}').join(manager.path || manager.tool)
     .split('{spec}').join(spec)
     .split('{pkg}').join(row.package)
     .split('{ver}').join(fix || 'latest')
+    .split('{python}').join(store + '/bin/python')
+}
+
+/** Kept for the row renderer, which has the aggregated finding rather than a fixed version. */
+function buildFixCommand(row, found) {
+  const fix = found && found.fixes && found.fixes.length ? newestVersion(found.fixes) : null
+  return fixCommandFor(row, fix)
+}
+
+/**
+ * One block for the copy control: a finding per *package*, not per advisory and not per environment.
+ * The old list repeated `pillow` nine times because it mapped every advisory row, and every
+ * environment, separately — a paste of that fixed nothing and read like a broken tool.
+ */
+function fixBlock(rows) {
+  const groups = new Map()
+  for (const row of rows) {
+    const key = row.package + '|' + (row.version || '') + '|' + (row.fix || '')
+    const group = groups.get(key) || { row, rows: [] }
+    group.rows.push(row)
+    groups.set(key, group)
+  }
+  const lines = []
+  for (const group of groups.values()) {
+    const row = group.row
+    const fix = row.fix || null
+    const stores = group.rows.map((item) => String(item.source || '')).filter(Boolean)
+    const unique = Array.from(new Set(stores))
+    const head = '# ' + row.package + (row.version ? ' ' + row.version : '')
+      + (fix ? ' → ' + fix : '')
+      + (unique.length > 1 ? ' — ' + unique.length + ' places carry it' : '')
+    lines.push(head)
+    for (const item of group.rows) lines.push(fixCommandFor(item, fix))
+  }
+  return lines.join('\n')
 }
 
 function dot(level) {
@@ -781,7 +822,15 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   const missingEcosystems = Object.entries((libraries && libraries.outcomes) || {})
     .filter(([, outcome]) => outcome === 'missing').map(([eco]) => eco)
 
-  const fixLines = flagged.map((row) => buildFixCommand(row, foundByPackage[keyOf(row)]))
+  // one entry per package@version@store, carrying the version that closes it — the copy control is
+  // read by a shell, so it must not repeat the same package once per advisory or per environment
+  const fixRows = Array.from(new Map(flagged.map((row) => {
+    const found = foundByPackage[keyOf(row)] || null
+    const fix = found && found.fixes && found.fixes.length ? newestVersion(found.fixes) : null
+    const key = row.package + '|' + row.version + '|' + (row.source || '')
+    return [key, { ...row, fix }]
+  })).values())
+  const fixText = fixBlock(fixRows)
   // An advisory with an empty `fixed` list has no published fix yet, in any version. Saying that
   // separately is the difference between "you are behind" and "nobody has shipped a fix" — the operator
   // ran `hermes update` and saw 40 advisories either way, which reads as if the update did nothing.
@@ -805,7 +854,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 : 'nothing to upgrade'))
         : null,
       flagged && flagged.length
-        ? jsx(Copy, { text: fixLines.join('\n'), label: 'copy fix commands' })
+        ? jsx(Copy, { text: fixText, label: 'copy fix commands' })
         : libraries
           ? jsx('span', {
               style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint },
@@ -1045,7 +1094,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
 
 // --------------------------------------------------------------------------- PENDING
 
-function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where }) {
+function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where, libraryFindings }) {
   const steps = (plan && plan.steps) || []
   const refusals = (plan && plan.refusals) || []
   // the commands are the product; APPLY is a shortcut that most hosts cannot allow
@@ -1114,9 +1163,14 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where }) {
             '  ·  reverse: ', jsx('span', { style: { fontFamily: MONO } }, step.reversal || '—')
           ])
         ]))
-      : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, padding: '6px 0' } },
+      : jsx('div', { style: { fontSize: '0.75rem', color: libraryFindings ? C.dim : C.faint, padding: '6px 0' } },
           planning ? 'measuring the host — this can take a few seconds over ssh'
           : limited ? 'planning needs a host — pick one in NOW first'
+          : libraryFindings
+            ? 'nothing to install on the system: the scan found 0 pending package updates. The '
+              + libraryFindings + ' library finding(s) above are fixed in their own stores — the copy '
+              + 'control in libs & runtimes carries those commands, and this panel is only about the '
+              + 'distro\'s package manager.'
           : plan ? 'the plan came back empty'
           : 'no plan yet — press “plan for …” to turn this host into commands'),
     refusals.length
@@ -1460,7 +1514,7 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
 // --------------------------------------------------------------------------- root
 
 export { VerdictBar, HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate,
-         buildFixCommand, SECTIONS }
+         buildFixCommand, fixBlock, SECTIONS }
 
 export function PatchSentinel({ compact }) {
   const [status, setStatus] = useState(null)
@@ -1676,6 +1730,8 @@ export function PatchSentinel({ compact }) {
                         hostLabel: selected }),
     jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }),
     jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning,
+                        libraryFindings: (libraries && libraries.vulnerable || [])
+                          .filter((row) => row.owner !== 'hermes' && (row.fixed || []).length).length,
                         where: status && status.hosts && status.hosts[selected]
                           ? status.hosts[selected].where : null }),
     // the optional shortcut, folded under the plan it belongs to — not a step of its own

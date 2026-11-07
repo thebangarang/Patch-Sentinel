@@ -108,6 +108,10 @@ def parse_installed(text: str, flavour: str) -> list[dict]:
     return rows
 
 
+#: How many advisories are handed back for attribution. One per package is what matters; 600 covers
+#: any host here without turning a payload into a feed dump.
+MAX_INDEX = 600
+
 #: Has the host refreshed the metadata a "candidate version" comes from? A stale index makes every
 #: advisory look like a lag, because the archive has moved on and this machine has not looked.
 FRESHNESS = {
@@ -428,7 +432,12 @@ def assess(target: str | None, family: str, os_id: str, version_id: str,
                                     "candidate": candidates.get(row["package"], "")}
             needed[row["package"]] = entry
     state = verdict.classify(rows, needed)
-    return {"state": "measured", "advisories_read": len(advisories),
+    # the same index answers a second question: *which* advisory sits behind a pending update. Passing
+    # it back means every pending row can carry its notice, not only Ubuntu's.
+    index = {name: {"notice": entry.get("notice") or "", "fixed": entry.get("version") or "",
+                    "cves": (entry.get("cves") or [])[:6]}
+             for name, entry in list(advisories.items())[:MAX_INDEX]}
+    return {"state": "measured", "advisories_read": len(advisories), "advisory_index": index,
             "index_fresh": index_fresh, **({"feed": feed_meta} if feed_meta else {}),
             "index_note": ("" if index_fresh else
                            "the archive index on this host is older than 48 h, so a version that "

@@ -1,7 +1,7 @@
 // The string a user pastes into a shell. Its failure mode is silent: a wrong path installs into the
 // wrong environment, or fails with "No module named pip" and no clue why.
 import assert from 'node:assert'
-import { buildFixCommand } from './pane.mjs'
+import { buildFixCommand, fixBlock } from './pane.mjs' 
 
 const pip = { tool: 'pip3', path: '/home/u/.hermes/tools/python/bin/pip3',
               upgrade: '{tool} install -U {spec}' }
@@ -26,12 +26,45 @@ assert.equal(buildFixCommand({ ecosystem: 'npm', package: 'lodash',
 assert.ok(buildFixCommand({ ecosystem: 'Maven', package: 'commons-lang3', manager: maven }, { fixes: [] })
             .startsWith('# commons-lang3: a build dependency'))
 
-// 5. no manager at all is admitted, never guessed
+// 5. no manager at all is admitted, never guessed — and says the actionable half: nothing to run here
 assert.ok(buildFixCommand({ ecosystem: 'RubyGems', package: 'rack' }, { fixes: ['2.2.8'] })
-            .includes('this scan did not find the store that owns it'))
+            .includes('no store on this machine owns it'))
 
-// 6. no placeholder survives into the output
+// 6. a package inside a project virtualenv is upgraded *in that virtualenv*, by its own pip
+assert.equal(
+  buildFixCommand({ ecosystem: 'PyPI', package: 'pillow', version: '12.3.0',
+                    source: 'env:/home/u/projects/api/.venv',
+                    manager: { tool: 'pip', path: '/home/u/projects/api/.venv/bin/pip',
+                               upgrade: '{tool} install -U {spec}' } },
+                  { fixes: ['13.0.0'] }),
+  "/home/u/projects/api/.venv/bin/pip install -U 'pillow>=13.0.0'")
+
+// 7. a uv-made venv has no pip: the command names its interpreter instead of a pip that is not there
+assert.equal(
+  buildFixCommand({ ecosystem: 'PyPI', package: 'pyjwt', version: '2.10.1',
+                    source: 'env:/home/u/projects/bot/.venv',
+                    manager: { tool: 'uv', path: 'uv',
+                               upgrade: 'uv pip install --python {python} {spec}' } },
+                  { fixes: ['2.15.0'] }),
+  "uv pip install --python /home/u/projects/bot/.venv/bin/python 'pyjwt>=2.15.0'")
+
+// 9. the copy block is one entry per package, not one per advisory or per environment: the first
+// version of it printed `pillow` nine times (three environments × three advisories) and fixed nothing
+const envPip = { tool: 'pip', path: '/home/u/projects/a/.venv/bin/pip', upgrade: '{tool} install -U {spec}' }
+const block = fixBlock([
+  { package: 'pillow', version: '12.3.0', source: 'env:/home/u/projects/a/.venv', fix: '13.0.0', manager: envPip },
+  { package: 'pillow', version: '12.3.0', source: 'env:/home/u/projects/b/.venv', fix: '13.0.0',
+    manager: { tool: 'uv', path: 'uv', upgrade: 'uv pip install --python {python} {spec}' } },
+  { package: 'pytest', version: '8.0.0', source: 'env:/home/u/projects/a/.venv', fix: '9.0.3', manager: envPip }
+])
+const headers = block.split('\n').filter((line) => line.startsWith('# '))
+assert.equal(headers.length, 2, 'one header per package\n' + block)
+assert.ok(block.includes("# pillow 12.3.0 → 13.0.0 — 2 places carry it"), block)
+assert.ok(block.includes('/home/u/projects/a/.venv/bin/pip install -U \'pillow>=13.0.0\''), block)
+assert.ok(block.includes('uv pip install --python /home/u/projects/b/.venv/bin/python \'pillow>=13.0.0\''), block)
+
+// 8. no placeholder survives into the output, ever
 const out = buildFixCommand({ ecosystem: 'PyPI', package: 'urllib3', manager: pip }, { fixes: ['1.26.5'] })
 assert.ok(!out.includes('{'), 'an unfilled placeholder reached the user: ' + out)
 
-console.log('fix commands: 6 assertions passed')
+console.log('fix commands: 8 assertions passed')

@@ -20,8 +20,8 @@ import re
 
 from . import apply as apply_mod
 from . import plan, schemas, store, verdict
-from .sources import (cve_tracker, dispatch, distro_lag, environments, languages, osv, projects,
-                      shell, threat, usn)
+from .sources import (cve_tracker, dispatch, distro_lag, environments, image_db, jars, languages,
+                      osv, projects, shell, threat, usn)
 from .sources import vendor as vendor_lag
 from .sources import hosts as inventory_module
 
@@ -160,8 +160,8 @@ def _summarise(host: dict) -> str:
                          f"({', '.join(advisories[:4])})" if advisories
                          else ", none named by a recent advisory")
     else:
-        advisory_note = (", advisory ids not attributed on this distro (only Ubuntu's feed is "
-                         "wired) — the pending list is measured either way")
+        advisory_note = (", no advisory id is attributed here (this host's feed names none of "
+                         "these packages) — the pending list is measured either way")
     parts = [f"{host['label']}: {total} package update(s) installable" + advisory_note]
     lag = host.get("vendor_lag") or []
     if lag:
@@ -322,6 +322,26 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             # "fixed upstream, not here yet" is bad; "…and it is being exploited" is the reason to act
             vendor_state["threat"] = threat.annotate_rows(vendor_state["vendor_lag"])
 
+        # Fedora and openSUSE: the feed that proves vendor lag also names the advisory behind a
+        # pending update, so those rows stop being anonymous too — the index is already in hand.
+        advisory_index = (vendor_state or {}).get("advisory_index") or {}
+        if advisory_index and os_id != "ubuntu":
+            attached = 0
+            for entry in pending:
+                if entry.get("advisory"):
+                    continue
+                hit = advisory_index.get(entry.get("package") or "")
+                if not hit or not hit.get("notice"):
+                    continue
+                entry["advisory"] = hit["notice"]
+                entry["advisory_cves"] = hit.get("cves") or []
+                attached += 1
+            if attached:
+                advisory_source = ("Bodhi" if (os_id or "").lower() == "fedora"
+                                   else "SUSE's OVAL")
+                outcomes["advisories"] = "ok"
+                named = [p for p in pending if p.get("advisory")]
+
         if outcomes["kernel"] == "unmeasured":
             blind.append({"host": label, "class": "kernel",
                           "reason": result.get("kernel_reason") or "kernel state not measurable",
@@ -475,6 +495,76 @@ def cve_plan(args: dict, **kwargs) -> str:
 
 
 @_never_raises
+def cve_image(args: dict, **kwargs) -> str:
+    """Read one container image's package database and check it against OSV.
+
+    The image is unpacked with ``docker save`` — never started. An image the reader cannot understand
+    (an rpm-based one, a foreign layout, a size past the cap) says so and exits 2, because "0 findings"
+    on an image nobody read is the false comfort this plugin exists to remove.
+    """
+    image = str(args.get("image") or args.get("name") or "").strip()
+    if not image:
+        return _json({"tool": "cve_image", **_refusal("no image given — name one, e.g. 'nginx:1.27'")})
+    host_label = str(args.get("host") or "").strip() or _local_label()
+    entry = next((h for h in _inventory() if h["label"] == host_label), None)
+    if entry is None:
+        return _json({"tool": "cve_image", "host": host_label,
+                      **_refusal(f"there is no host called {host_label!r} in this inventory")})
+    target = entry.get("target") or None
+
+    timeout = int(_settings.get("timeout") or 180)
+    saved = image_db.save_and_read([image], target, timeout=max(timeout, 300))
+    state = image_db.report(saved["images"].get(image) or {})
+    base = {"tool": "cve_image", "host": host_label, "image": image,
+            "os": state.get("os_label"), "features_read": len(state.get("packages") or []),
+            "layers": state.get("layers"), "ecosystem": state.get("ecosystem"),
+            "summary": state.get("summary")}
+    if not state.get("packages"):
+        return _json({**base, "outcome": state.get("outcome"), "exit_code": 2,
+                      **_refusal(state.get("outcome") or "nothing was read from the image")})
+    if not state.get("ecosystem"):
+        return _json({**base, "outcome": "unsupported",
+                      "reason": (f"the image runs {state.get('os_label')}, and this plugin has no "
+                                 f"advisory feed for that distribution — the package list is read, "
+                                 f"the CVEs are unmeasured"),
+                      "exit_code": 2})
+
+    components = [{"package": row["package"], "version": row["version"],
+                   "ecosystem": state["ecosystem"], "source": f"image:{image}"}
+                  for row in state["packages"]]
+    answer = osv.query(components[:800])
+    if not answer.get("ok"):
+        return _json({**base, "outcome": "unmeasured", "exit_code": 2,
+                      **_refusal(f"the advisory database could not be queried ({answer.get('why')})")})
+
+    pairs = list(zip(components, answer["results"]))
+    wanted = sorted({vid for _, found in pairs for vid in found})
+    records = {vid: osv.vuln(vid) for vid in wanted[:MAX_ADVISORY_RECORDS]}
+    vulnerable, seen = [], set()
+    for component, found in pairs:
+        for vid in found:
+            record = records.get(vid)
+            item = (osv.summarise(record, component["ecosystem"], component["package"])
+                    if record else {"id": vid, "aliases": [], "summary": None, "severity": None,
+                                    "fixed": [], "url": f"https://osv.dev/vulnerability/{vid}"})
+            key = (component["package"], component["version"], item.get("id"))
+            if key in seen:
+                continue
+            seen.add(key)
+            vulnerable.append({"package": component["package"], "version": component["version"],
+                               "source": component["source"], **item})
+    threat_summary = threat.annotate(vulnerable)
+    exploited = sum(1 for row in vulnerable if row.get("kev"))
+    answer_line = (f"{image} on {host_label}: {len(vulnerable)} advisory match(es) across "
+                   f"{len({(v['package'], v['version']) for v in vulnerable})} package(s), from "
+                   f"{len(components)} package(s) read out of the image ({state.get('os_label')})")
+    if exploited:
+        answer_line += f" — {exploited} in CISA's known-exploited list"
+    return _json({**base, "answer": answer_line, "vulnerable": vulnerable[:MAX_PENDING],
+                  "vulnerable_count": len(vulnerable), "threat": threat_summary,
+                  "exit_code": 1 if vulnerable else 0})
+
+
 def cve_apply(args: dict, **kwargs) -> str:
     """The gated apply. Refuses by default; needs the host name typed and dry_run=false."""
     requested = str(args.get("host") or "").strip() or _local_label()
@@ -694,15 +784,18 @@ def cve_coverage(args: dict, **kwargs) -> str:
                         "publication — which is a fact about the release, not about this scan",
          "next": "upgrade off an end-of-life release; that is the only thing that produces new "
                  "advisories for it."},
-        {"gap": "container image packages", "state": "not measured", "hosts": "every",
-         "kind": "limit",
-         "why": "docker image ids and digests are compared against the registry (a rebuilt upstream "
-                "image is reported), but the packages *inside* an image are not read. That needs a "
-                "layer reader this plugin does not ship, or an external scanner.",
-         "consequence": "an image built last year on a vulnerable base reads as 'up to date' when "
-                        "the registry has not moved it",
-         "next": "the layer reader is the next coverage item; until then the pane says the layer "
-                 "contents are unmeasured rather than clean."},
+        {"gap": "container images are not scanned by a host scan", "state": "partly measured",
+         "hosts": "every", "kind": "limit",
+         "why": "a host scan compares image digests against the registry (a rebuilt upstream image is "
+                "reported), but unpacking every image on every scan would cost minutes and gigabytes. "
+                "`cve_image` reads one image on demand — `docker save`, then the layer's dpkg or apk "
+                "database, checked against OSV — and names its distro. Images built on rpm (Fedora, "
+                "RHEL) answer 'unmeasured': their package database is sqlite, which this plugin does "
+                "not parse.",
+         "consequence": "an image built on a vulnerable base is only caught when someone asks about "
+                        "that image, not by the periodic scan",
+         "next": "ask per image (`cve_image`, 'is our nginx:1.27 patched?'); an rpmdb reader is the "
+                 "remaining piece."},
         {"gap": "operating systems without an adapter", "state": "not measured",
          "hosts": "every", "kind": "limit",
          "why": f"adapters exist for: {', '.join(implemented)}; every other OS answers "
@@ -803,14 +896,18 @@ def cve_libraries(args: dict, **kwargs) -> str:
         # largest surface a global-tree reader cannot see, and they cost one `find`.
         environments_state = environments.collect(host.get("target") or None,
                                                   timeout=int(_settings.get("timeout") or 180))
+        # jars on disk: the Java deployments that never pass through the local Maven repository
+        jars_state = jars.collect(host.get("target") or None,
+                                  timeout=int(_settings.get("timeout") or 180))
         known = {(c["ecosystem"], c["package"], c["version"]) for c in collected["components"]}
-        extra = [c for c in environments_state["components"]
+        extra = [c for c in environments_state["components"] + jars_state["components"]
                  if (c["ecosystem"], c["package"], c["version"]) not in known]
         collected = {**collected,
                      "components": collected["components"] + extra,
                      "outcomes": {**collected.get("outcomes", {}),
-                                  **environments_state["outcomes"]},
-                     "truncated": collected.get("truncated") or environments_state["truncated"]}
+                                  **environments_state["outcomes"], **jars_state["outcomes"]},
+                     "truncated": (collected.get("truncated") or environments_state["truncated"]
+                                   or jars_state["truncated"])}
     components = collected["components"]
     base = {"tool": "cve_libraries", "host": host["label"], "target": host["target"] or "local",
             "scope": "project" if project else "machine",
@@ -934,9 +1031,10 @@ HANDLERS = {
     "cve_coverage": cve_coverage,
     "cve_libraries": cve_libraries,
     "cve_apply": cve_apply,
+    "cve_image": cve_image,
 }
 
 __all__ = ["HANDLERS", "SCHEMAS", "configure", "cve_scan", "cve_plan", "cve_explain",
-           "cve_coverage", "cve_libraries", "cve_apply"]
+           "cve_coverage", "cve_libraries", "cve_image", "cve_apply"]
 
 SCHEMAS = schemas.SCHEMAS

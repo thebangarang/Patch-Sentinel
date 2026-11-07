@@ -61,6 +61,28 @@ not looked is not a machine the vendor forgot.
 
 A family with no feed answers `unsupported` with the reason — never "no lag".
 
+## Container images
+
+`cve_image` reads what is inside an image **without starting it**: `docker save` (piped back over ssh
+for a remote daemon), then the layer tars are walked and `etc/os-release` + `var/lib/dpkg/status` or
+`lib/apk/db/installed` are read from the last layer that holds them. The distro decides the OSV
+ecosystem (`Debian:12`, `Ubuntu:24.04`, `Alpine:v3.24`).
+
+Measured on the VPS: `caddy:2-alpine` → **32 packages from 4 layers**, `zlib 1.3.2-r1` flagged
+(`ALPINE-CVE-2026-4738`, fixed in `1.4-r0`) in 3 seconds.
+
+Honest limits, each in the result: an rpm-based image (Fedora, RHEL) answers *unmeasured* — its package
+database is sqlite and this plugin has no rpmdb reader; an image with no package database at all says so;
+an archive past 2 GB is refused rather than unpacked. Debian, Ubuntu and Alpine images are fully read.
+
+## Jars on disk
+
+`cve_libraries` also reads `*.jar` files under `/opt`, `/srv`, `/var/lib`, `/home` and `/usr/share`:
+a Maven build stamps `META-INF/maven/<group>/<artifact>/pom.properties` into the jar, which is exactly
+the `group:artifact` + version OSV's Maven ecosystem keys on. No JDK is involved; a jar is a zip.
+A jar without that file falls back to its file name — **no group id, so it is counted but not matched**:
+attributing another artifact's CVEs would be worse than staying silent.
+
 ## Project environments
 
 `cve_libraries` also reads **every virtualenv on the machine**: one `find` for `*.dist-info` directories

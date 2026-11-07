@@ -176,6 +176,30 @@ CVE_APPLY = {
     },
 }
 
+CVE_IMAGE = {
+    "name": "cve_image",
+    "description": (
+        "Read what is inside one container image and check it against OSV: the image is unpacked with "
+        "`docker save` (never started), its distro is read from /etc/os-release, and its package "
+        "database from dpkg or apk. Use it when the question is about an image rather than a host — "
+        "'is our nginx image patched?', 'what CVEs are baked into <image>?'. Debian, Ubuntu and Alpine "
+        "images are fully measured; an rpm-based image (needs a sqlite rpmdb reader) or an image with "
+        "no package database answers `unsupported`/`unmeasured` and exit_code 2 — never 'clean'. The "
+        "result carries the OS, the package count read, the advisories with their fixing version, and "
+        "KEV/EPSS annotations."),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "image": {"type": "string",
+                      "description": ("Image name or id as docker knows it, e.g. 'nginx:1.27' or "
+                                      "'a1b2c3d4'. One image per call.")},
+            "host": {"type": "string",
+                     "description": "Host label whose docker daemon to ask. Omit for this machine."},
+        },
+        "required": ["image"],
+    },
+}
+
 SCHEMAS = {schema["name"]: schema
            for schema in (CVE_SCAN, CVE_PLAN, CVE_EXPLAIN, CVE_COVERAGE, CVE_LIBRARIES,
-                          CVE_APPLY)}
+                          CVE_IMAGE, CVE_APPLY)}
