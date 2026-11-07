@@ -199,11 +199,14 @@ function chip(text, colour, title) {
 }
 
 function label(text, extra) {
+  // section headings carry the HUD accent: bigger, spaced, with a rule under them and a faint glow,
+  // so the eye can jump between panels without reading a word
   return jsx('div', {
     style: {
-      fontFamily: MONO, fontSize: '0.75rem', letterSpacing: '0.16em', fontWeight: 700,
-      textTransform: 'uppercase', color: C.accent, paddingBottom: '3px',
-      borderBottom: '1px solid ' + C.accent, display: 'inline-block', ...(extra || {})
+      fontFamily: MONO, fontSize: '0.8125rem', letterSpacing: '0.18em', fontWeight: 700,
+      textTransform: 'uppercase', color: C.accent, paddingBottom: '4px',
+      borderBottom: '1px solid ' + C.accent, display: 'inline-block',
+      textShadow: '0 0 12px rgba(53, 214, 214, 0.28)', ...(extra || {})
     }
   }, text)
 }
@@ -230,6 +233,43 @@ function Copy({ text, what, label }) {
       border: '1px solid ' + C.border, borderRadius: '3px'
     }
   }, done ? 'copied' : (label || 'copy'))
+}
+
+// --------------------------------------------------------------------------- the verdict bar
+
+/**
+ * The answer to "am I ok?" in one line, before any panel is read: how many servers answered, what is
+ * pending, what is being exploited, and what could not be looked at. Each chip is a fact from the
+ * stored scan, and the age is printed beside it — a verdict without its timestamp is a rumour.
+ */
+function VerdictBar({ status }) {
+  if (!status) return null
+  const hosts = Object.values(status.hosts || {})
+  if (!hosts.length) return null
+  const pending = hosts.reduce((total, entry) => total + (entry.pending_count || 0), 0)
+  const lag = hosts.reduce((total, entry) => total + ((entry.vendor_lag || []).length), 0)
+  const exploited = (status.threat && status.threat.exploited) || []
+  const blind = (status.blind || []).length
+  const kernelWaiting = hosts.filter((entry) => (entry.kernel || {}).verdict === 'kernel-reboot-needed').length
+  return jsxs('div', {
+    style: {
+      display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '12px',
+      padding: '7px 9px', border: '1px solid ' + C.border, borderRadius: '4px', background: C.panel
+    }
+  }, [
+    chip(hosts.length + ' server' + (hosts.length === 1 ? '' : 's'), C.dim, 'servers in the inventory'),
+    chip(pending ? pending + ' update' + (pending === 1 ? '' : 's') + ' pending' : 'nothing pending',
+         pending ? C.warn : C.ok, 'package updates the distro would install'),
+    lag ? chip(lag + ' vendor-lag', C.warn, 'a fix exists upstream, the archive does not carry it yet') : null,
+    exploited.length ? chip(exploited.length + ' exploited', C.danger,
+                            'CISA KEV: ' + exploited.join(', ')) : null,
+    kernelWaiting ? chip(kernelWaiting + ' reboot needed', C.warn,
+                         'a kernel was installed but the running one is older') : null,
+    blind ? chip(blind + ' could not look', C.danger, 'see gaps — this is a fact about the scan') : null,
+    jsx('span', { style: { flex: 1 } }),
+    jsx('span', { style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint } },
+      'measured ' + ago(status.age_seconds))
+  ])
 }
 
 // --------------------------------------------------------------------------- HOSTS
@@ -1221,7 +1261,7 @@ function ApplyGate({ hostLabel, entry }) {
 
 // --------------------------------------------------------------------------- root
 
-export { HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate,
+export { VerdictBar, HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate,
          buildFixCommand, SECTIONS }
 
 export function PatchSentinel({ compact }) {
@@ -1415,6 +1455,7 @@ export function PatchSentinel({ compact }) {
       }
     }, SECTIONS.map((section) => jsx('div', { key: section.key },
         jsx('b', { style: { color: C.dim } }, section.title), ' — ' + section.blurb))),
+    jsx(VerdictBar, { status }),
     jsx(HostsPanel, { onChanged: load }),
     jsx(NowPanel, { status }),
     jsx(UpdatesPanel, { entry: status && status.hosts ? status.hosts[selected] : null,

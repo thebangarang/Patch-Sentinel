@@ -382,7 +382,8 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
     if save and selected:
         try:
             store.save_scan({k: payload[k] for k in
-                             ("tool", "scan", "answer", "hosts", "blind", "findings", "exit_code")})
+                             ("tool", "scan", "answer", "hosts", "blind", "findings", "exit_code",
+                              "threat")})
         except OSError:
             payload["stored"] = False
     return payload

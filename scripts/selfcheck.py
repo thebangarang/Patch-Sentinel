@@ -58,14 +58,21 @@ def check_libraries(rows: list[dict]) -> None:
     took = round(time.time() - started, 1)
     outcomes = payload.get("outcomes") or {}
     vulnerable = payload.get("vulnerable") or []
+    # A toolchain that is not installed is *not applicable*, not a blind spot: reporting a machine
+    # without Ruby as "could not look" trains the reader to ignore the word, which is the failure
+    # this check exists to prevent. Only an unreadable or refused store is a hole.
+    hard = [name for name, state in outcomes.items() if state in ("unreadable", "refused", "empty")]
+    absent = [name for name, state in outcomes.items() if state == "missing"]
     rows.append({
         "surface": "language check",
-        "outcome": "measured" if all(v == "ok" for v in outcomes.values()) and outcomes else "could not look",
+        "outcome": "could not look" if hard else ("finding" if vulnerable else "measured"),
         "detail": (f"{payload.get('components', 0)} package(s) read "
                    f"({', '.join(f'{k}: {v}' for k, v in outcomes.items())}) "
                    f"via {', '.join((payload.get('details') or {}).values()) or 'unknown'} · "
                    f"{len(vulnerable)} vulnerable · "
-                   + (", ".join(sorted({v['package'] for v in vulnerable})) or "no findings")),
+                   + (", ".join(sorted({v['package'] for v in vulnerable})) or "no findings")
+                   + (f" · not installed here: {', '.join(sorted(absent))}" if absent else "")
+                   + (f" · UNREADABLE: {', '.join(sorted(hard))}" if hard else "")),
         "seconds": took,
     })
     for item in vulnerable[:3]:
@@ -76,6 +83,24 @@ def check_libraries(rows: list[dict]) -> None:
     for name, why in (payload.get("unmeasured") or {}).items():
         rows.append({"surface": f"  ↳ {name}", "outcome": "could not look", "detail": why,
                      "seconds": None})
+
+
+def check_threat(rows: list[dict]) -> None:
+    """2b. Are the two feeds that say "this is being exploited" reachable right now?"""
+    from patch_sentinel.sources import threat
+    started = time.time()
+    known = threat.kev()
+    scores = threat.epss(["CVE-2021-44228", "CVE-2023-44487"])
+    took = round(time.time() - started, 1)
+    rows.append({
+        "surface": "threat feeds",
+        "outcome": "measured" if known and scores else "could not look",
+        "detail": (f"CISA KEV {len(known)} entries · EPSS answered for {len(scores)} test CVE(s)"
+                   if known and scores else
+                   f"KEV {len(known)} entries, EPSS {len(scores)} — a finding cannot be ranked "
+                   f"as exploited right now"),
+        "seconds": took,
+    })
 
 
 def check_plan(rows: list[dict], host: str) -> None:
@@ -131,6 +156,7 @@ def main() -> int:
     rows: list[dict] = []
     check_scan(rows, args.host)
     check_libraries(rows)
+    check_threat(rows)
     check_plan(rows, host)
     check_advisories(rows)
 

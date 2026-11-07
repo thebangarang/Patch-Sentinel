@@ -68,7 +68,8 @@ def status() -> dict:
                 "note": "no measurement yet — press Refresh, or ask the agent 'are we patched?'"}
     return {"scan": scan.get("scan"), "age_seconds": age, "hosts": scan.get("hosts") or {},
             "blind": scan.get("blind") or [], "exit_code": scan.get("exit_code"),
-            "answer": scan.get("answer"), "job": _job_state("scan")}
+            "answer": scan.get("answer"), "threat": scan.get("threat"),
+            "job": _job_state("scan")}
 
 
 # --------------------------------------------------------------------------- long jobs

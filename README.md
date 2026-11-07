@@ -128,6 +128,25 @@ own staleness as a vendor delay.
 Where an advisory carries a Workarounds section, the finding also shows the vendor's own temporary
 mitigation — quoted, never invented.
 
+## Where the answers come from
+
+Every claim the plugin makes is traceable to one of these feeds. Nothing is inferred from memory, and a
+feed that cannot be read is reported as **unmeasured**, never as clean.
+
+| feed | what it answers | used for | limit |
+|---|---|---|---|
+| Ubuntu security notices (`ubuntu.com/security/notices.json`) | the fixed version per Ubuntu release | vendor lag on Ubuntu | Ubuntu only |
+| OSV, per release (`Debian:12`, `Alpine:v3.22`, `Rocky Linux:9`…) | the fixed version per distro release | vendor lag on Debian, Alpine, RHEL family | Fedora and openSUSE have no OSV ecosystem |
+| Arch security tracker (`security.archlinux.org/all.json`) | affected/fixed per AVG, with resolved ones marked | vendor lag on Arch | Arch only |
+| OSV advisories (`api.osv.dev`, batched) | which published advisories name an installed version | npm, PyPI, Packagist, RubyGems, Maven, Go, crates.io, NuGet, Pub | machine-wide stores only; no project lockfiles |
+| **CISA KEV** (`known_exploited_vulnerabilities.json`) | is this *being exploited right now* | an `exploited in the wild` flag on any finding, plus the vendor's required action | US catalogue; absence is not proof of safety |
+| **FIRST EPSS** (`api.first.org`) | probability of exploitation in 30 days | ranked urgency beside the severity | a forecast, not a fact |
+| Docker registry (manifest digests) | does the running image still match its tag | container images | needs registry access; no image scanning |
+| The distro's own tools (`apt`, `dnf`, `pacman`, `zypper`, `apk`) | what the archive would install | the pending list and the plan | a stale archive index is called out, never trusted |
+
+Not wired, and named as gaps in the pane: Fedora's Bodhi updates, SUSE's CSAF/VEX documents, and any
+form of image scanning (Trivy-class) — the plugin does not pretend to see inside a container.
+
 ## Why a scan does not answer instantly
 
 A scan of two servers takes 40-60 seconds: an ssh round trip, `dpkg` for every package an advisory

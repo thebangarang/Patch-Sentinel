@@ -9,8 +9,8 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate,
-         PatchSentinel, SECTIONS } from './pane.mjs'
+import { VerdictBar, HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel,
+         ApplyGate, PatchSentinel, SECTIONS } from './pane.mjs'
 
 const dataPath = process.env.PANE_DATA || '../pane-data.json'
 const data = JSON.parse(readFileSync(dataPath, 'utf8'))
@@ -77,6 +77,24 @@ for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXT
   }
   console.log('  ' + name.padEnd(36) + html.length + ' bytes')
 }
+
+// The one-glance verdict: an exploited CVE must outrank everything else on that line.
+const verdict = renderToStaticMarkup(createElement(VerdictBar, {
+  status: {
+    age_seconds: 120,
+    threat: { exploited: ['CVE-2021-44228'] },
+    blind: [{ class: 'images' }],
+    hosts: {
+      a: { pending_count: 4, kernel: { verdict: 'kernel-current' }, vendor_lag: [] },
+      b: { pending_count: 0, kernel: { verdict: 'kernel-reboot-needed' }, vendor_lag: [{}, {}] }
+    }
+  }
+}))
+for (const expected of ['2 servers', '4 updates pending', '2 vendor-lag', '1 exploited',
+                        '1 reboot needed', '1 could not look', 'measured']) {
+  if (!verdict.includes(expected)) throw new Error('the verdict bar is missing: ' + expected)
+}
+console.log('  verdict bar names every fact, including the exploited one')
 
 // The legend and the panels read from one array, in one order. This asserts it on the rendered page.
 const root = renderToStaticMarkup(createElement(PatchSentinel, {}))
