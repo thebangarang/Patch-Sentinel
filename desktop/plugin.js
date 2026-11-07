@@ -123,27 +123,32 @@ const LEVEL_COLOUR = { green: C.ok, amber: C.warn, red: C.danger, grey: C.faint 
  * which is exactly what happened when the legend was six hand-written lines and the pane gained a
  * seventh panel above them.
  */
+// One question per section, one line each. The long explanation lives in the tooltip (`long`), which
+// is where a person looks when they want it — a wall of it above the pane is what makes the pane feel
+// like documentation instead of an answer.
 const SECTIONS = [
-  { key: 'servers', title: 'servers',
-    blurb: 'the machines this pane answers for (this one included). A server is added only after a '
-         + 'probe of it succeeds; addresses only, never a key.' },
-  { key: 'overview', title: 'overview',
-    blurb: 'one row per server: what the last scan measured, and how old that measurement is.' },
-  { key: 'packages', title: 'system packages',
-    blurb: "the distro's own update list (apt, dnf, pacman, zypper), every package it would upgrade." },
-  { key: 'integrity', title: 'integrity',
-    blurb: 'is this host still running what was installed on it? Package checksums, the preload hook '
-         + 'and the listening sockets compared with the baseline this plugin recorded. A patch scanner '
-         + 'reads versions; an intrusion does not change a version. It never says "not compromised".' },
-  { key: 'libs', title: 'libs & runtimes',
-    blurb: 'what each language toolchain has installed machine-wide, checked against OSV: npm, pip, '
-         + 'PHP, Ruby, Rust, .NET, Maven and Go.' },
-  { key: 'plan', title: 'the fix, as commands',
-    blurb: 'the system packages above turned into ordered commands to paste where you are allowed '
-         + 'to patch (risk, downtime, how to verify, how to undo). This is the normal way to apply '
-         + 'an update; everything else here is measurement.' },
-  { key: 'gaps', title: 'gaps',
-    blurb: 'what this scan could not see. Red here is a fact about the scan, not the server.' },
+  { key: 'servers', title: 'servers', blurb: 'the machines this pane answers for',
+    long: 'This machine plus any host you add. A host is added only after a probe of it succeeds, and '
+        + 'only the address is stored — never a key.' },
+  { key: 'overview', title: 'overview', blurb: 'one row per server, and how old the reading is',
+    long: 'What the last scan measured per host: pending packages, kernel, images, advisories, and '
+        + 'whether each patch is in effect.' },
+  { key: 'packages', title: 'system packages', blurb: "the distro's update list",
+    long: 'Every package apt, dnf, pacman or zypper would upgrade, with which USN or advisory names '
+        + 'that exact version.' },
+  { key: 'integrity', title: 'integrity', blurb: 'is this still what we installed?',
+    long: 'Package checksums, the /etc/ld.so.preload hook and the listening sockets against the '
+        + 'baseline recorded earlier. A patch scanner reads versions; an intrusion does not change a '
+        + 'version. It never says "not compromised".' },
+  { key: 'libs', title: 'libs & runtimes', blurb: 'language packages, against OSV',
+    long: 'What each toolchain has installed machine-wide and in every project virtualenv — npm, pip, '
+        + 'PHP, Ruby, Rust, .NET, Maven, Go, Dart — plus jars on disk and lockfile pins.' },
+  { key: 'plan', title: 'the fix, as commands', blurb: 'the commands to paste',
+    long: 'The pending packages turned into ordered commands, with risk, downtime, how to verify and '
+        + 'how to undo. This is the normal way to patch; APPLY is an optional shortcut on top of it.' },
+  { key: 'gaps', title: 'gaps', blurb: 'what this scan could not see',
+    long: 'Red here is a fact about the scan, not about the server: a host that did not answer, a feed '
+        + 'that refused, a surface with no reader yet.' },
 ]
 const SECTION = SECTIONS.reduce((acc, section) => { acc[section.key] = section; return acc }, {})
 
@@ -396,12 +401,13 @@ function chip(text, colour, title) {
   }, text)
 }
 
-function label(text, extra) {
+function label(text, extra, title) {
   // section headings carry the HUD accent: bigger, spaced, with a rule under them and a faint glow,
   // so the eye can jump between panels without reading a word
   return jsx('div', {
+    title: title || undefined,
     style: {
-      fontFamily: MONO, fontSize: '0.8125rem', letterSpacing: '0.18em', fontWeight: 700,
+      fontFamily: MONO, fontSize: '0.875rem', letterSpacing: '0.18em', fontWeight: 700,
       textTransform: 'uppercase', color: C.accent, paddingBottom: '4px',
       borderBottom: '1px solid ' + C.accent, display: 'inline-block',
       textShadow: '0 0 12px rgba(53, 214, 214, 0.28)', ...(extra || {})
@@ -409,7 +415,7 @@ function label(text, extra) {
   }, text)
 }
 
-function Copy({ text, what, label }) {
+function Copy({ text, what, label, primary }) {
   const [done, setDone] = useState(false)
   const onClick = useCallback(async () => {
     try {
@@ -426,11 +432,54 @@ function Copy({ text, what, label }) {
     onClick,
     title: what ? 'Copy ' + what : 'Copy',
     style: {
-      fontFamily: MONO, fontSize: '0.75rem', padding: '2px 8px', cursor: 'pointer',
-      color: done ? C.ok : C.dim, background: 'transparent',
-      border: '1px solid ' + C.border, borderRadius: '3px'
+      fontFamily: MONO, fontSize: '0.75rem', padding: primary ? '3px 10px' : '2px 8px',
+      cursor: 'pointer',
+      color: done ? C.ok : (primary ? C.accent : C.dim),
+      background: primary ? 'rgba(77,227,208,0.08)' : 'transparent',
+      border: '1px solid ' + (done ? C.ok : (primary ? C.accent : C.border)),
+      borderRadius: '3px', whiteSpace: 'nowrap'
     }
   }, done ? 'copied' : (label || 'copy'))
+}
+
+/**
+ * A command is the thing the operator came for, so it gets its own block: where to run it, the text
+ * in mono at reading size, and one copy control that says what it copies. Scattering the copy button
+ * next to a paragraph is what made "the fix, as commands" feel like documentation.
+ */
+function Command({ text, where, label }) {
+  return jsxs('div', {
+    style: {
+      border: '1px solid ' + C.border, borderLeft: '2px solid ' + C.accent,
+      borderRadius: '4px', background: C.panel, padding: '6px 9px', marginTop: '5px'
+    }
+  }, [
+    jsxs('div', {
+      key: 'head',
+      style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }
+    }, [
+      jsx('span', {
+        key: 'label',
+        style: {
+          fontFamily: MONO, fontSize: '0.6875rem', letterSpacing: '0.08em',
+          textTransform: 'uppercase', color: C.faint
+        }
+      }, label || 'run in a terminal'),
+      where
+        ? jsx('span', { key: 'where', style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim } },
+            where)
+        : null,
+      jsx('span', { key: 'spacer', style: { flex: 1 } }),
+      jsx(Copy, { key: 'copy', text, label: 'copy', what: 'the command', primary: true })
+    ]),
+    jsx('pre', {
+      key: 'body',
+      style: {
+        fontFamily: MONO, fontSize: '0.8125rem', lineHeight: 1.55, margin: 0, color: C.text,
+        whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+      }
+    }, text)
+  ])
 }
 
 // --------------------------------------------------------------------------- the verdict bar
@@ -556,7 +605,7 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
 
   return jsxs('section', { style: sectionStyle('servers') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label(SECTION.servers.title),
+      label(SECTION.servers.title, null, SECTION.servers.long),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.faint } },
         hosts ? hosts.length + ' server(s)' : '…'),
@@ -750,7 +799,7 @@ function NowPanel({ status }) {
 
   return jsxs('section', { style: sectionStyle('overview') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label(SECTION.overview.title),
+      label(SECTION.overview.title, null, SECTION.overview.long),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.faint } },
         ago(status ? status.age_seconds : null) + ' · exit ' + (status && status.exit_code !== null && status.exit_code !== undefined ? status.exit_code : '—'))
@@ -785,7 +834,7 @@ function UpdatesPanel({ entry, hostLabel }) {
 
   return jsxs('section', { style: sectionStyle('packages') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label(SECTION.packages.title),
+      label(SECTION.packages.title, null, SECTION.packages.long),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { fontFamily: MONO, fontSize: '0.75rem', color: total ? C.warn : C.faint },
         hostLabel ? total + ' available' : '—'),
@@ -1099,7 +1148,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
 
   return jsxs('section', { style: sectionStyle('libs') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label(SECTION.libs.title),
+      label(SECTION.libs.title, null, SECTION.libs.long),
       jsx('span', { style: { flex: 1 } }),
       libraries
         ? jsx('span', {
@@ -1121,7 +1170,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 : 'nothing to upgrade'))
         : null,
       flagged && flagged.length && commandCount
-        ? jsx(Copy, { text: fixText,
+        ? jsx(Copy, { text: fixText, primary: true,
                       label: 'copy ' + commandCount + ' command' + (commandCount === 1 ? '' : 's') })
         // no second sentence: the header already says "nothing to run" and why. Saying it twice in
         // the same row is how a screen with nothing to do reads like a to-do list.
@@ -1138,6 +1187,12 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
         }
       }, busy ? [jsx('span', { key: 'dot', className: 'ps-dot' }), 'checking'] : libraries ? 're-check' : 'check')
     ]),
+    busy
+      ? jsx(ScanLine, {
+          label: 'reading the installed packages, every project virtualenv, the jars on disk and the '
+                 + 'lockfile pins'
+        })
+      : null,
     libraries
       ? jsxs('div', {}, [
           // a project is what ships; the machine-wide view cannot see what a lockfile pins
@@ -1361,6 +1416,13 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 : null
             ])
           })),
+          commandCount
+            ? jsx(Command, {
+                text: fixText,
+                label: 'the fix — ' + commandCount + ' command(s)',
+                where: '· on ' + (hostLabel || 'this machine')
+              })
+            : null,
           // an acknowledgement is a record, not a filter: it stays on screen with its reason and its
           // end date, and it can be reopened. Nothing is ever deleted by it.
           acknowledged.length
@@ -1519,7 +1581,7 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
 
   return jsxs('section', { style: sectionStyle('integrity') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label(SECTION.integrity.title),
+      label(SECTION.integrity.title, null, SECTION.integrity.long),
       jsx('span', {
         style: { fontSize: '0.6875rem', color: C.faint }
       }, state
@@ -1546,9 +1608,8 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
       : null,
     !state && !busy
       ? jsx('div', { style: { fontSize: '0.8125rem', color: C.dim, lineHeight: 1.5 } },
-          'Not measured yet. This is the one check that answers whether what is installed is still '
-          + 'what was installed — package checksums, a preloaded library hook, and sockets that were '
-          + 'not there before. It takes about a minute and runs only when you ask.')
+          'Not read yet — this is the check that answers “has anything on this host changed without '
+          + 'the package manager?” It takes about a minute and runs only when you press the button.')
       : state ? jsxs('div', {}, [
           jsx('div', {
             style: { fontSize: '0.8125rem', color: tone(state.state), marginBottom: '4px' }
@@ -1727,7 +1788,7 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where, libra
 
   return jsxs('section', { style: sectionStyle('plan') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label(SECTION.plan.title),
+      label(SECTION.plan.title, null, SECTION.plan.long),
       jsx('span', { style: { flex: 1 } }),
       jsx('button', {
         type: 'button',
@@ -1743,7 +1804,8 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where, libra
         }
       }, planning ? 'planning…' : steps.length ? 're-plan' : 'commands for ' + (hostLabel || 'this machine')),
       steps.length
-        ? jsx(Copy, { text: steps.map((step) => step.command).join('\n'), what: 'all the steps' })
+        ? jsx(Copy, { text: steps.map((step) => step.command).join('\n'), what: 'all the steps',
+                      label: 'copy all ' + steps.length + ' commands', primary: true })
         : null
     ]),
     steps.length > 1
@@ -1766,15 +1828,10 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where, libra
         }, [
           jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline' } }, [
             jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.accent } }, String(index + 1).padStart(2, '0')),
-            jsx('span', { style: { flex: 1, fontSize: '0.8125rem', fontWeight: 600 } }, step.action),
-            jsx(Copy, { text: step.command, what: 'the command' })
+            jsx('span', { style: { flex: 1, fontSize: '0.8125rem', fontWeight: 600 } }, step.action)
           ]),
-          jsx('div', {
-            style: {
-              fontFamily: MONO, fontSize: '0.8125rem', color: C.text, marginTop: '4px',
-              whiteSpace: 'pre-wrap', wordBreak: 'break-all'
-            }
-          }, step.command),
+          jsx(Command, { text: step.command, label: 'step ' + (index + 1) + ' — run in a terminal',
+                         where: whereLine || null }),
           jsx('div', { style: { fontSize: '0.8125rem', color: C.dim, marginTop: '4px' } },
             'risk ' + step.risk + ' · downtime ' + step.downtime),
           jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, marginTop: '3px' } }, step.why),
@@ -1865,7 +1922,7 @@ function GapsPanel({ coverage, selected }) {
 
   return jsxs('section', { style: sectionStyle('gaps') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label(SECTION.gaps.title),
+      label(SECTION.gaps.title, null, SECTION.gaps.long),
       jsx('span', { style: { flex: 1 } }),
       jsx('span', { style: { fontSize: '0.75rem', color: C.faint } },
         selected ? 'what a scan of ' + selected + ' cannot see' : 'what this scan cannot see')
@@ -2101,13 +2158,9 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
                       }
                     }, 'connect: ' + result.handoff.where.ssh)
                   : null,
-                result.handoff.commands.map((command, index) => jsxs('div', {
-                  key: index,
-                  style: {
-                    fontFamily: MONO, fontSize: '0.6875rem', color: C.accent, marginTop: '3px',
-                    wordBreak: 'break-all'
-                  }
-                }, [String(index + 1) + '. ', command])),
+                result.handoff.commands.map((command, index) => jsx(Command, {
+                  key: index, text: command, label: 'step ' + (index + 1) + ' — run by hand'
+                })),
                 result.handoff.verify
                   ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim, marginTop: '3px', wordBreak: 'break-all' } },
                       'then check: ' + result.handoff.verify)
@@ -2148,6 +2201,7 @@ export function PatchSentinel({ compact }) {
   const [libraries, setLibraries] = useState(null)
   // integrity is a slow reading with its own button, so it has its own state and its own "read at"
   const [integrity, setIntegrity] = useState(null)
+  const [legend, setLegend] = useState(false)
   const [integrityBusy, setIntegrityBusy] = useState(false)
   const [integritySeconds, setIntegritySeconds] = useState(0)
   const [libBusy, setLibBusy] = useState(false)
@@ -2392,12 +2446,12 @@ export function PatchSentinel({ compact }) {
     ]),
     // the stylesheet is always mounted; the line appears only while something is being measured
     jsx('style', {}, SCAN_CSS),
-    busy || libBusy
+    // the top line is the global rescan's. Anything else animates inside its own section, next to the
+    // control that started it — an animation at the top of the page for a local check reads as a scan.
+    busy
       ? jsx(ScanLine, {
-          label: busy
-            ? 'measuring every server — packages, kernel, images, advisories, and whether each patch '
-              + 'is in effect'
-            : 'reading the language stores, every virtualenv and the jars on disk'
+          label: 'measuring every server — packages, kernel, images, advisories, and whether each '
+                 + 'patch is in effect'
         })
       : null,
     scanError
@@ -2409,13 +2463,47 @@ export function PatchSentinel({ compact }) {
           + (health.data_dir ? ' (data dir: ' + health.data_dir + ')' : '')
           + ' — if you declared more, it is running without its settings: restart the app.')
       : null,
+    // one line, not a wall: the pane already repeats each title above its section
     jsxs('div', {
       style: {
-        fontSize: '0.8125rem', color: C.faint, lineHeight: 1.5, marginBottom: '14px',
-        borderLeft: '2px solid ' + C.border, paddingLeft: '9px'
+        display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap',
+        marginBottom: '12px', paddingLeft: '9px', borderLeft: '2px solid ' + C.border
       }
-    }, SECTIONS.map((section) => jsx('div', { key: section.key },
-        jsx('b', { style: { color: C.dim } }, section.title), ' — ' + section.blurb))),
+    }, [
+      jsx('span', {
+        key: 'order',
+        style: { fontFamily: MONO, fontSize: '0.75rem', color: C.dim, letterSpacing: '0.02em' }
+      }, SECTIONS.map((section) => section.title).join('  →  ')),
+      jsx('button', {
+        key: 'toggle',
+        type: 'button',
+        onClick: () => setLegend((current) => !current),
+        style: {
+          fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px', cursor: 'pointer',
+          color: legend ? C.accent : C.faint, background: 'transparent',
+          border: '1px solid ' + C.border, borderRadius: '3px'
+        }
+      }, legend ? 'hide' : 'what each one is')
+    ]),
+    legend
+      ? jsx('div', {
+          style: { fontSize: '0.8125rem', color: C.faint, lineHeight: 1.55, marginBottom: '12px',
+                   paddingLeft: '9px', borderLeft: '2px solid ' + C.border }
+        }, SECTIONS.map((section) => jsx('div', { key: section.key, style: { marginBottom: '3px' } },
+            jsx('b', { style: { color: C.dim } }, section.title), ' — ' + section.long)))
+      : null,
+    (status && Object.keys(status.hosts || {}).length
+      && !Object.values(status.hosts || {}).some((host) => host && (host.pending_count !== undefined
+        || (host.os && host.os.id))))
+      && !busy
+      ? jsx('div', {
+          style: {
+            fontSize: '0.8125rem', color: C.warn, marginBottom: '12px', padding: '7px 10px',
+            border: '1px solid ' + C.border, borderLeft: '2px solid ' + C.warn, borderRadius: '4px'
+          }
+        }, 'Nothing measured yet on these servers — press rescan all. It reads each host once and '
+           + 'takes about twenty seconds; nothing is installed or changed by it.')
+      : null,
     jsx(VerdictBar, { status }),
     jsx(HostsPanel, { onChanged: load }),
     jsx(NowPanel, { status }),

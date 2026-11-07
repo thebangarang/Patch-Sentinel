@@ -51,6 +51,14 @@ if (!integrityHtml.includes('only re-baseline ports you meant to open')) throw n
 if (!integrityHtml.includes('ss -lntup')) throw new Error('the advice names no command')
 if (!integrityHtml.includes('could not be read')) throw new Error('the non-root caveat is missing')
 if (integrityHtml.includes('not compromised<')) throw new Error('the panel claimed a host is not compromised')
+// a local check animates inside its own section, never at the top of the page
+const libsBusy = renderToStaticMarkup(
+  createElement(LanguagesPanel, { libraries: data.libraries || data, onCheck: noop, busy: true }))
+if (!libsBusy.includes('ps-scan-track')) throw new Error(
+  'the libs check shows no progress line inside its section')
+if (!libsBusy.includes('every project virtualenv')) throw new Error(
+  'the libs progress line does not say what it is reading')
+
 const integrityEmpty = renderToStaticMarkup(
   createElement(IntegrityPanel, { reading: null, busy: false, seconds: 0, onRead: noop, onRebaseline: noop }))
 if (!integrityEmpty.includes('read integrity')) throw new Error('the not-read-yet state has no button')
