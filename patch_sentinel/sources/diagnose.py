@@ -13,7 +13,6 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
-from pathlib import Path
 
 from . import shell
 
@@ -33,8 +32,8 @@ SIGNATURES = [
      "that host wants a password, and this plugin never handles one: copy a key with the command "
      "below, or point the entry at an ssh alias that already uses a key"),
     (r"permission denied", "auth",
-     "the host answered but rejected the key — append this machine's public key to the target's "
-     "authorized_keys (the command is below)"),
+     "the host answered but rejected the key — give the target this machine's public key (command "
+     "below); ssh-copy-id does exactly that"),
     (r"host key verification failed", "hostkey",
      "this is the first connection to that host: accept its key once from a terminal, then test again"),
     (r"remote host identification has changed", "hostkey",
@@ -44,23 +43,18 @@ SIGNATURES = [
 ]
 
 
-def public_key() -> str:
-    """The key a user should copy, as a ready-to-paste line. Never the private one.
+def agent_has_keys() -> bool:
+    """Does the ssh agent hold a key? Asked of the agent, never of the filesystem.
 
-    Looks for the conventional names first, then any ``*.pub``: a machine that only has a project key
-    (this lab has ``id_ed25519_patchlab.pub``) still gets a usable command instead of a shrug.
+    Reading ``~/.ssh`` to find a public key is what the admission scan (rightly) rates as access to
+    the ssh directory, and this plugin's promise is that it does not go near a credential. The agent
+    answers the only question worth asking, in public form.
     """
-    ssh_dir = Path.home() / ".ssh"
-    candidates = [ssh_dir / name for name in ("id_ed25519.pub", "id_rsa.pub", "id_ecdsa.pub")]
-    candidates += sorted(ssh_dir.glob("*.pub")) if ssh_dir.is_dir() else []
-    for candidate in candidates:
-        try:
-            text = candidate.read_text(encoding="utf-8").strip()
-        except OSError:
-            continue
-        if text.startswith(("ssh-", "ecdsa-")):
-            return text
-    return ""
+    try:
+        proc = subprocess.run(["ssh-add", "-L"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0 and proc.stdout.strip().startswith(("ssh-", "ecdsa-"))
 
 
 def diagnose(target: str | None) -> dict:
@@ -105,11 +99,9 @@ def _fix_for(stage: str, target: str) -> str:
     if sep and tail.isdigit():
         user_host, port = host, tail
     port_flag = f" -p {port}" if port else ""
-    key = public_key()
     if stage == "auth":
-        if key:
-            return f"ssh-copy-id -i ~/.ssh/{_key_name()}{port_flag} {user_host}"
-        return f"ssh {user_host} 'mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys'  # then paste a key"
+        # ssh-copy-id with no -i uses the agent's default key, which is the one ssh just offered
+        return f"ssh-copy-id{port_flag} {user_host}"
     if stage == "hostkey":
         host_only = user_host.split("@")[-1].strip("[]")
         return f"ssh-keygen -R {host_only} && ssh{port_flag} {user_host} true"
@@ -118,11 +110,4 @@ def _fix_for(stage: str, target: str) -> str:
     return ""
 
 
-def _key_name() -> str:
-    ssh_dir = Path.home() / ".ssh"
-    for name in ("id_ed25519.pub", "id_rsa.pub", "id_ecdsa.pub"):
-        if (ssh_dir / name).exists():
-            return name
-    for candidate in sorted(ssh_dir.glob("*.pub")) if ssh_dir.is_dir() else []:
-        return candidate.name
-    return "id_ed25519.pub"
+

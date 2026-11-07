@@ -59,7 +59,6 @@ DISTROS = {
         # shell that does not exist, and the console comes up at a login prompt with no user created
         # (measured from the boot log). ash is what the image ships.
         "shell": "/bin/ash",
-        "needs_manual_user": True,
         "port": 2224,
         "label": "alpine-lab",
     },
@@ -144,25 +143,14 @@ def write_seed(name: str) -> None:
         "PATCH_SENTINEL_LAB_SEED",
         str(Path.home() / ".config" / "patch-sentinel-lab" / "seed-extra.yaml")))
     extra_text = extra.read_text(encoding="utf-8") if extra.exists() else ""
-    # Alpine's cloud-init image runs the datasource but does not apply `users:`. Three attempts on
-    # fresh overlays: /bin/bash (no such file), /bin/ash, then runcmd plus a fixed home mode — each one
-    # wrote the key to ~/.ssh/authorized_keys ("adduser: user 'alpine' in use" in the console log) and
-    # sshd still answered "Permission denied (publickey)". Not solved. Lab only; Alpine's lag path stays
-    # adapter-tested rather than live-proven, and docs/coverage.md says so.
+    # Alpine's cloud-init image runs the datasource but does not apply `users:`, so no account is
+    # created and ssh refuses the key. Three attempts on fresh overlays (bash, ash, then an explicit
+    # runcmd that provisioned the account and its key file) all ended at "Permission denied
+    # (publickey)". Account provisioning does not belong in this tree anyway — the admission scan
+    # rates it a backdoor, and it is right to — so it stays out: export PATCH_SENTINEL_LAB_SEED with
+    # an image-specific seed when a host needs one. Alpine's vendor-lag path is adapter-tested only;
+    # docs/coverage.md says so.
     manual = ""
-    if spec.get("needs_manual_user"):
-        manual = ("runcmd:\n"
-                  "  - [ sh, -c, \"adduser -D -s /bin/ash " + spec["user"] + " || true; "
-                  "mkdir -p /home/" + spec["user"] + "/.ssh; "
-                  # sshd's StrictModes refuses a key in a home that is group/world-writable, and the
-                  # image's home is 777: the key was written and still rejected (measured).
-                  "chown " + spec["user"] + ":" + spec["user"] + " /home/" + spec["user"] + "; "
-                  "chmod 755 /home/" + spec["user"] + "; "
-                  "printf '%s\\n' '" + pub + "' > /home/" + spec["user"] + "/.ssh/authorized_keys; "
-                  "chown -R " + spec["user"] + ":" + spec["user"] + " /home/" + spec["user"] + "/.ssh; "
-                  "chmod 700 /home/" + spec["user"] + "/.ssh; "
-                  "chmod 600 /home/" + spec["user"] + "/.ssh/authorized_keys; "
-                  "rc-service sshd restart 2>/dev/null || true\" ]\n")
     p["userdata"].write_text(
         "#cloud-config\n"
         f"hostname: {spec['label']}\n"

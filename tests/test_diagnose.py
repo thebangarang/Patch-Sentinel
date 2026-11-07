@@ -63,7 +63,7 @@ class Stages(unittest.TestCase):
 
 
 class Fixes(unittest.TestCase):
-    def test_auth_points_at_ssh_copy_id_with_the_key_and_the_port(self):
+    def test_auth_points_at_ssh_copy_id_with_the_port(self):
         fix = diagnose._fix_for("auth", "debian@10.0.0.9:2223")
         self.assertIn("ssh-copy-id", fix)
         self.assertIn("-p 2223", fix)
@@ -75,27 +75,21 @@ class Fixes(unittest.TestCase):
     def test_a_name_that_does_not_resolve_gets_a_plain_retry(self):
         self.assertEqual(diagnose._fix_for("dns", "vps.example"), "ssh vps.example true")
 
-    def test_no_suggestion_ever_names_a_private_key(self):
-        # a suggestion may point at ~/.ssh/id_ed25519.pub, never at the private half
+    def test_no_suggestion_touches_a_key_file(self):
+        """The plugin never reads, writes or names a key path: ssh and its agent own that."""
         for stage in ("auth", "dns", "tcp", "hostkey", "shell"):
             with self.subTest(stage=stage):
                 fix = diagnose._fix_for(stage, "a@b")
-                if "~/.ssh/" in fix:
-                    # whatever key this machine has, the suggestion names the .pub half
-                    self.assertRegex(fix, r"~/\.ssh/[\w.-]+\.pub")
+                self.assertNotIn("authorized_keys", fix)
+                self.assertNotIn("~/.ssh", fix)
 
-    def test_the_command_uses_the_key_that_exists(self):
-        import tempfile
-        from pathlib import Path as P
+    def test_the_agent_is_asked_about_keys_never_the_filesystem(self):
         from unittest import mock
-        with tempfile.TemporaryDirectory() as home:
-            ssh = P(home) / ".ssh"
-            ssh.mkdir()
-            (ssh / "id_ed25519_patchlab.pub").write_text("ssh-ed25519 AAAA lab\n", encoding="utf-8")
-            with mock.patch.object(diagnose.Path, "home", return_value=P(home)):
-                fix = diagnose._fix_for("auth", "debian@10.0.0.9")
-                self.assertIn("ssh-copy-id", fix)
-                self.assertIn("id_ed25519_patchlab.pub", fix)
+        with mock.patch.object(diagnose.subprocess, "run",
+                               return_value=result(0, stdout="ssh-ed25519 AAAA key comment\n")):
+            self.assertTrue(diagnose.agent_has_keys())
+        with mock.patch.object(diagnose.subprocess, "run", return_value=result(1)):
+            self.assertFalse(diagnose.agent_has_keys())
 
 
 if __name__ == "__main__":
