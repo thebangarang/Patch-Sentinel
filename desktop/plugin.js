@@ -125,10 +125,6 @@ const SECTIONS = [
          + 'an update; everything else here is measurement.' },
   { key: 'gaps', title: 'gaps',
     blurb: 'what this scan could not see. Red here is a fact about the scan, not the server.' },
-  { key: 'apply', title: 'apply from here — optional',
-    blurb: 'runs the same commands from the pane, for hosts where the account Hermes runs as can '
-         + 'patch unattended (root over ssh, or a no-prompt rule). It needs the server name typed, '
-         + 'and it says up front when a host cannot allow it.' }
 ]
 const SECTION = SECTIONS.reduce((acc, section) => { acc[section.key] = section; return acc }, {})
 
@@ -764,7 +760,6 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
   // separately is the difference between "you are behind" and "nobody has shipped a fix" — the operator
   // ran `hermes update` and saw 40 advisories either way, which reads as if the update did nothing.
   const withFix = (rows) => rows.filter((v) => Array.isArray(v.fixed) && v.fixed.length)
-  const agentWithFix = withFix(findingsAgent)
   const mineWithFix = withFix(findingsMine)
 
   return jsxs('section', { style: { marginBottom: '18px' } }, [
@@ -974,23 +969,23 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 + '“show all ' + matching.length + '” lists them')
             : jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '3px' } },
                 rows.length + ' row(s) in the box above — it scrolls, the filter narrows'),
-          // Hermes's own environment is measured, but it is not an alert: the only lever is
-          // `hermes update`, so a green row or a red one changes nothing the operator can do here.
-          // Mentioned only when an advisory exists at all, and never in the counts above.
-          agentOwned.length && findingsAgent.length
+          // Hermes's own environment is measured, but it is not an alert. The only lever is
+          // `hermes update`, and an advisory there clears when the agent ships past it — so a count
+          // of them is a wall the operator rightly called noise. Named only when one of them is
+          // being exploited: that is a fact about this machine, whatever the fix path is.
+          agentOwned.length && findingsAgent.some((v) => v.kev)
             ? jsxs('div', {
                 style: {
-                  marginTop: '8px', padding: '5px 8px', borderLeft: '2px solid ' + C.border,
+                  marginTop: '8px', padding: '5px 8px', borderLeft: '2px solid ' + C.warn,
                   borderRadius: '3px'
                 }
               }, [
                 jsxs('div', {
-                  style: { display: 'flex', alignItems: 'baseline', gap: '8px', fontSize: '0.625rem', color: C.faint }
+                  style: { display: 'flex', alignItems: 'baseline', gap: '8px', fontSize: '0.625rem', color: C.warn }
                 }, [
-                  jsx('span', {}, agentOwned.length + ' package(s) ship with Hermes itself and '
-                    + findingsAgent.length + ' carry an advisory (' + agentWithFix.length
-                    + ' already fixed upstream, ' + (findingsAgent.length - agentWithFix.length)
-                    + ' not yet) — their only lever is `hermes update`, so they are not counted above'),
+                  jsx('span', {}, findingsAgent.filter((v) => v.kev).length
+                    + ' exploited advisory(ies) sit in packages Hermes itself ships — `hermes update` '
+                    + 'is the lever, and this machine cannot close it sooner'),
                   jsx('span', { style: { flex: 1 } }),
                   jsx('button', {
                     type: 'button',
@@ -1002,11 +997,6 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                     }
                   }, showHermes ? 'hide' : 'show')
                 ]),
-                jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
-                  'They are read from the interpreter the agent runs on and upgraded with `hermes '
-                  + 'update`, not one by one — installing them by hand into that venv is how an agent '
-                  + 'stops starting. A “fixed upstream” advisory can survive an update: it clears '
-                  + 'when Hermes itself ships past it.'),
                 showHermes
                   ? jsx('div', {
                       style: {
@@ -1217,23 +1207,10 @@ function GapsPanel({ coverage, selected }) {
 
 // --------------------------------------------------------------------------- APPLY GATE
 
-function ApplyGate({ hostLabel, entry, initialResult }) {
+function ApplyGate({ hostLabel, entry, initialResult, probe }) {
   const [typed, setTyped] = useState('')
   const [result, setResult] = useState(initialResult || null)
   const [busy, setBusy] = useState(false)
-  // Whether this host can be patched from here is a fact about the host, and it is knowable before
-  // the operator types anything: asking it turns a refusal after the click into a stated condition
-  // before it. `sudo -n true` only, so this preflight can never prompt.
-  const [probe, setProbe] = useState(null)
-  useEffect(() => {
-    let live = true
-    setProbe(null)
-    if (!hostLabel || !entry) return () => { live = false }
-    call('/apply/preflight?host=' + encodeURIComponent(hostLabel))
-      .then((state) => { if (live) setProbe(state) })
-      .catch(() => { if (live) setProbe({ ok: false, known: false, reason: 'the preflight did not answer' }) })
-    return () => { live = false }
-  }, [hostLabel, entry])
   const armed = Boolean(hostLabel) && typed.trim() === hostLabel
 
   /**
@@ -1283,20 +1260,11 @@ function ApplyGate({ hostLabel, entry, initialResult }) {
   const steps = (result && result.steps) || []
   const measured = Boolean(entry)
   const blocked = Boolean(probe && probe.known && !probe.ok)
-  const commandBlock = entry && entry.commands
-    ? [entry.commands.stage, entry.commands.apply].filter(Boolean).join('\n')
-    : ''
   const count = measured ? (entry.pending_count || 0) : null
   const nothingToDo = measured && count === 0
   // a host that has not answered the preflight is not a host this control may touch
   const ready = armed && measured && !nothingToDo && Boolean(probe && probe.ok)
-  return jsxs('section', { style: { borderTop: '1px solid ' + C.border, paddingTop: '10px', marginTop: '6px' } }, [
-    jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', marginBottom: '6px' } }, [
-      label(SECTION.apply.title),
-      jsx('span', { style: { flex: 1 } }),
-      jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: nothingToDo ? C.faint : C.warn } },
-        !measured ? 'no measurement' : nothingToDo ? 'nothing to apply' : count + ' update(s) to install')
-    ]),
+  return jsxs('div', { style: { borderLeft: '2px solid ' + C.border, paddingLeft: '9px', marginTop: '2px' } }, [
     jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginBottom: '4px' } },
       !measured
         ? 'Nothing has been measured for ' + (hostLabel || 'this host') + ' yet — press rescan above, then come back.'
@@ -1329,14 +1297,8 @@ function ApplyGate({ hostLabel, entry, initialResult }) {
                       ? 'on ' + probe.where.machine + (probe.where.ssh ? ' (`' + probe.where.ssh + '`)' : '')
                       : 'in a terminal on this machine')
                   + '.'),
-                commandBlock
-                  ? jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', marginTop: '4px' } }, [
-                      jsx('span', {
-                        style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.accent, flex: 1, wordBreak: 'break-all' }
-                      }, commandBlock.split('\n').join('  ·  ')),
-                      jsx(Copy, { text: commandBlock, label: 'copy the commands' })
-                    ])
-                  : null
+                jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px' } },
+                  'The commands and their copy control are in the plan above — nothing is missing here.')
               ])
             : jsx('div', { style: { fontSize: '0.625rem', color: C.ok, marginBottom: '6px' } },
                 'this host allows it: ' + ((probe.where && probe.where.runs_as) || 'this account')
@@ -1485,6 +1447,21 @@ export function PatchSentinel({ compact }) {
   const [libBusy, setLibBusy] = useState(false)
   const [scanSeconds, setScanSeconds] = useState(0)
   const [scanError, setScanError] = useState(null)
+  // APPLY is the plan's shortcut, folded under it and closed by default. The preflight is asked here,
+  // not inside the control, so the closed row can already say whether this host allows it — the
+  // operator's complaint was that APPLY looked like the flow's last step and then refused.
+  const [applyOpen, setApplyOpen] = useState(false)
+  const [applyProbe, setApplyProbe] = useState(null)
+
+  useEffect(() => {
+    let live = true
+    setApplyProbe(null)
+    if (!selected) return () => { live = false }
+    call('/apply/preflight?host=' + encodeURIComponent(selected))
+      .then((state) => { if (live) setApplyProbe(state) })
+      .catch(() => { if (live) setApplyProbe({ ok: false, known: false, reason: 'the preflight did not answer' }) })
+    return () => { live = false }
+  }, [selected])
 
   const load = useCallback(async () => {
     try {
@@ -1674,9 +1651,37 @@ export function PatchSentinel({ compact }) {
     jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning,
                         where: status && status.hosts && status.hosts[selected]
                           ? status.hosts[selected].where : null }),
+    // the optional shortcut, folded under the plan it belongs to — not a step of its own
+    jsxs('div', { style: { marginBottom: '14px' } }, [
+      jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } }, [
+        jsx('button', {
+          type: 'button',
+          onClick: () => setApplyOpen((current) => !current),
+          disabled: !selected,
+          title: 'runs the same commands the plan gives you, from here',
+          style: {
+            fontFamily: MONO, fontSize: '0.625rem', padding: '2px 8px',
+            cursor: selected ? 'pointer' : 'default', color: applyOpen ? C.accent : C.faint,
+            background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
+          }
+        }, (applyOpen ? '▾ ' : '▸ ') + 'run it from here instead — optional'),
+        jsx('span', { style: { flex: 1 } }),
+        jsx('span', {
+          style: {
+            fontFamily: MONO, fontSize: '0.5625rem',
+            color: applyProbe && applyProbe.known && !applyProbe.ok ? C.warn : C.faint
+          }
+        }, applyProbe === null ? 'checking this host…'
+           : !applyProbe.known ? 'unknown'
+           : applyProbe.ok ? 'allowed on ' + selected
+           : 'not available on ' + selected + ' — sudo needs a password there')
+      ]),
+      applyOpen
+        ? jsx(ApplyGate, { hostLabel: selected, probe: applyProbe,
+                           entry: status && status.hosts ? status.hosts[selected] : null })
+        : null
+    ]),
     jsx(GapsPanel, { coverage, selected }),
-    jsx(ApplyGate, { hostLabel: selected,
-                     entry: status && status.hosts ? status.hosts[selected] : null }),
     jsx('div', {
       style: {
         marginTop: '12px', paddingTop: '8px', borderTop: '1px solid ' + C.border,

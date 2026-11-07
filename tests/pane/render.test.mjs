@@ -74,6 +74,18 @@ if (!updates.includes('copy the commands')) throw new Error('the package list ha
 if (!updates.includes('run them on debian@10.0.0.9')) throw new Error('the package list does not say where')
 if (!updates.includes('ssh -p 2223 debian@10.0.0.9')) throw new Error('the ssh line is missing from the update panel')
 
+// An exploited advisory inside Hermes's own environment is worth one line — it is a fact about this
+// machine, even though the only lever is `hermes update`.
+const AGENT_EXPLOITED = JSON.parse(JSON.stringify(FIXTURE))
+AGENT_EXPLOITED.vulnerable = AGENT_EXPLOITED.vulnerable.map((v) => (v.package === 'filelock'
+  ? { ...v, kev: { cves: ['CVE-5000-3'], name: 'fixture', added: '2026-01-01', ransomware: false } }
+  : v))
+const agentExploited = renderToStaticMarkup(createElement(LanguagesPanel, {
+  libraries: AGENT_EXPLOITED, onCheck: noop, busy: false }))
+if (!agentExploited.includes('sit in packages Hermes itself ships')) throw new Error(
+  'an exploited advisory in the agent env is not named')
+if (!agentExploited.includes('hermes update')) throw new Error('the agent lever is not stated')
+
 for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXTURE],
                                  ['libs (nothing read)', null]]) {
   const html = renderToStaticMarkup(createElement(LanguagesPanel, { libraries, onCheck: noop,
@@ -83,12 +95,13 @@ for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXT
     if (!html.includes('/opt/py/bin/pip3 install -U')) throw new Error('no resolved pip path in a row')
     if (!html.includes('npm install -g lodash@4.17.21')) throw new Error('no npm fix command')
     // React escapes the apostrophe in text nodes, so assert on the fragment before it
-    // Hermes's own packages are a footnote, not an alert: never in the counts, only named in the
-    // sentence that says their lever is `hermes update`
-    if (!html.includes('ship with Hermes itself')) throw new Error('the agent-owned footnote is missing')
-    if (!html.includes('not counted above')) throw new Error('the agent packages still read as findings')
-    if (html.includes("in Hermes&#x27;s env") || html.includes("in Hermes's env")) throw new Error(
+    // Hermes's own packages are measured and then dropped: no count, no paragraph, nothing at all
+    // unless one of them is being exploited (the fixture's agent package is not)
+    if (html.includes('in Hermes&#x27;s env') || html.includes("in Hermes's env")) throw new Error(
       "the agent packages are counted in the libs header again")
+    if (html.includes('ship with Hermes')) throw new Error(
+      'the agent packages are mentioned although nothing there is exploited')
+    if (html.includes('0 not yet')) throw new Error('the agent-package advisory paragraph is back')
     // the chip text is lowercase in the DOM (CSS uppercases it)
     if (!html.includes('exploited · ransomware')) throw new Error('the exploited-in-the-wild chip is missing')
     if (!html.includes('epss 97')) throw new Error('the EPSS chip is missing')

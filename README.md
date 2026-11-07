@@ -153,16 +153,20 @@ form of image scanning (Trivy-class) — the plugin does not pretend to see insi
 1. **rescan** — measure every server;
 2. **the fix, as commands** — the plan for the selected server: the ordered commands, where to run
    them (`ssh …` for a remote one), how to verify, how to undo, and one *copy the commands* control;
-3. **apply from here — optional** — the same commands run by the pane itself, for hosts where the
-   account Hermes runs as can patch unattended. It is a shortcut, not the last step: on a host where
-   sudo wants a password it says so *before* you type anything, and hands you the commands instead.
+3. **run it from here instead — optional** — a collapsed row under the plan, not a section and not a
+   step: it runs the same commands from the pane, for hosts where the account Hermes runs as can
+   patch unattended. The row itself already says whether this host allows it (`not available on
+   beelink — sudo needs a password there`), so nothing looks like a final step that would refuse.
 
 The system-package list copies commands, not a list of versions — a package list is a reference, and
 the copy control exists to paste something a shell can run.
 
-Packages that ship inside Hermes's own environment are measured but never counted as your findings:
-they are upgraded by `hermes update`, so a red row there would be a lever you cannot pull. They appear
-as one quiet footnote, with a count, only when an advisory exists at all.
+Packages that ship inside Hermes's own environment are measured and then dropped from the view: they
+are upgraded by `hermes update`, so a count of them is a lever you cannot pull. One line appears only
+if one of those advisories is being exploited (CISA KEV) — that is a fact about the machine whatever
+the fix path is. The same rule drops any component at version `0.0.0`: an in-tree install has no
+published version to compare, and matching one against advisory ranges invented twenty CVEs on
+`hermes-agent 0.0.0`.
 
 ## When APPLY refuses
 

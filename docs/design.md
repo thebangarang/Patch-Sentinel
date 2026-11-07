@@ -110,10 +110,12 @@ Three rules decide what earns the operator's attention, and each was a complaint
 
 The instinctive reading of a scan → plan → apply flow is that apply is the end of the work. On most
 machines it is not: the plugin runs as the account Hermes runs as (`hermes`), and `sudo -n` there
-fails. So the pane states the precondition **before** the click — `GET /apply/preflight` runs
-`sudo -n true` on that host when a server is selected, and the section either says *this host allows
-it* or *not available here*, with the reason, the account, and the commands to run instead. The
-button stays locked until the preflight has said yes.
+fails. So APPLY is not a section at all: it is a collapsed row **under the plan**, labelled *run it from here
+instead — optional*, and the row itself carries the verdict — `GET /apply/preflight` runs
+`sudo -n true` on that host when a server is selected, so it reads *allowed on webasix* or *not
+available on beelink — sudo needs a password there* before anything is typed or clicked. Opening it
+shows the gate; inside, a blocked host points back at the plan instead of repeating its commands
+(two copies of the same three lines is exactly the duplication the operator called out).
 
 ## Dashboard pane (opt-in, desktop half)
 

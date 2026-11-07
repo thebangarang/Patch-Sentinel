@@ -23,4 +23,5 @@ cd "$work"
 PANE_DATA="${PANE_DATA:-$root/tmp/pane-data.json}" node fixcmd.test.mjs
 node diagnose.test.mjs
 PANE_DATA="${PANE_DATA:-$root/tmp/pane-data.json}" node render.test.mjs
+node page.test.mjs
 echo "pane checks passed"
