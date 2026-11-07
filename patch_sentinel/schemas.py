@@ -248,6 +248,32 @@ CVE_ACK = {
     },
 }
 
+CVE_INTEGRITY = {
+    "name": "cve_integrity",
+    "description": (
+        "Ask whether this host is still running what was installed on it — the question a patch "
+        "scanner cannot answer, because an intrusion does not change a version number. Three readings: "
+        "package checksums (dpkg -V / rpm -Va / apk audit — a package-managed file whose content no "
+        "longer matches the package that owns it, with operator-edited conffiles counted apart), "
+        "/etc/ld.so.preload (a preload hook is what an injected library needs), and the listening "
+        "socket set compared against the baseline this plugin recorded last time. It answers clean / "
+        "finding / could-not-look and NEVER 'not compromised': a rootkit that hides, a fileless attack "
+        "or a kernel compromise is invisible to all three — say so when relaying a clean result. Takes "
+        "tens of seconds on a full package database and is therefore not part of cve_scan."),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "host": {"type": "string",
+                     "description": "Host label from the inventory. Omit for this machine."},
+            "action": {"type": "string", "enum": ["check", "baseline"],
+                       "description": "'check' (default) reads and compares; 'baseline' accepts the "
+                                      "current sockets as the known set (use after a deliberate "
+                                      "change, e.g. a new service was deployed)."},
+        },
+        "required": [],
+    },
+}
+
 SCHEMAS = {schema["name"]: schema
            for schema in (CVE_SCAN, CVE_PLAN, CVE_EXPLAIN, CVE_COVERAGE, CVE_LIBRARIES,
-                          CVE_IMAGE, CVE_SBOM, CVE_APPLY, CVE_ACK)}
+                          CVE_IMAGE, CVE_SBOM, CVE_APPLY, CVE_ACK, CVE_INTEGRITY)}

@@ -9,12 +9,44 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { VerdictBar, HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel,
-         ApplyGate, PatchSentinel, SECTIONS } from './pane.mjs'
+import { VerdictBar, HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, IntegrityPanel, PendingPanel,
+         GapsPanel, ApplyGate, PatchSentinel, SECTIONS } from './pane.mjs'
 
 const dataPath = process.env.PANE_DATA || '../pane-data.json'
 const data = JSON.parse(readFileSync(dataPath, 'utf8'))
 const noop = () => {}
+
+// The integrity reading: never read yet, a finished reading, and a finding. It renders real rows and
+// must never print a clean bill of health — "no evidence of tampering in the surfaces read" is the
+// strongest sentence this section is allowed to say.
+const integrityFinding = {
+  host: 'beelink', read_at: Math.floor(Date.now() / 1000) - 90,
+  integrity: {
+    state: 'finding', account: 'hermes', root: false,
+    note: 'hermes: 14 packaged file(s) could not be read, so this check cannot see them — run it as root for the whole set',
+    tamper: { state: 'finding', changed_count: 1, conffile_count: 2, missing_count: 0,
+              unreadable_count: 14, changed: ['/usr/bin/ssh'] },
+    preload: { state: 'ok', entries: [] },
+    listeners: { state: 'finding', count: 36, new: ['tcp:4444'], baseline_count: 36 }
+  },
+  answers: [
+    { check: 'package checksums', state: 'finding', detail: '1 file(s) changed, 2 conffile(s) edited by the operator', items: ['/usr/bin/ssh'] },
+    { check: 'preload hook', state: 'ok', detail: '/etc/ld.so.preload is empty', items: [] },
+    { check: 'listening sockets', state: 'finding', detail: '1 not in the baseline', items: ['tcp:4444'] }
+  ],
+  answer: 'integrity: 1 package-managed file(s) no longer match (or are gone) — first: /usr/bin/ssh'
+}
+const integrityHtml = renderToStaticMarkup(
+  createElement(IntegrityPanel, { reading: integrityFinding, busy: false, seconds: 0,
+                                  onRead: noop, onRebaseline: noop }))
+if (!integrityHtml.includes('package checksums')) throw new Error('the integrity rows are missing')
+if (!integrityHtml.includes('tcp:4444')) throw new Error('the new socket is not named')
+if (!integrityHtml.includes('what this cannot see')) throw new Error('the limits toggle is missing')
+if (!integrityHtml.includes('could not be read')) throw new Error('the non-root caveat is missing')
+if (integrityHtml.includes('not compromised<')) throw new Error('the panel claimed a host is not compromised')
+const integrityEmpty = renderToStaticMarkup(
+  createElement(IntegrityPanel, { reading: null, busy: false, seconds: 0, onRead: noop, onRebaseline: noop }))
+if (!integrityEmpty.includes('read integrity')) throw new Error('the not-read-yet state has no button')
 
 const panes = [
   ['servers (closed)', createElement(HostsPanel, { onChanged: noop })],

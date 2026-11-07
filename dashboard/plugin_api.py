@@ -40,6 +40,8 @@ if "patch_sentinel" not in sys.modules:
     _spec.loader.exec_module(_module)
 
 from patch_sentinel import store, tools                # noqa: E402  (after the loader above)
+from patch_sentinel.sources import hosts as inventory_module       # noqa: E402
+from patch_sentinel.sources import integrity as integrity_module   # noqa: E402
 
 # A router gets no ``ctx``, so it cannot call ``ctx.get_config``; it reads back what register()
 # resolved instead (see store.save_settings). Before the plugin has ever registered, this is empty
@@ -253,6 +255,30 @@ def libraries(project: str | None = None, host: str | None = None) -> dict:
     if host:
         args["host"] = host
     return _payload(tools.cve_libraries, args)
+
+
+@router.get("/integrity")
+def integrity_cached(host: str | None = None) -> dict:
+    """The last integrity reading, with the time it was taken — never a fresh 40-second probe."""
+    label = host or (inventory_module.inventory(tools._settings.get("hosts")) or [{}])[0].get("label")
+    data_dir = str(tools._settings.get("data_dir") or store.data_dir())
+    record = integrity_module.read_result(data_dir, label) if label else None
+    state = (record or {}).get("state") or None
+    return {"host": label, "read_at": (record or {}).get("at"), "integrity": state,
+            "answers": integrity_module.answers(state) if state else [],
+            "answer": integrity_module.summarise(state) if state else
+                      "no integrity reading yet — press read integrity"}
+
+
+@router.post("/integrity")
+def integrity_start(body: dict | None = None) -> dict:
+    """Read it now. A job, because verifying a package database takes tens of seconds."""
+    args = {}
+    if isinstance(body, dict) and body.get("host"):
+        args["host"] = body["host"]
+    if isinstance(body, dict) and body.get("action"):
+        args["action"] = body["action"]
+    return _start("integrity", tools.cve_integrity, args)
 
 
 @router.post("/ack")

@@ -116,6 +116,10 @@ const SECTIONS = [
     blurb: 'one row per server: what the last scan measured, and how old that measurement is.' },
   { key: 'packages', title: 'system packages',
     blurb: "the distro's own update list (apt, dnf, pacman, zypper), every package it would upgrade." },
+  { key: 'integrity', title: 'integrity',
+    blurb: 'is this host still running what was installed on it? Package checksums, the preload hook '
+         + 'and the listening sockets compared with the baseline this plugin recorded. A patch scanner '
+         + 'reads versions; an intrusion does not change a version. It never says "not compromised".' },
   { key: 'libs', title: 'libs & runtimes',
     blurb: 'what each language toolchain has installed machine-wide, checked against OSV: npm, pip, '
          + 'PHP, Ruby, Rust, .NET, Maven and Go.' },
@@ -1479,6 +1483,129 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
 
 // --------------------------------------------------------------------------- PENDING
 
+
+/**
+ * Integrity: is this host still running what was installed on it?
+ *
+ * The reading takes tens of seconds (a package database is large), so it is never run by a scan and
+ * never run silently: the section shows the last reading with its age, and a button takes a fresh one.
+ * Three rows, each either measured or saying why not — and the section never prints "not compromised".
+ */
+function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline }) {
+  const [open, setOpen] = useState(false)
+  const state = reading && reading.integrity
+  const answers = (reading && reading.answers) || []
+  const age = reading && reading.read_at ? ago(reading.read_at) : null
+  const tone = (value) => (value === 'finding' ? C.danger
+    : value === 'ok' ? C.ok
+    : value === 'baseline' ? C.warn : C.faint)
+
+  return jsxs('section', { style: sectionStyle('integrity') }, [
+    jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
+      label(SECTION.integrity.title),
+      jsx('span', {
+        style: { fontSize: '0.5625rem', color: C.faint }
+      }, state
+        ? (age ? 'read ' + age : 'read')
+        : 'not read yet'),
+      jsx('button', {
+        type: 'button',
+        onClick: () => onRead(),
+        disabled: busy,
+        title: 'verifies package checksums, the preload hook and the listening sockets — about a '
+               + 'minute on a full package database',
+        style: {
+          marginLeft: 'auto', fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
+          cursor: busy ? 'default' : 'pointer', color: busy ? C.faint : C.accent,
+          background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
+        }
+      }, busy
+        ? [jsx('span', { key: 'dot', className: 'ps-dot' }), ' reading' + (seconds ? ' ' + seconds + 's' : '')]
+        : (state ? 'read again' : 'read integrity'))
+    ]),
+    !state
+      ? jsx('div', { style: { fontSize: '0.6875rem', color: C.dim, lineHeight: 1.5 } },
+          'Not measured yet. This is the one check that answers whether what is installed is still '
+          + 'what was installed — package checksums, a preloaded library hook, and sockets that were '
+          + 'not there before. It takes about a minute and runs only when you ask.')
+      : jsxs('div', {}, [
+          jsx('div', {
+            style: { fontSize: '0.6875rem', color: tone(state.state), marginBottom: '4px' }
+          }, reading.answer || ''),
+          jsx('div', {
+            style: {
+              border: '1px solid ' + C.border, borderRadius: '3px', background: C.panel,
+              padding: '4px 7px'
+            }
+          }, answers.map((row, index) => jsxs('div', {
+            key: index,
+            style: {
+              display: 'flex', gap: '8px', alignItems: 'baseline', padding: '2px 0',
+              borderTop: index ? '1px solid ' + C.border : 'none'
+            }
+          }, [
+            jsx('span', {
+              key: 'chip',
+              style: {
+                fontFamily: MONO, fontSize: '0.5625rem', textTransform: 'uppercase',
+                letterSpacing: '0.04em', color: tone(row.state), minWidth: '74px'
+              }
+            }, row.state === 'baseline' ? 'baseline' : row.state === 'ok' ? 'measured'
+              : row.state === 'finding' ? 'finding' : 'could not look'),
+            jsx('span', {
+              key: 'what', style: { fontSize: '0.6875rem', color: C.text, minWidth: '132px' }
+            }, row.check),
+            jsx('span', {
+              key: 'detail',
+              style: { flex: 1, fontSize: '0.625rem', color: C.dim, wordBreak: 'break-word' }
+            }, (row.detail || '')
+               + ((row.items || []).length ? ' — ' + row.items.slice(0, 4).join(', ') : ''))
+          ]))),
+          reading.integrity && reading.integrity.note
+            ? jsx('div', { style: { fontSize: '0.5625rem', color: C.warn, marginTop: '4px' } },
+                reading.integrity.note)
+            : null,
+          jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '5px' } }, [
+            jsx('button', {
+              key: 'why',
+              type: 'button',
+              onClick: () => setOpen((current) => !current),
+              style: {
+                fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 7px', cursor: 'pointer',
+                color: open ? C.accent : C.faint, background: 'transparent',
+                border: '1px solid ' + C.border, borderRadius: '3px'
+              }
+            }, open ? 'hide what this cannot see' : 'what this cannot see'),
+            reading.integrity && reading.integrity.listeners
+              && reading.integrity.listeners.state !== 'unmeasured'
+              ? jsx('button', {
+                  key: 'rebase',
+                  type: 'button',
+                  onClick: () => onRebaseline(),
+                  disabled: busy,
+                  title: 'accepts the sockets listening right now as the known set — use it after you '
+                         + 'deploy something, not to silence a port you do not recognise',
+                  style: {
+                    fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 7px',
+                    cursor: busy ? 'default' : 'pointer', color: C.dim, background: 'transparent',
+                    border: '1px solid ' + C.border, borderRadius: '3px'
+                  }
+                }, 're-baseline the sockets')
+              : null
+          ]),
+          open
+            ? jsx('div', {
+                style: { fontSize: '0.625rem', color: C.faint, marginTop: '4px', lineHeight: 1.5 }
+              }, 'A rootkit that hides from dpkg and ss, a fileless attack, an intrusion that restored the '
+               + 'checksums afterwards, and anything living only in memory are all invisible here. A '
+               + 'clean reading means no evidence of tampering in the three surfaces above — not that '
+               + 'this host is uncompromised. For that you need an EDR (Wazuh, auditd rules, Falco) and '
+               + 'a place to send its alerts.')
+            : null
+        ])
+  ])
+}
+
 function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where, libraryFindings }) {
   const steps = (plan && plan.steps) || []
   const refusals = (plan && plan.refusals) || []
@@ -1898,7 +2025,8 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
 
 // --------------------------------------------------------------------------- root
 
-export { VerdictBar, HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, PendingPanel, GapsPanel, ApplyGate,
+export { VerdictBar, HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, IntegrityPanel, PendingPanel,
+         GapsPanel, ApplyGate,
          buildFixCommand, fixBlock, actionableFixes, SECTIONS }
 
 export function PatchSentinel({ compact }) {
@@ -1910,6 +2038,10 @@ export function PatchSentinel({ compact }) {
   const [planning, setPlanning] = useState(false)
   const [health, setHealth] = useState(null)
   const [libraries, setLibraries] = useState(null)
+  // integrity is a slow reading with its own button, so it has its own state and its own "read at"
+  const [integrity, setIntegrity] = useState(null)
+  const [integrityBusy, setIntegrityBusy] = useState(false)
+  const [integritySeconds, setIntegritySeconds] = useState(0)
   const [libBusy, setLibBusy] = useState(false)
   const [scanSeconds, setScanSeconds] = useState(0)
   const [scanError, setScanError] = useState(null)
@@ -1928,6 +2060,47 @@ export function PatchSentinel({ compact }) {
       .catch(() => { if (live) setApplyProbe({ ok: false, known: false, reason: 'the preflight did not answer' }) })
     return () => { live = false }
   }, [selected])
+
+  // the stored reading for the selected host: cheap, so it loads with the page and never probes
+  const loadIntegrity = useCallback(async (label) => {
+    if (!label) { setIntegrity(null); return }
+    try {
+      setIntegrity(await call('/integrity?host=' + encodeURIComponent(label)))
+    } catch (err) {
+      setIntegrity(null)
+    }
+  }, [])
+
+  useEffect(() => { loadIntegrity(selected) }, [selected, loadIntegrity])
+
+  /**
+   * Take a fresh reading. It is a job, not a request: verifying a package database takes tens of
+   * seconds and a renderer call is cut at 30. `action: baseline` re-records the socket set.
+   */
+  const readIntegrity = useCallback(async (action) => {
+    if (integrityBusy || !selected) return
+    setIntegrityBusy(true)
+    setIntegritySeconds(0)
+    try {
+      const started = await call('/integrity', {
+        method: 'POST', body: { host: selected, action: action || 'check' }
+      })
+      if (started && started.error) return
+      for (let tick = 0; tick < 160; tick += 1) {
+        await new Promise((resolve) => { setTimeout(resolve, 1500) })
+        let job = null
+        try { job = ((await call('/jobs')) || {}).integrity || null } catch (err) { continue }
+        if (job && job.seconds) setIntegritySeconds(job.seconds)
+        if (job && !job.running) break
+      }
+      await loadIntegrity(selected)
+    } catch (err) {
+      setIntegrity({ host: selected, read_at: null, integrity: null, answers: [],
+                     answer: 'the reading could not be taken: ' + String(err && err.message ? err.message : err) })
+    } finally {
+      setIntegrityBusy(false)
+    }
+  }, [integrityBusy, selected, loadIntegrity])
 
   const load = useCallback(async () => {
     try {
@@ -2126,6 +2299,9 @@ export function PatchSentinel({ compact }) {
     jsx(NowPanel, { status }),
     jsx(UpdatesPanel, { entry: status && status.hosts ? status.hosts[selected] : null,
                         hostLabel: selected }),
+    jsx(IntegrityPanel, { reading: integrity, busy: integrityBusy, seconds: integritySeconds,
+                          onRead: () => readIntegrity('check'),
+                          onRebaseline: () => readIntegrity('baseline') }),
     jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }),
     jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning,
                         libraryFindings: (libraries && libraries.vulnerable || [])

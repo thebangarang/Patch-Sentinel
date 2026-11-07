@@ -49,7 +49,7 @@ class DashboardRoutes(unittest.TestCase):
         # silently loses a surface. cve_apply is the gate — it must be here.
         self.assertEqual(sorted(body["tools"]),
                          ["cve_ack", "cve_apply", "cve_coverage", "cve_explain", "cve_image",
-                          "cve_libraries", "cve_plan", "cve_sbom", "cve_scan"])
+                          "cve_integrity", "cve_libraries", "cve_plan", "cve_sbom", "cve_scan"])
 
     def test_health_reports_which_build_of_the_pane_is_served(self):
         body = self.client.get(self.base + "/health").json()

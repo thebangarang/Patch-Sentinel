@@ -36,7 +36,7 @@ its own verdict, not "patched". A registry that answered `429` is *unverified*, 
 - **`full-upgrade`, never `upgrade`**: a new kernel arrives as a new *package*, which `upgrade` keeps
   back. That is design rule 4, and it has its own test.
 
-## The four tools
+## The tools
 
 | tool | input | what it measures |
 |---|---|---|
@@ -45,6 +45,10 @@ its own verdict, not "patched". A registry that answered `429` is *unverified*, 
 | `cve_explain` | `cve_id` | the vendor record for one CVE, plus our measured state and any tracker/measurement disagreement |
 | `cve_coverage` | — | what answered and when, and the standing gaps. Never empty, never green |
 | `cve_image` | `image`, `host?` | what is inside one container image — distro, packages read from its layers, CVEs with fixing versions. Never starts the image |
+| `cve_libraries` | `host?`, `project?` | every language package installed machine-wide, every project virtualenv, jars on disk, or one project's lockfiles — asked against OSV. Lockfile ranges are counted as unverifiable, never as findings |
+| `cve_integrity` | `host?`, `action?` | package checksums, the `/etc/ld.so.preload` hook, and listening sockets against the recorded baseline. Says clean / finding / could-not-look — never "not compromised" |
+| `cve_ack` | `package`, `advisory`, `reason` | records one advisory as accepted, with a reason and an expiry (90 days). `action: release` reopens it |
+| `cve_apply` | `host`, `confirm`, `dry_run` | runs the plan behind a typed-confirmation gate; refuses without a passwordless sudo as a handover of the same commands |
 
 ## Coverage — what is proven, and on which machine
 
@@ -141,6 +145,25 @@ own staleness as a vendor delay.
 
 Where an advisory carries a Workarounds section, the finding also shows the vendor's own temporary
 mitigation — quoted, never invented.
+
+## "Is this still what we installed?" — the integrity section
+
+A patch scanner reads versions. An intrusion does not change a version: it replaces a binary, preloads
+a library, or opens a port. `cve_integrity` reads three surfaces, on demand (it takes about a minute on
+a full package database, so a scan never runs it — the pane shows the last reading and its age):
+
+| reading | a finding means |
+|---|---|
+| **package checksums** — `dpkg -V`, `rpm -Va`, `apk audit` | a package-managed file no longer matches the checksum of the package that owns it, or is gone. Files marked `c` are **conffiles**, which are meant to be edited: they are counted apart and never called tampering. `?????????` means dpkg *could not read* the file — it is reported as unreadable, never as modified. |
+| **preload hook** — `/etc/ld.so.preload` | the file is not empty. Almost nothing legitimate uses it, and it is what an injected library needs. |
+| **listening sockets** — `ss`/`netstat` | a socket that is not in the baseline this plugin recorded. The first reading records the baseline and says so; `re-baseline the sockets` accepts the current set after a deliberate change. |
+
+Two refusals keep it honest. A non-root reading cannot see every file, so the payload names how many
+it could not read and says the check is not conclusive without root. And the section **never says "not
+compromised"**: the strongest sentence it prints is *no evidence of tampering in the surfaces read*, and
+`what this cannot see` states the rest — a rootkit that hides from `ss`/`dpkg`, a fileless attack, a
+kernel compromise, and an intrusion that restored the checksums afterwards are all invisible here. Real
+compromise detection is an EDR (Wazuh, auditd rules, Falco) with somewhere to send its alerts.
 
 ## "There is a fix for nobody" — and how to live with it
 

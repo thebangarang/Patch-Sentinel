@@ -17,12 +17,14 @@ import functools
 import json
 import os
 import re
+import time
 from pathlib import Path
 
 from . import apply as apply_mod
 from . import plan, schemas, store, verdict
-from .sources import (acks, cve_tracker, dispatch, distro_lag, environments, image_db, jars,
-                      languages, osv, projects, repos, sbom, services, shell, support, threat, usn)
+from .sources import (acks, cve_tracker, dispatch, distro_lag, environments, image_db, integrity,
+                      jars, languages, osv, projects, repos, sbom, services, shell, support, threat,
+                      usn)
 from .sources import vendor as vendor_lag
 from .sources import hosts as inventory_module
 
@@ -297,6 +299,8 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
         # the host's own codename must match the release the notices were read for.
         vendor_state = None
         host_release = (result.get("os") or {}).get("codename")
+        # one place for the state directory: integrity's baseline and its last reading live there
+        state_data_dir = str(_settings.get("data_dir") or store.data_dir())
         if os_id == "ubuntu" and feed.get("ok") and host_release == release:
             advisories: dict[str, dict] = {}
             for notice in feed.get("notices") or []:
@@ -397,6 +401,12 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
         if effect.get("reboot_required") or effect.get("services"):
             findings += 1
 
+        # Integrity is a 40-second reading on a full package database, so a scan does not run it: it
+        # carries the last reading and its timestamp, and `cve_integrity` takes a fresh one on demand.
+        integrity_cached = integrity.read_result(state_data_dir, label)
+        if integrity_cached and (integrity_cached.get("state") or {}).get("state") == "finding":
+            findings += 1
+
         # Is this release still receiving fixes at all? An end-of-life host with nothing pending is
         # not a patched host, it is a host nobody will publish a fix for again.
         # the adapter reports a *codename* on Ubuntu; the lifecycle table is keyed by version
@@ -451,6 +461,10 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             # whose feed answered, and how old it is: a stale feed is not a vendor delay
             "vendor_feed": (vendor_state or {}).get("feed"),
             "services": effect,
+            "integrity": (integrity_cached or {}).get("state"),
+            "integrity_at": (integrity_cached or {}).get("at"),
+            "integrity_answer": integrity_cached
+            and integrity.summarise((integrity_cached or {}).get("state") or {}) or "",
             "support": support_state,
             "pockets": pockets,
             # the commands that would fix this host, and where they belong — the pane must never
@@ -1153,6 +1167,38 @@ def cve_libraries(args: dict, **kwargs) -> str:
                   "limits": LIBRARY_LIMITS})
 
 
+def cve_integrity(args: dict, **kwargs) -> str:
+    """Is what is installed still what was installed? Checksums, the preload hook, the sockets.
+
+    Deliberately not part of ``cve_scan``: verifying a full package database takes tens of seconds, and
+    a scan has to stay interactive. The scan carries the last reading and its timestamp; this takes a
+    fresh one. It answers clean / finding / could-not-look, and never "not compromised".
+    """
+    requested = str(args.get("host") or "").strip() or _local_label()
+    host = next((h for h in _inventory() if h["label"].lower() == requested.lower()), None)
+    if host is None:
+        return _json({"tool": "cve_integrity", **_not_in_inventory(requested)})
+    data_dir = str(_settings.get("data_dir") or store.data_dir())
+    state = integrity.collect(host.get("target"), data_dir, host["label"],
+                              timeout=int(_settings.get("timeout") or 180))
+    if (str(args.get("action") or "").strip().lower() in ("baseline", "rebase")
+            and (state.get("listeners") or {}).get("set") is not None):
+        # re-baselining is an explicit act: it accepts today's sockets as the known set, and the
+        # previous set is not lost — it is replaced, so the pane says the baseline was renewed now
+        record = integrity.write_baseline(data_dir, host["label"], state["listeners"]["set"])
+        state["listeners"].update(state="baseline", new=[], baseline_at=record.get("at"),
+                                  baseline_count=record.get("count"),
+                                  reason=f"baseline renewed now with {record.get('count')} socket(s)")
+    integrity.save_result(data_dir, host["label"], state)
+    return _json({"tool": "cve_integrity",
+                  "host": {"label": host["label"], "target": host.get("target") or "local"},
+                  "integrity": state,
+                  "answers": integrity.answers(state),
+                  "answer": integrity.summarise(state),
+                  "read_at": time.time(),
+                  "exit_code": 0 if state.get("state") in ("ok", "baseline") else (1 if state.get("state") == "finding" else 2)})
+
+
 def cve_ack(args: dict, **kwargs) -> str:
     """Record "I know, and I accept it" against one advisory, with a reason and an end date."""
     action = str(args.get("action") or "ack").strip().lower()
@@ -1184,6 +1230,7 @@ HANDLERS = {
     "cve_image": cve_image,
     "cve_sbom": cve_sbom,
     "cve_ack": cve_ack,
+    "cve_integrity": cve_integrity,
 }
 
 __all__ = ["HANDLERS", "SCHEMAS", "configure", "cve_scan", "cve_plan", "cve_explain",
