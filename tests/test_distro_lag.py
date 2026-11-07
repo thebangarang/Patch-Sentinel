@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -150,18 +151,66 @@ class ArchFeed(unittest.TestCase):
         self.assertEqual(distro_lag.arch_advisories(json.dumps(self.FEED), {"zsh": "5.9-1"}), {})
 
 
-class FamiliesWithoutAFeed(unittest.TestCase):
-    """The gap must be *said*, not implied: these return unsupported, with the API named."""
+class TheLastTwoFamilies(unittest.TestCase):
+    """Fedora and openSUSE used to answer "unsupported". They now read a feed, and a feed that cannot
+    be read is *unmeasured* — never unsupported, never clean."""
 
-    def test_fedora_is_unsupported_and_names_bodhi(self):
-        answer = distro_lag.assess(None, "dnf", "fedora", "44", timeout=5)
-        self.assertEqual(answer["state"], "unsupported")
+    def test_fedora_asks_bodhi_for_its_release(self):
+        asked = {}
+
+        def fake_advisories(version_id, **kwargs):
+            asked["release"] = version_id
+            return {"openssl": {"version": "3.2.5", "notice": "FEDORA-2026-a", "cves": ["CVE-1"]}}
+
+        def fake_run(command, target=None, timeout=0, path_prefix=None):
+            if command.startswith("rpm -qa"):
+                return 0, "openssl\t3.2.4-1.fc45\topenssl-3.2.4-1.fc45.src.rpm\n"
+            if command.startswith("dnf -q list"):
+                return 0, "openssl.x86_64 3.2.4-1.fc45 updates\n"
+            return 0, ""
+
+        with mock.patch.object(distro_lag, "shell") as fake_shell, \
+             mock.patch("patch_sentinel.sources.bodhi.advisories", side_effect=fake_advisories):
+            fake_shell.run.side_effect = fake_run
+            fake_shell.SYSTEM_PATH_PREFIX = ""
+            answer = distro_lag.assess(None, "dnf", "fedora", "45", timeout=5)
+        self.assertEqual(asked["release"], "45")
+        self.assertEqual(answer["state"], "measured")
+        self.assertEqual(answer["feed"]["product"], "F45")
+        self.assertEqual(answer["counts"]["vendor_lag"], 1)
+        self.assertEqual(answer["vendor_lag"][0]["fixed_version"], "3.2.5")
+
+    def test_opensuse_asks_the_oval_for_its_product(self):
+        def fake_run(command, target=None, timeout=0, path_prefix=None):
+            if command.startswith("rpm -qa"):
+                return 0, "libopenssl-3-0\t3.1.4-150600.5.1\topenssl-3-3.1.4-150600.5.1.src.rpm\n"
+            return 0, "<stream><update-list><update name=\"libopenssl-3-0\" edition=\"3.1.4-150600.5.1\"/></update-list></stream>"
+
+        index = {"libopenssl-3-0": {"version": "3.1.5-150600.6.1", "notice": "CVE-2026-1",
+                                    "cves": ["CVE-2026-1"], "cve_count": 1}}
+        meta = {"product": "opensuse.leap.15.6.xml.gz", "feed_date": "Thu, 25 Jun 2026 15:58:48 GMT",
+                "age_days": 135.0, "stale": True, "source_url": "https://example/oval"}
+        with mock.patch.object(distro_lag, "shell") as fake_shell, \
+             mock.patch("patch_sentinel.sources.suse_oval.advisories", return_value=(index, meta)):
+            fake_shell.run.side_effect = fake_run
+            fake_shell.SYSTEM_PATH_PREFIX = ""
+            answer = distro_lag.assess(None, "zypper", "opensuse-leap", "15.6", timeout=5)
+        self.assertEqual(answer["state"], "measured")
+        self.assertTrue(answer["feed"]["stale"])
+        self.assertEqual(answer["counts"]["vendor_lag"], 1)
+        self.assertIn("libopenssl-3-0", answer["vendor_lag"][0]["package"])
+
+    def test_a_feed_that_cannot_be_read_is_unmeasured_not_unsupported(self):
+        def fake_run(command, target=None, timeout=0, path_prefix=None):
+            return 0, "openssl\t3.2.4-1.fc45\topenssl-3.2.4-1.fc45.src.rpm\n"
+
+        with mock.patch.object(distro_lag, "shell") as fake_shell, \
+             mock.patch("patch_sentinel.sources.bodhi.advisories", side_effect=OSError("no route")):
+            fake_shell.run.side_effect = fake_run
+            fake_shell.SYSTEM_PATH_PREFIX = ""
+            answer = distro_lag.assess(None, "dnf", "fedora", "45", timeout=5)
+        self.assertEqual(answer["state"], "unmeasured")
         self.assertIn("Bodhi", answer["reason"])
-
-    def test_opensuse_is_unsupported_and_names_csaf(self):
-        answer = distro_lag.assess(None, "zypper", "opensuse-leap", "15.6", timeout=5)
-        self.assertEqual(answer["state"], "unsupported")
-        self.assertIn("CSAF", answer["reason"])
 
 
 class AssessmentEndToEnd(unittest.TestCase):

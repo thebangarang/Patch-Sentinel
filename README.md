@@ -113,11 +113,24 @@ exists to remove, so it is now its own state, **vendor lag**:
 > 3 fix(es) exist upstream but not in this archive yet
 > `openssl 3.0.13-1ubuntu0.3 → 3.0.13-1ubuntu0.4 (USN-9001-1)`
 
-The comparison needs a feed that names a fixed version **per release**, and five families have one:
-Ubuntu's notice feed, Debian/Alpine/the RHEL family through OSV (`Debian:12`, `Alpine:v3.22`,
-`Rocky Linux:9`…), and Arch's own tracker. Installed ≥ fix → already fixed; the archive's candidate ≥
-fix → it is in the pending list; candidate < fix → **vendor lag**. Fedora and openSUSE have no feed
-wired yet, and those hosts say the lag is *unmeasured* rather than reporting none.
+The comparison needs a feed that names a fixed version **per release**, and every family this plugin
+ships now has one:
+
+| family | feed |
+|---|---|
+| Ubuntu | its own security notices |
+| Debian, Alpine, Rocky/Alma/RHEL | OSV, per release (`Debian:12`, `Alpine:v3.22`, `Rocky Linux:9`…) |
+| Arch | `security.archlinux.org` |
+| **Fedora** | **Bodhi** — the stable security updates for the host's release, indexed per package |
+| **openSUSE / SLES** | **SUSE's OVAL** — one document per product, already joining CVE → package → fix |
+
+Installed ≥ fix → already fixed; the archive's candidate ≥ fix → it is in the pending list; candidate
+< fix → **vendor lag**. Both new feeds are cached (6 h / 12 h) because they cost real time: a Bodhi page
+takes about ten seconds and the OVAL document is 12 MB compressed.
+
+Each feed's **own date** travels with the answer. openSUSE Leap 15.6's OVAL last moved on 2026-06-25,
+because the release left support: the row quotes it, anything older than 30 days is flagged, and the
+pane says plainly that a stale feed is not a vendor delay.
 
 Version ordering is dpkg's own, ported and checked against `dpkg --compare-versions` over 900 pairs
 (0 mismatches). Two guards matter more than the comparison itself: the distro feeds name **source**

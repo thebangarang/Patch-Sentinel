@@ -167,8 +167,17 @@ def _summarise(host: dict) -> str:
     if lag:
         sample = ", ".join(f"{row['package']} (fixed {row['fixed_version']}, archive "
                            f"{row.get('candidate') or 'nothing'})" for row in lag[:3])
-        parts.append(f"{len(lag)} package(s) have a fix the archive does not carry yet — {sample}"
-                     + (f" (+{len(lag) - 3} more)" if len(lag) > 3 else ""))
+        more = f" (+{len(lag) - 3} more)" if len(lag) > 3 else ""
+        if host.get("vendor_index_fresh") is False:
+            # the comparison ran, but this host has not refreshed its package index: the archive
+            # answers "nothing" because it was never asked, and saying "the fix is missing" would be
+            # a claim nobody measured
+            parts.append(f"{len(lag)} package(s) look older than the vendor's fix, but this host's "
+                         f"package index is older than 48 h — refresh it and rescan before believing "
+                         f"that — {sample}{more}")
+        else:
+            parts.append(f"{len(lag)} package(s) have a fix the archive does not carry yet — "
+                         f"{sample}{more}")
     kernel = host.get("kernel") or {}
     kernel_line = f"kernel {kernel.get('running')} → {kernel.get('verdict')}"
     if kernel.get("verdict") == "kernel-unknown":
@@ -299,10 +308,12 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             assessed = distro_lag.assess(
                 result.get("target"), str(result.get("family") or ""), str(os_id or ""),
                 str(host_release or "unknown"),
-                timeout=int(_settings.get("timeout") or 180))
+                timeout=int(_settings.get("timeout") or 180),
+                cache_dir=str(_settings.get("data_dir") or "") or None)
             vendor_state = {"vendor_lag": assessed.get("vendor_lag") or [],
                             "counts": assessed.get("counts") or {},
                             "advisories_read": assessed.get("advisories_read"),
+                            "feed": assessed.get("feed"),
                             "state": assessed.get("state"), "reason": assessed.get("reason"),
                             "index_fresh": assessed.get("index_fresh"),
                             "index_note": assessed.get("index_note") or ""}
@@ -359,6 +370,8 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             "vendor_index_fresh": (vendor_state or {}).get("index_fresh"),
             "vendor_index_note": (vendor_state or {}).get("index_note") or "",
             "vendor_threat": (vendor_state or {}).get("threat"),
+            # whose feed answered, and how old it is: a stale feed is not a vendor delay
+            "vendor_feed": (vendor_state or {}).get("feed"),
             # the commands that would fix this host, and where they belong — the pane must never
             # offer a list of packages as if a package named "1.2.3" were something you can paste
             "commands": _commands_for(result.get("family")),
@@ -668,17 +681,27 @@ def cve_coverage(args: dict, **kwargs) -> str:
                         "scan here names; a lockfile makes the same project fully covered",
          "next": "commit the lockfile — that is the fix, and this plugin reads it the moment it "
                  "exists. Guessing from a range would be a claim, not a measurement."},
-        {"gap": "vendor lag on Fedora and openSUSE hosts", "state": "not measured",
-         "hosts": "fedora, opensuse-leap, opensuse-tumbleweed, sles", "kind": "limit",
-         "why": "vendor lag needs a feed that names a fixed version per release. Ubuntu (USN), "
-                "Debian, Alpine, the RHEL family (all through OSV, per release) and Arch (its AVG "
-                "tracker) are read. Fedora's CVEs live inside Bodhi updates and openSUSE's in CSAF "
-                "documents; neither is wired yet, so those hosts report a fix the archive does not "
-                "carry as '0 pending'.",
-         "consequence": "on Fedora or openSUSE, 'nothing to do' can still mean 'the vendor has not "
-                        "shipped it yet' — the host row says the lag itself is unmeasured",
-         "next": "a Bodhi adapter (updates per package and release) and a CSAF/VEX one would close "
-                 "it. Until then the gap is named here rather than implied by a green row."},
+        {"gap": "vendor lag on a release the vendor has stopped updating", "state": "partly measured",
+         "hosts": "suse (ancient releases), and any distro past its end of life", "kind": "limit",
+         "why": "vendor lag is measured on all six families this plugin ships: Ubuntu (USN), Debian, "
+                "Alpine and the RHEL family (OSV per release), Arch (its AVG tracker), Fedora "
+                "(Bodhi's stable security updates) and openSUSE/SUSE (their OVAL document). What no "
+                "feed can answer is a release its vendor has stopped publishing for: openSUSE 15.6's "
+                "OVAL last moved in June 2026, so the comparison runs against a snapshot. The feed's "
+                "own date is quoted on the host row and a feed older than 30 days is flagged.",
+         "consequence": "on an out-of-support release the lag list is as current as the vendor's last "
+                        "publication — which is a fact about the release, not about this scan",
+         "next": "upgrade off an end-of-life release; that is the only thing that produces new "
+                 "advisories for it."},
+        {"gap": "container image packages", "state": "not measured", "hosts": "every",
+         "kind": "limit",
+         "why": "docker image ids and digests are compared against the registry (a rebuilt upstream "
+                "image is reported), but the packages *inside* an image are not read. That needs a "
+                "layer reader this plugin does not ship, or an external scanner.",
+         "consequence": "an image built last year on a vulnerable base reads as 'up to date' when "
+                        "the registry has not moved it",
+         "next": "the layer reader is the next coverage item; until then the pane says the layer "
+                 "contents are unmeasured rather than clean."},
         {"gap": "operating systems without an adapter", "state": "not measured",
          "hosts": "every", "kind": "limit",
          "why": f"adapters exist for: {', '.join(implemented)}; every other OS answers "

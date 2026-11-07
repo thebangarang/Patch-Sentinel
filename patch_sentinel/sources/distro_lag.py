@@ -71,6 +71,7 @@ LIST_COMMANDS = {
     "apk": ("apk info -v 2>/dev/null", "apk"),
     "dnf": ("rpm -qa --qf '%{NAME}\\t%{VERSION}-%{RELEASE}\\t%{SOURCERPM}\\n' 2>/dev/null", "rpm"),
     "pacman": ("pacman -Q 2>/dev/null", "pacman"),
+    "zypper": ("rpm -qa --qf '%{NAME}\\t%{VERSION}-%{RELEASE}\\t%{SOURCERPM}\\n' 2>/dev/null", "rpm"),
 }
 
 
@@ -114,6 +115,7 @@ FRESHNESS = {
     "dnf": "find /var/cache/dnf -name '*.solv' -newermt '-48 hours' 2>/dev/null | head -1",
     "apk": "find /var/cache/apk -newermt '-48 hours' 2>/dev/null | head -1",
     "pacman": "find /var/lib/pacman/sync -newermt '-48 hours' 2>/dev/null | head -1",
+    "zypper": "find /var/cache/zypp -newermt '-48 hours' 2>/dev/null | head -1",
 }
 
 CANDIDATE_COMMANDS = {
@@ -121,6 +123,8 @@ CANDIDATE_COMMANDS = {
     "apk": "apk policy {names} 2>/dev/null",
     "dnf": "dnf -q list --available {names} 2>/dev/null",
     "pacman": "pacman -Si {names} 2>/dev/null",
+    # XML rather than the column layout: zypper's human table pads and wraps, its XML does not
+    "zypper": "zypper --xmlout --non-interactive --no-refresh list-updates --type package 2>/dev/null",
 }
 
 
@@ -153,8 +157,16 @@ def parse_candidates(text: str, family: str) -> dict[str, str]:
             parts = line.split()
             if len(parts) >= 3 and parts[0] not in ("Available", "Installed"):
                 best.setdefault(parts[0].split(".")[0], parts[1])
+    elif family == "zypper":
+        # <update name="openssl" kind="package" edition="3.1.4-150600.5.1" …/> — attributes, so the
+        # order they appear in does not matter
+        for tag in re.findall(r"<update\b[^>]*>", text or ""):
+            name = re.search(r'\bname="([^"]+)"', tag)
+            edition = re.search(r'\bedition="([^"]+)"', tag)
+            if name and edition:
+                best.setdefault(name.group(1), edition.group(1))
     elif family == "pacman":
-        # `pacman -Si` prints one "Key : value" block per package, name first, version later
+        # `pacman -Si` prints one "Key : Value" block per package, name first, version later
         name = None
         for line in (text or "").splitlines():
             if ":" not in line:
@@ -299,26 +311,35 @@ def _version_id(target: str | None, timeout: int) -> str:
 
 
 def assess(target: str | None, family: str, os_id: str, version_id: str,
-           timeout: int = 120) -> dict:
-    """Measure vendor lag on a Debian/Alpine/RHEL/Arch host.
+           timeout: int = 120, cache_dir: str | None = None) -> dict:
+    """Measure vendor lag on a host whose distro publishes a machine-readable fixed version.
+
+    Five sources, one comparison:
+
+    * Ubuntu → its notice feed (handled in ``tools``);
+    * Debian / Alpine / RHEL family → OSV, per release;
+    * Arch → its own tracker;
+    * **Fedora → Bodhi**, the update system itself (one bounded query, index by package);
+    * **openSUSE / SLES → SUSE's OVAL**, one document per product, joined CVE → package → fix.
 
     Returns ``{"state": "measured"|"unsupported"|"unmeasured", "vendor_lag": [...], "counts": {...},
     "reason": str}``. ``unsupported`` is a fact about the plugin, never about the host.
     """
-    if not (version_id or "").strip()[:1].isdigit():
+    os_key = (os_id or "").strip().lower()
+    tumbleweed = os_key == "opensuse-tumbleweed"
+    if not (version_id or "").strip()[:1].isdigit() and not tumbleweed:
         # a codename is not a release: querying OSV with one answers nothing, quietly
         version_id = _version_id(target, timeout)
-    ecosystem = ecosystem_for(os_id, version_id)
-    if not ecosystem and family != "pacman":
-        # a family with no feed is a fact about the plugin, not about the host: say which feed
-        hint = {"fedora": "Fedora needs its Bodhi adapter",
-                "opensuse-leap": "openSUSE needs its CSAF/VEX adapter",
-                "opensuse-tumbleweed": "openSUSE needs its CSAF/VEX adapter",
-                "sles": "SUSE needs its CSAF/VEX adapter"}.get(
-                    (os_id or "").lower(), f"{os_id or 'this distribution'} publishes no feed this "
-                                           f"plugin reads")
-        return {"state": "unsupported", "vendor_lag": [], "counts": {},
-                "reason": f"vendor lag is unmeasured here: {hint}. The rest of this scan is measured."}
+
+    feed_meta: dict = {}
+    ecosystem = None
+    if os_key != "fedora" and not (os_key.startswith("opensuse") or os_key.startswith("sles")):
+        ecosystem = ecosystem_for(os_id, version_id)
+        if not ecosystem and family != "pacman":
+            return {"state": "unsupported", "vendor_lag": [], "counts": {},
+                    "reason": f"vendor lag is unmeasured here: {os_id or 'this distribution'} "
+                              f"publishes no feed this plugin reads. The rest of this scan is "
+                              f"measured."}
     command, flavour = LIST_COMMANDS.get(family, (None, ""))
     if command is None:
         return {"state": "unsupported", "vendor_lag": [], "counts": {},
@@ -338,6 +359,28 @@ def assess(target: str | None, family: str, os_id: str, version_id: str,
         except Exception as exc:            # network, JSON, timeout — all mean unmeasured
             return {"state": "unmeasured", "vendor_lag": [], "counts": {},
                     "reason": f"the Arch tracker could not be read ({type(exc).__name__})"}
+    elif os_key == "fedora":
+        from . import bodhi
+        try:
+            advisories = bodhi.advisories(version_id, timeout=timeout, cache_dir=cache_dir)
+            feed_meta = {"product": bodhi.release_tag(version_id) or version_id,
+                         "source_url": bodhi.BASE, "feed_date": "", "age_days": None,
+                         "stale": False}
+        except Exception as exc:
+            return {"state": "unmeasured", "vendor_lag": [], "counts": {},
+                    "reason": f"Bodhi could not be read for {version_id} "
+                              f"({type(exc).__name__}) — the lag is unmeasured, not zero"}
+    elif os_key.startswith("opensuse") or os_key.startswith("sles"):
+        from . import suse_oval
+        try:
+            advisories, feed_meta = suse_oval.advisories(os_key, version_id, cache_dir,
+                                                          timeout=max(timeout, 120))
+        except ValueError as exc:
+            return {"state": "unsupported", "vendor_lag": [], "counts": {}, "reason": str(exc)}
+        except Exception as exc:
+            return {"state": "unmeasured", "vendor_lag": [], "counts": {},
+                    "reason": f"SUSE's OVAL could not be read for {version_id} "
+                              f"({type(exc).__name__}) — the lag is unmeasured, not zero"}
     else:
         pairs = [(row["source"], row["version"]) for row in installed]
         try:
@@ -345,17 +388,25 @@ def assess(target: str | None, family: str, os_id: str, version_id: str,
         except Exception as exc:
             return {"state": "unmeasured", "vendor_lag": [], "counts": {},
                     "reason": f"OSV could not be queried for {ecosystem} ({type(exc).__name__})"}
+    source_label = ("Bodhi" if os_key == "fedora"
+                    else "SUSE's OVAL" if os_key.startswith(("opensuse", "sles"))
+                    else ecosystem or "the Arch tracker")
     if not advisories:
         return {"state": "measured", "vendor_lag": [], "counts": {"vendor_lag": 0},
-                "advisories_read": 0,
-                "reason": f"{len(installed)} package(s) read against "
-                          f"{ecosystem or 'the Arch tracker'}: no open advisory names an "
-                          f"installed version"}
+                "advisories_read": 0, **({"feed": feed_meta} if feed_meta else {}),
+                "reason": f"{len(installed)} package(s) read against {source_label}: no open "
+                          f"advisory names an installed version"}
 
-    # whose binary carries it? map source → the installed binaries built from it
+    # whose binary carries it? map source → the installed binaries built from it.
+    # SUSE's OVAL names *binary* packages (libopenssl-3-0, not the source openssl-3), and Fedora's
+    # Bodhi names builds, so both keys are indexed there — a source-only map would answer "no
+    # advisory names an installed version" and read as clean.
+    by_binary = os_key.startswith(("opensuse", "sles"))
     binaries: dict[str, list[dict]] = {}
     for row in installed:
         binaries.setdefault(row["source"], []).append(row)
+        if by_binary:
+            binaries.setdefault(row["package"], []).append(row)
 
     code, out = shell.run(FRESHNESS.get(family, "true"), target, timeout=timeout,
                           path_prefix=shell.SYSTEM_PATH_PREFIX)
@@ -378,7 +429,7 @@ def assess(target: str | None, family: str, os_id: str, version_id: str,
             needed[row["package"]] = entry
     state = verdict.classify(rows, needed)
     return {"state": "measured", "advisories_read": len(advisories),
-            "index_fresh": index_fresh,
+            "index_fresh": index_fresh, **({"feed": feed_meta} if feed_meta else {}),
             "index_note": ("" if index_fresh else
                            "the archive index on this host is older than 48 h, so a version that "
                            "fixes this may already be published — refresh it before acting"),

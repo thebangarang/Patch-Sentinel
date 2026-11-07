@@ -43,12 +43,23 @@ This comparison needs a feed that names a fixed version **per release**. Which f
 | Alpine | OSV `Alpine:v<major.minor>` | same shape, source names | **adapter tested against captured payloads**; the lab VM's key was rejected at scan time, so the lag path has not run on a live Alpine host |
 | Rocky / AlmaLinux / RHEL | OSV `Rocky Linux:<major>`, `AlmaLinux:<major>`, `Red Hat:<major>` | same shape | adapter tested against captured payloads; no RHEL host in the lab yet |
 | Arch | `security.archlinux.org/all.json` | `fixed` per AVG, binary names, resolved advisories skipped | proven live (Arch VM) |
-| Fedora | — (Bodhi holds CVE→build per update) | not read | **named gap**: the host says the lag is unmeasured |
-| openSUSE / SLES | — (SUSE publishes CSAF/VEX) | not read | **named gap**, same |
+| Fedora | Bodhi `updates/?type=security&status=stable&releases=F<major>` | `builds[].nvr` split from the right, indexed per package; the update alias is the notice | **proven live** (Fedora 45 VM: 109 pending, 38 advisories matched, 9 fix-in-archive, 29 already fixed, 0 lag — a measured zero, not an assumption) |
+| openSUSE / SLES | `ftp.suse.com/pub/projects/security/oval/opensuse.<product>.xml.gz` | OVAL `definition → criterion → rpminfo_test → object/state`, epoch stripped | **proven live** (Leap 15.6 VM: 4,965 packages indexed, 90 already fixed, 6 lag rows, e.g. `kernel-default-base …103.0 → …103.1` for `CVE-2026-43284`; the VM had never refreshed its index, and the scan says so) |
 
 The distro records key on the **source** package (`openssl`, not `libssl3`), so installed binaries are
-mapped to their source before querying and back again for the report. A family with no feed answers
-`unsupported` with the reason — never "no lag".
+mapped to their source before querying and back again for the report. SUSE's OVAL names *binary*
+packages instead, so both keys are indexed there — a source-only map answered "no advisory names an
+installed version", which reads as clean.
+
+Both new feeds are cached (Bodhi 6 h, OVAL 12 h) because they are expensive: a Bodhi page takes about
+ten seconds and the OVAL document is 12 MB compressed, parsing to a 4,965-package index in ~7 s.
+
+A feed's **own date** travels with the result. openSUSE Leap 15.6's OVAL last moved on 2026-06-25
+because the release left support; the host row quotes the date, flags anything older than 30 days, and
+the pane says *a stale feed is not a vendor delay*. Same rule as the archive index: a machine that has
+not looked is not a machine the vendor forgot.
+
+A family with no feed answers `unsupported` with the reason — never "no lag".
 
 ## Project lockfiles
 

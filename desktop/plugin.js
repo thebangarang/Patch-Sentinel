@@ -595,6 +595,25 @@ function UpdatesPanel({ entry, hostLabel }) {
           entry.where.ssh ? jsx('span', { style: { fontFamily: MONO, color: C.dim } }, ' · ' + entry.where.ssh) : null
         ])
       : null,
+    // whose feed answered, and how old it is: SUSE's OVAL for a release that left support stops
+    // moving, and a stopped feed is not a vendor delay
+    entry && entry.vendor_feed && entry.vendor_feed.stale
+      ? jsxs('div', {
+          style: {
+            borderLeft: '2px solid ' + C.warn, background: C.panel, padding: '5px 8px',
+            marginBottom: '6px', borderRadius: '3px'
+          }
+        }, [
+          jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, fontWeight: 600 } },
+            (entry.vendor_feed.product || 'the vendor feed') + ' was last refreshed '
+            + String(entry.vendor_feed.feed_date || '').replace(' GMT', '')
+            + (entry.vendor_feed.age_days !== null && entry.vendor_feed.age_days !== undefined
+                ? ' — ' + entry.vendor_feed.age_days + ' days ago' : '')),
+          jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
+            'A stale feed is not a vendor delay: the release has probably left support, so no new '
+            + 'fixes are published for it. Lag rows below are a snapshot of that feed\'s last run.')
+        ])
+      : null,
     // the lag check itself can be unmeasured (a family with no feed) — say it rather than let the
     // absence of rows read as "no lag"
     entry && (entry.vendor_state === 'unsupported' || entry.vendor_state === 'unmeasured')
