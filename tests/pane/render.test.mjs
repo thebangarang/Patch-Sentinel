@@ -60,6 +60,20 @@ const FIXTURE = {
   ]
 }
 
+// The copy control on the system-package list must hand over something a shell can run.
+const updates = renderToStaticMarkup(createElement(UpdatesPanel, {
+  entry: { pending: [{ package: 'openssl', from: '3.0.1', to: '3.0.2' }], pending_count: 1,
+           measured_at: '2026-11-07T10:00:00Z',
+           commands: { stage: 'sudo apt-get update && sudo apt-get -y --download-only full-upgrade',
+                       apply: 'sudo apt-get -y full-upgrade' },
+           where: { kind: 'remote', machine: 'debian@10.0.0.9', how: 'on debian@10.0.0.9, in a terminal there',
+                    ssh: 'ssh -p 2223 debian@10.0.0.9' } },
+  hostLabel: 'debian-lab'
+}))
+if (!updates.includes('copy the commands')) throw new Error('the package list has no command copy control')
+if (!updates.includes('run them on debian@10.0.0.9')) throw new Error('the package list does not say where')
+if (!updates.includes('ssh -p 2223 debian@10.0.0.9')) throw new Error('the ssh line is missing from the update panel')
+
 for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXTURE],
                                  ['libs (nothing read)', null]]) {
   const html = renderToStaticMarkup(createElement(LanguagesPanel, { libraries, onCheck: noop,
@@ -69,7 +83,12 @@ for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXT
     if (!html.includes('/opt/py/bin/pip3 install -U')) throw new Error('no resolved pip path in a row')
     if (!html.includes('npm install -g lodash@4.17.21')) throw new Error('no npm fix command')
     // React escapes the apostrophe in text nodes, so assert on the fragment before it
-    if (!html.includes('belong to Hermes')) throw new Error('agent-owned block missing')
+    // Hermes's own packages are a footnote, not an alert: never in the counts, only named in the
+    // sentence that says their lever is `hermes update`
+    if (!html.includes('ship with Hermes itself')) throw new Error('the agent-owned footnote is missing')
+    if (!html.includes('not counted above')) throw new Error('the agent packages still read as findings')
+    if (html.includes("in Hermes&#x27;s env") || html.includes("in Hermes's env")) throw new Error(
+      "the agent packages are counted in the libs header again")
     // the chip text is lowercase in the DOM (CSS uppercases it)
     if (!html.includes('exploited · ransomware')) throw new Error('the exploited-in-the-wild chip is missing')
     if (!html.includes('epss 97')) throw new Error('the EPSS chip is missing')
@@ -100,6 +119,9 @@ const refused = renderToStaticMarkup(createElement(ApplyGate, {
 if (!refused.includes('run it yourself')) throw new Error('the handoff block is missing')
 if (!refused.includes('apt-get -y full-upgrade')) throw new Error('the handoff commands are missing')
 if (!refused.includes('copy both')) throw new Error('the handoff copy control is missing')
+// the apply control must not look ready before the host has said it allows it
+if (!refused.includes('apply — locked') && !refused.includes('apply for real')) throw new Error(
+  'the apply button has no locked/unlocked label')
 if (!refused.includes('connect: ssh -p 2223 debian@10.0.0.9')) throw new Error('the handoff does not say where')
 if (!refused.includes('then check: apt-get -s dist-upgrade')) throw new Error('the verify command is missing')
 

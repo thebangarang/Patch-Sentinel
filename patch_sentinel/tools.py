@@ -133,6 +133,18 @@ def _now() -> str:
 # ─── measurement ────────────────────────────────────────────────────────────────
 
 
+def _commands_for(family) -> dict:
+    """The pasteable sequence for an adapter family — empty when there is none, never a guess."""
+    from .plan import COMMANDS
+    entry = COMMANDS.get(str(family or "")) or {}
+    return {key: entry.get(key) or "" for key in ("stage", "apply", "verify", "reversal")}
+
+
+def _where_for(target, label) -> dict:
+    from .apply import _where
+    return _where(target if target and target != "local" else None, label)
+
+
 def _summarise(host: dict) -> str:
     """One sentence a model can quote without inventing a number."""
     pending = host.get("pending") or []
@@ -347,6 +359,10 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
             "vendor_index_fresh": (vendor_state or {}).get("index_fresh"),
             "vendor_index_note": (vendor_state or {}).get("index_note") or "",
             "vendor_threat": (vendor_state or {}).get("threat"),
+            # the commands that would fix this host, and where they belong — the pane must never
+            # offer a list of packages as if a package named "1.2.3" were something you can paste
+            "commands": _commands_for(result.get("family")),
+            "where": _where_for(result.get("target"), label),
         }
         host_payload["summary"] = _summarise(host_payload)
         hosts_payload[label] = host_payload
@@ -795,7 +811,12 @@ def cve_libraries(args: dict, **kwargs) -> str:
                                 f"({answer.get('why')}) — unmeasured, not clean",
                       "limits": LIBRARY_LIMITS})
 
-    pairs = list(zip(components, answer["results"]))
+    # `0.0.0` is what an editable or in-tree install reports. Comparing it against advisory ranges
+    # produced 20 CVEs on `hermes-agent 0.0.0` — the package itself, at a version that does not
+    # exist. Named as skipped; a version nobody published cannot be said to be vulnerable.
+    unversioned = [c for c in components if str(c.get("version")) in ("0.0.0", "0.0.0.0")]
+    pairs = [(c, r) for c, r in zip(components, answer["results"])
+             if str(c.get("version")) not in ("0.0.0", "0.0.0.0")]
     wanted = sorted({vid for _, found in pairs for vid in found})
     records = {vid: osv.vuln(vid) for vid in wanted[:MAX_ADVISORY_RECORDS]}
 
@@ -810,7 +831,12 @@ def cve_libraries(args: dict, **kwargs) -> str:
                         "fixed": [], "url": f"https://osv.dev/vulnerability/{vid}"}
             vulnerable.append({"ecosystem": component["ecosystem"],
                                "package": component["package"],
-                               "version": component["version"], **item})
+                               "version": component["version"],
+                               # whose package it is travels with the finding, so a count can be
+                               # split by who can act on it
+                               "owner": component.get("owner") or "machine",
+                               "source": component.get("source") or "",
+                               **item})
 
     # Is any of this being exploited right now? KEV and EPSS are the two public feeds that answer it,
     # and they are what turns a list of CVEs into a decision.
@@ -820,10 +846,22 @@ def cve_libraries(args: dict, **kwargs) -> str:
     exit_code = 2 if unreadable else (1 if vulnerable else 0)
     where = (f"pinned in {project['root']}" if project
              else "across the machine's installed language packages")
-    answer_line = (f"{host['label']}: {len(vulnerable)} advisory match(es) across "
-                   f"{len({(v['ecosystem'], v['package']) for v in vulnerable})} package(s), "
+    # Packages that ship inside Hermes's own environment are measured, but they are not the
+    # operator's to upgrade: the only lever is `hermes update`. Counting them with everything else
+    # is what made "128 packages, 40 advisories" read as a broken alert list after an update.
+    agent = [v for v in vulnerable if v.get("owner") == "hermes"]
+    mine = [v for v in vulnerable if v.get("owner") != "hermes"]
+    answer_line = (f"{host['label']}: {len(mine)} advisory match(es) across "
+                   f"{len({(v['ecosystem'], v['package']) for v in mine})} package(s), "
                    f"from {len(components)} package(s) {where}"
                    if components else f"{host['label']}: nothing measurable")
+    if agent:
+        answer_line += (f" · {len(agent)} more on {len({v['package'] for v in agent})} package(s) "
+                        f"that ship with Hermes itself (lever: `hermes update`)")
+    if unversioned:
+        answer_line += (f" · {len(unversioned)} package(s) at version 0.0.0 were not compared "
+                        f"(an in-tree install has no published version to match): "
+                        f"{', '.join(sorted(c['package'] for c in unversioned)[:4])}")
     # An exploited CVE outranks a critical one that nobody is using. Say it in the answer, not only in
     # a field a pane might forget to render.
     if threat_summary["kev_count"]:

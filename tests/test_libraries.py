@@ -84,6 +84,54 @@ class OsvAnswers(unittest.TestCase):
         self.assertEqual(answer["results"], [])
 
 
+class WhatCountsAsAnAlert(unittest.TestCase):
+    """Two rules learned from the operator reading his own pane: the agent's packages are not his
+    findings, and a version nobody published cannot be said to be vulnerable."""
+
+    def _handler(self, components, vulnerable_ids):
+        """Run cve_libraries against stubbed inventory, OSV batch and OSV records."""
+        def fake_batch(comps):
+            return {"ok": True, "results": [[vid for vid in vulnerable_ids
+                                             if vid.endswith(comp["package"])] for comp in comps]}
+
+        def fake_record(vid):
+            package = vid.split("-", 1)[1]
+            return {"id": vid, "summary": "fixture", "aliases": [],
+                    "affected": [{"package": {"ecosystem": "PyPI", "name": package},
+                                  "ranges": [{"events": [{"fixed": "9.9.9"}]}]}]}
+
+        with mock.patch.object(languages, "collect",
+                               return_value={"components": components, "outcomes": {},
+                                             "details": {}, "by_ecosystem": {}, "installers": {},
+                                             "truncated": False, "measured_at": "2026-11-07T00:00:00Z"}), \
+             mock.patch.object(osv, "query", side_effect=fake_batch), \
+             mock.patch.object(osv, "vuln", side_effect=fake_record), \
+             mock.patch.object(tools.threat, "annotate",
+                               return_value={"kev_state": "unmeasured", "kev_count": 0,
+                                             "exploited": [], "ransomware": [], "scored": 0}):
+            return json.loads(tools.cve_libraries({}))
+
+    def test_an_agent_owned_package_is_not_counted_as_the_operators_finding(self):
+        components = [
+            {"ecosystem": "PyPI", "package": "requests", "version": "2.0.0", "owner": "machine",
+             "source": "pip3"},
+            {"ecosystem": "PyPI", "package": "filelock", "version": "3.32.4", "owner": "hermes",
+             "source": "pip3"}]
+        out = self._handler(components, ["CVE-1-filelock"])
+        self.assertEqual(out["vulnerable_count"], 1)
+        self.assertEqual(out["vulnerable"][0]["owner"], "hermes")
+        self.assertIn(": 0 advisory match(es)", out["answer"])
+        self.assertIn("ship with Hermes itself", out["answer"])
+
+    def test_an_editable_install_is_skipped_by_name_not_compared(self):
+        components = [{"ecosystem": "PyPI", "package": "hermes-agent", "version": "0.0.0",
+                       "owner": "hermes", "source": "pip3"}]
+        out = self._handler(components, ["CVE-1-hermes-agent"])
+        self.assertEqual(out["vulnerable"], [])
+        self.assertIn("0.0.0 were not compared", out["answer"])
+        self.assertIn("hermes-agent", out["answer"])
+
+
 class MoreRuntimes(unittest.TestCase):
     """PHP, Ruby, Rust and .NET — added because a machine's attack surface is not just npm and pip.
 

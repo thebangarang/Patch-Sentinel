@@ -148,6 +148,22 @@ feed that cannot be read is reported as **unmeasured**, never as clean.
 Not wired, and named as gaps in the pane: Fedora's Bodhi updates, SUSE's CSAF/VEX documents, and any
 form of image scanning (Trivy-class) — the plugin does not pretend to see inside a container.
 
+## What the pane asks you to do, in order
+
+1. **rescan** — measure every server;
+2. **the fix, as commands** — the plan for the selected server: the ordered commands, where to run
+   them (`ssh …` for a remote one), how to verify, how to undo, and one *copy the commands* control;
+3. **apply from here — optional** — the same commands run by the pane itself, for hosts where the
+   account Hermes runs as can patch unattended. It is a shortcut, not the last step: on a host where
+   sudo wants a password it says so *before* you type anything, and hands you the commands instead.
+
+The system-package list copies commands, not a list of versions — a package list is a reference, and
+the copy control exists to paste something a shell can run.
+
+Packages that ship inside Hermes's own environment are measured but never counted as your findings:
+they are upgraded by `hermes update`, so a red row there would be a lever you cannot pull. They appear
+as one quiet footnote, with a count, only when an advisory exists at all.
+
 ## When APPLY refuses
 
 APPLY runs as the account Hermes runs as, with `sudo -n` — an agent tool call cannot answer a password

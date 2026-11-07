@@ -91,6 +91,30 @@ application: stage first (download/pull, no restart), then apply, then verify by
 answers / `uname -r`), then record. Reversal is documented per action — an apt action's reversal is
 the dated pre-change state capture, an image's is the previous image id.
 
+### What is an alert, and what is only measured
+
+Three rules decide what earns the operator's attention, and each was a complaint from a real session:
+
+* **An agent-owned package is never a finding.** The packages inside Hermes's own environment are
+  read, annotated, and reported — but the only lever is `hermes update`, so counting them against the
+  machine published 40 advisories that no per-package action could clear. They are one quiet footnote,
+  shown only when an advisory exists.
+* **A version nobody published is not comparable.** An editable install reports `0.0.0`; matching it
+  against advisory ranges invented 20 CVEs on `hermes-agent 0.0.0` — half of the "40 advisories".
+  Those components are skipped *by name*, in the answer line.
+* **A copy control copies something a shell can run.** The package list's copy button handed over
+  `openssl 3.0.1 → 3.0.2` lines; the operator pasted them and got no command. Copy now emits the
+  upgrade sequence, and the reference list is a second, faint control.
+
+### APPLY is a shortcut, never the last step
+
+The instinctive reading of a scan → plan → apply flow is that apply is the end of the work. On most
+machines it is not: the plugin runs as the account Hermes runs as (`hermes`), and `sudo -n` there
+fails. So the pane states the precondition **before** the click — `GET /apply/preflight` runs
+`sudo -n true` on that host when a server is selected, and the section either says *this host allows
+it* or *not available here*, with the reason, the account, and the commands to run instead. The
+button stays locked until the preflight has said yes.
+
 ## Dashboard pane (opt-in, desktop half)
 
 Three panels, house HUD style (thin wireframe, cyan on near-black, monospace data — see the root

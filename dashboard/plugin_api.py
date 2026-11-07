@@ -261,6 +261,27 @@ def coverage() -> dict:
     return _payload(tools.cve_coverage, {})
 
 
+@router.get("/apply/preflight")
+def apply_preflight(host: str = "") -> dict:
+    """Whether unattended apply is possible on one host — asked *before* the buttons are offered.
+
+    The operator's complaint was exact: APPLY looked like the last step of the product, and then
+    refused. A preflight that runs when the host is selected turns that into a stated precondition.
+    """
+    from patch_sentinel import apply as apply_module
+
+    entry = next((h for h in _hosts_now() if h["label"] == host), None)
+    if entry is None:
+        return {"ok": False, "known": False, "reason": f"{host!r} is not in the inventory",
+                "where": {}}
+    target = entry.get("target") or None
+    target = None if target in (None, "", "local") else target
+    check = apply_module.preflight(target)
+    return {"ok": bool(check["ok"]), "known": True, "reason": check.get("why") or "",
+            "detail": check.get("detail") or "",
+            "where": apply_module._where(target, host)}
+
+
 @router.post("/apply")
 def apply(body: dict | None = None) -> dict:
     """The gate. The typed host name is required; ``dry_run`` defaults to true.
