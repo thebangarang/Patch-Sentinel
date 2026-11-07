@@ -61,6 +61,24 @@ not looked is not a machine the vendor forgot.
 
 A family with no feed answers `unsupported` with the reason — never "no lag".
 
+## Project environments
+
+`cve_libraries` also reads **every virtualenv on the machine**: one `find` for `*.dist-info` directories
+under project `.venv`/`venv`, pipx and poetry environments, and the package name and version come from
+the directory name — nothing is imported, no interpreter is launched, no project code runs.
+
+Measured on the beelink: **9 environments, 232 packages** — and the finding that mattered was
+`pillow 12.3.0` in three projects (59 advisories, fix 13.0.0). The same package in three environments
+is **one** finding that names its three environments, not three rows.
+
+Two lessons are pinned in `tests/test_environments.py`: a bare `*.dist-info` walk finds uv's
+unpacked-wheel cache (485 "environments" of nothing), so the path must name a venv; and the exclusions
+run **in the find**, because `head` runs before Python sees a line — a backup of the home directory
+otherwise ate 350 of the 600 budget.
+
+Not read: `node_modules/`, `vendor/`, and projects whose only manifest is a range (`composer.json`,
+`Cargo.toml`, `go.mod`).
+
 ## Project lockfiles
 
 `cve_libraries` with a `project` argument (or the field in the pane) reads a repository instead of the

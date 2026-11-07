@@ -20,8 +20,8 @@ import re
 
 from . import apply as apply_mod
 from . import plan, schemas, store, verdict
-from .sources import (cve_tracker, dispatch, distro_lag, languages, osv, projects, shell,
-                      threat, usn)
+from .sources import (cve_tracker, dispatch, distro_lag, environments, languages, osv, projects,
+                      shell, threat, usn)
 from .sources import vendor as vendor_lag
 from .sources import hosts as inventory_module
 
@@ -675,8 +675,9 @@ def cve_coverage(args: dict, **kwargs) -> str:
                 "go.sum, Cargo.lock, composer.lock, Gemfile.lock or pubspec.lock are all parsed "
                 "(pass a directory to cve_libraries, or use the field in the pane). What is left "
                 "out is the project with only a manifest — composer.json, Cargo.toml, go.mod, "
-                "*.csproj, setup.py — where the version is a range rather than a pin, and any "
-                "virtualenv the machine-wide readers cannot see.",
+                "*.csproj, setup.py — where the version is a range rather than a pin. Installed "
+                "Python environments are not the hole: every virtualenv on the machine is read by "
+                "package name and version from its dist-info directories.",
          "consequence": "a project without a lockfile can carry a vulnerable dependency that no "
                         "scan here names; a lockfile makes the same project fully covered",
          "next": "commit the lockfile — that is the fix, and this plugin reads it the moment it "
@@ -757,12 +758,13 @@ def cve_coverage(args: dict, **kwargs) -> str:
 LIBRARY_LIMITS = {
     "measured": ("npm's global tree, the first pip on PATH, composer's global vendor, local gems, "
                  "cargo's installed binaries, dotnet's global tools, Maven's local repository and "
-                 "the modules behind Go's installed binaries"),
+                 "the modules behind Go's installed binaries — plus every virtualenv on the "
+                 "machine (project .venv/venv, pipx and poetry environments), read from its "
+                 "dist-info names without executing anything"),
     "missing_toolchains": ("a toolchain that is not installed here is reported as 'missing', never "
                            "as zero findings"),
     "not_measured": [
-        "per-project lockfiles (package.json, composer.json, Cargo.toml, go.mod, *.csproj)",
-        "virtualenvs other than the first python3 on PATH",
+        "project manifests with no lockfile (package.json, composer.json, Cargo.toml, go.mod)",
         "vendor/ and node_modules/ directories inside projects",
         "anything inside a container image",
     ],
@@ -797,6 +799,18 @@ def cve_libraries(args: dict, **kwargs) -> str:
                      "measured_at": _now()}
     else:
         collected = languages.collect(host["target"])
+        # …and every project environment the machine can name. A developer's ten virtualenvs are the
+        # largest surface a global-tree reader cannot see, and they cost one `find`.
+        environments_state = environments.collect(host.get("target") or None,
+                                                  timeout=int(_settings.get("timeout") or 180))
+        known = {(c["ecosystem"], c["package"], c["version"]) for c in collected["components"]}
+        extra = [c for c in environments_state["components"]
+                 if (c["ecosystem"], c["package"], c["version"]) not in known]
+        collected = {**collected,
+                     "components": collected["components"] + extra,
+                     "outcomes": {**collected.get("outcomes", {}),
+                                  **environments_state["outcomes"]},
+                     "truncated": collected.get("truncated") or environments_state["truncated"]}
     components = collected["components"]
     base = {"tool": "cve_libraries", "host": host["label"], "target": host["target"] or "local",
             "scope": "project" if project else "machine",
@@ -843,7 +857,10 @@ def cve_libraries(args: dict, **kwargs) -> str:
     wanted = sorted({vid for _, found in pairs for vid in found})
     records = {vid: osv.vuln(vid) for vid in wanted[:MAX_ADVISORY_RECORDS]}
 
-    vulnerable = []
+    # The same package@version can sit in several project environments. A finding belongs to the
+    # package, not to the copy: one row, with every environment that carries it.
+    vulnerable: list[dict] = []
+    seen_findings: dict[tuple, dict] = {}
     for component, found in pairs:
         for vid in found:
             record = records.get(vid)
@@ -852,14 +869,25 @@ def cve_libraries(args: dict, **kwargs) -> str:
             else:
                 item = {"id": vid, "aliases": [], "summary": None, "severity": None,
                         "fixed": [], "url": f"https://osv.dev/vulnerability/{vid}"}
-            vulnerable.append({"ecosystem": component["ecosystem"],
-                               "package": component["package"],
-                               "version": component["version"],
-                               # whose package it is travels with the finding, so a count can be
-                               # split by who can act on it
-                               "owner": component.get("owner") or "machine",
-                               "source": component.get("source") or "",
-                               **item})
+            key = (component["ecosystem"], component["package"], component["version"],
+                   item.get("id"))
+            source = component.get("source") or ""
+            known_row = seen_findings.get(key)
+            if known_row is not None:
+                if source and source not in known_row["sources"]:
+                    known_row["sources"].append(source)
+                continue
+            row = {"ecosystem": component["ecosystem"],
+                   "package": component["package"],
+                   "version": component["version"],
+                   # whose package it is travels with the finding, so a count can be
+                   # split by who can act on it
+                   "owner": component.get("owner") or "machine",
+                   "source": source,
+                   "sources": [source] if source else [],
+                   **item}
+            seen_findings[key] = row
+            vulnerable.append(row)
 
     # Is any of this being exploited right now? KEV and EPSS are the two public feeds that answer it,
     # and they are what turns a list of CVEs into a decision.

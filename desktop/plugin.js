@@ -128,6 +128,13 @@ const SECTIONS = [
 ]
 const SECTION = SECTIONS.reduce((acc, section) => { acc[section.key] = section; return acc }, {})
 
+/** `env:/home/x/projects/api/.venv` → `projects/api/.venv` — enough to recognise the project. */
+function envName(source) {
+  if (!source || source.indexOf('env:') !== 0) return ''
+  const parts = source.slice(4).split('/').filter(Boolean)
+  return parts.slice(-2).join('/')
+}
+
 /** The newest of a list of versions, by numeric segments (`2.10` sorts above `2.9`). */
 function newestVersion(list) {
   const key = (v) => String(v).split(/[.\-+]/).map((part) => parseInt(part, 10) || 0)
@@ -932,7 +939,8 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 }
               }, [
                 jsx('span', { style: { color: C.text, wordBreak: 'break-all' } },
-                  row.package + '@' + row.version + '  ' + (row.ecosystem || '')),
+                  row.package + '@' + row.version + '  ' + (row.ecosystem || '')
+                  + (envName(row.source) ? '  · ' + envName(row.source) : '')),
                 jsx('span', { style: { color: found ? C.danger : C.faint, textAlign: 'right' } },
                   found
                     ? found.count + ' advisor' + (found.count === 1 ? 'y' : 'ies')

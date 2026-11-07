@@ -20,6 +20,10 @@ if str(ROOT) not in sys.path:
 from patch_sentinel import tools                              # noqa: E402
 from patch_sentinel.sources import languages, osv             # noqa: E402
 
+#: The environment walk reads the real filesystem; a test must not depend on what is installed here.
+NO_ENVIRONMENTS = {"components": [], "outcomes": {"venvs": "ok: 0 environment(s)"},
+                   "dirs": 0, "truncated": False}
+
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
@@ -100,7 +104,8 @@ class WhatCountsAsAnAlert(unittest.TestCase):
                     "affected": [{"package": {"ecosystem": "PyPI", "name": package},
                                   "ranges": [{"events": [{"fixed": "9.9.9"}]}]}]}
 
-        with mock.patch.object(languages, "collect",
+        with mock.patch.object(tools.environments, "collect", return_value=NO_ENVIRONMENTS), \
+             mock.patch.object(languages, "collect",
                                return_value={"components": components, "outcomes": {},
                                              "details": {}, "by_ecosystem": {}, "installers": {},
                                              "truncated": False, "measured_at": "2026-11-07T00:00:00Z"}), \
@@ -298,6 +303,7 @@ class LibrariesTool(unittest.TestCase):
                      "measured_at": "2026-11-06T15:00:00+00:00", "truncated": False,
                      "by_ecosystem": {"npm": 1, "PyPI": 1}}
         with mock.patch.object(languages, "collect", return_value=collected), \
+                mock.patch.object(tools.environments, "collect", return_value=NO_ENVIRONMENTS), \
                 mock.patch.object(osv, "query", return_value=query_answer), \
                 mock.patch.object(osv, "vuln", return_value=record):
             return json.loads(tools.cve_libraries({}))
