@@ -11,7 +11,7 @@ const maven = { upgrade: null, why: "a build dependency: the fix belongs in the 
 // 1. the real failure: the interpreter that answered, not whatever python3 means in the user's shell
 assert.equal(
   buildFixCommand({ ecosystem: 'PyPI', package: 'filelock', manager: pip }, { fixes: ['3.20.0'] }),
-  "/home/u/.hermes/tools/python/bin/pip3 install -U 'filelock>=3.20.0'")
+  "/home/u/.hermes/tools/python/bin/pip3 install -U 'filelock==3.20.0'")
 
 // 2. a pipx tool is not upgradable by pip
 assert.equal(buildFixCommand({ ecosystem: 'PyPI', package: 'pycowsay', manager: pipx }, { fixes: [] }),
@@ -37,7 +37,7 @@ assert.equal(
                     manager: { tool: 'pip', path: '/home/u/projects/api/.venv/bin/pip',
                                upgrade: '{tool} install -U {spec}' } },
                   { fixes: ['13.0.0'] }),
-  "/home/u/projects/api/.venv/bin/pip install -U 'pillow>=13.0.0'")
+  "/home/u/projects/api/.venv/bin/pip install -U 'pillow==13.0.0'")
 
 // 7. a uv-made venv has no pip: the command names its interpreter instead of a pip that is not there
 assert.equal(
@@ -46,7 +46,7 @@ assert.equal(
                     manager: { tool: 'uv', path: 'uv',
                                upgrade: 'uv pip install --python {python} {spec}' } },
                   { fixes: ['2.15.0'] }),
-  "uv pip install --python /home/u/projects/bot/.venv/bin/python 'pyjwt>=2.15.0'")
+  "uv pip install --python /home/u/projects/bot/.venv/bin/python 'pyjwt==2.15.0'")
 
 // 9. the copy block is one entry per package, not one per advisory or per environment: the first
 // version of it printed `pillow` nine times (three environments × three advisories) and fixed nothing
@@ -60,8 +60,8 @@ const block = fixBlock([
 const headers = block.split('\n').filter((line) => line.startsWith('# '))
 assert.equal(headers.length, 2, 'one header per package\n' + block)
 assert.ok(block.includes("# pillow 12.3.0 → 13.0.0 — 2 places carry it"), block)
-assert.ok(block.includes('/home/u/projects/a/.venv/bin/pip install -U \'pillow>=13.0.0\''), block)
-assert.ok(block.includes('uv pip install --python /home/u/projects/b/.venv/bin/python \'pillow>=13.0.0\''), block)
+assert.ok(block.includes("/home/u/projects/a/.venv/bin/pip install -U 'pillow==13.0.0'"), block)
+assert.ok(block.includes("uv pip install --python /home/u/projects/b/.venv/bin/python 'pillow==13.0.0'"), block)
 
 // 10. an advisory whose named fix is *behind* the installed version is not an upgrade. The pane read
 // "pytest 9.1.1 → 9.0.3" and a paste of that would have been a downgrade.

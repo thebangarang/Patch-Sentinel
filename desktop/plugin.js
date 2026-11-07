@@ -166,9 +166,11 @@ function newestVersion(list) {
 function fixCommandFor(row, fix) {
   const eco = String(row.ecosystem || '').toLowerCase()
   const manager = row.manager || null
+  // the exact first-fixed version, not ">= that": a `>=` spec let pip install 4.2.9 where 4.2.1 was
+  // the fix, and a major jump inside a project is a breakage the operator did not ask for
   const spec = eco === 'npm'
     ? row.package + '@' + (fix || 'latest')
-    : "'" + row.package + '>=' + (fix || 'latest') + "'"
+    : "'" + row.package + '==' + (fix || 'latest') + "'"
   if (row.owner === 'hermes') {
     return '# ' + row.package + ': part of Hermes\'s own environment — upgraded with `hermes update`, '
       + 'not by hand'

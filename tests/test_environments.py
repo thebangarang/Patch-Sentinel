@@ -63,6 +63,33 @@ class Parsing(unittest.TestCase):
         self.assertEqual([row["package"] for row in rows], ["numpy"])
 
 
+class Installers(unittest.TestCase):
+    """The command has to name a binary that exists on the host — uv is usually not on a login PATH."""
+
+    def test_a_venv_with_pip_uses_that_pip(self):
+        out = "pip /home/u/p/a/.venv/bin/pip\n"
+        with mock.patch.object(shell, "run", return_value=(0, out)):
+            found = environments._installers(["/home/u/p/a/.venv"], None, 5)
+        self.assertEqual(found["/home/u/p/a/.venv"]["path"], "/home/u/p/a/.venv/bin/pip")
+
+    def test_a_uv_made_venv_gets_the_resolved_uv_path_not_a_bare_uv(self):
+        out = ("uvbin /home/u/.hermes/bin/uv\n"
+               "python /home/u/p/b/.venv/bin/python\n")
+        with mock.patch.object(shell, "run", return_value=(0, out)):
+            found = environments._installers(["/home/u/p/b/.venv"], None, 5)
+        manager = found["/home/u/p/b/.venv"]
+        self.assertEqual(manager["path"], "/home/u/.hermes/bin/uv")
+        self.assertIn("{python}", manager["upgrade"])
+
+    def test_no_pip_and_no_uv_is_admitted_not_invented(self):
+        out = "python /home/u/p/c/.venv/bin/python\n"
+        with mock.patch.object(shell, "run", return_value=(0, out)):
+            found = environments._installers(["/home/u/p/c/.venv"], None, 5)
+        manager = found["/home/u/p/c/.venv"]
+        self.assertIsNone(manager["upgrade"])
+        self.assertIn("uv is not installed", manager["why"])
+
+
 class Collecting(unittest.TestCase):
     def test_the_find_names_environments_and_excludes_the_noise(self):
         command = environments.FIND

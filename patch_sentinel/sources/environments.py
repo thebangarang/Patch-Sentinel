@@ -82,8 +82,17 @@ def parse(paths: list[str]) -> list[dict]:
 
 #: Which installer owns this environment? A venv built by `uv venv` has no pip at all, and telling the
 #: operator to run a pip that is not there is the same class of bug as a fix command naming no store.
-PIP_PROBE = ("for d in {stores}; do if [ -x \"$d/bin/pip\" ]; then echo \"pip $d/bin/pip\"; "
-             "elif [ -x \"$d/bin/python\" ]; then echo \"uv $d/bin/python\"; fi; done")
+#: Three things at once: is there a pip in the environment, where is uv, and what would run it.
+#: `uv` is usually *not* on a login PATH (`~/.hermes/bin`, `~/.local/bin`, `~/.cargo/bin` are common),
+#: so a bare `uv` in a pasted command fails on a machine where uv is installed — which is exactly what
+#: the operator hit. The absolute path is resolved here, once, at scan time.
+PIP_PROBE = (
+    "U=$(command -v uv 2>/dev/null); [ -n \"$U\" ] && echo \"uvbin $U\"; "
+    "for p in \"$HOME/.local/bin/uv\" \"$HOME/.cargo/bin/uv\" \"$HOME/.hermes/bin/uv\" "
+    "/usr/local/bin/uv /snap/bin/uv /opt/homebrew/bin/uv; do "
+    "[ -x \"$p\" ] && echo \"uvbin $p\"; done; "
+    "for d in {stores}; do if [ -x \"$d/bin/pip\" ]; then echo \"pip $d/bin/pip\"; "
+    "elif [ -x \"$d/bin/python\" ]; then echo \"python $d/bin/python\"; fi; done")
 
 
 def _installers(stores: list[str], target: str | None, timeout: int) -> dict[str, dict]:
@@ -95,20 +104,33 @@ def _installers(stores: list[str], target: str | None, timeout: int) -> dict[str
     quoted = " ".join("'" + store.replace("'", "'\\''") + "'" for store in stores)
     code, out = shell.run(PIP_PROBE.format(stores=quoted), target, timeout=timeout,
                           path_prefix=shell.SYSTEM_PATH_PREFIX)
-    found: dict[str, dict] = {}
+    uv_path = ""
+    stores_with_pip: set[str] = set()
+    python_only: set[str] = set()
     for line in (out or "").splitlines():
         parts = line.split()
         if len(parts) != 2 or not parts[1].startswith("/"):
             continue
-        store = parts[1].rsplit("/bin/", 1)[0]
-        if parts[0] == "pip":
-            found[store] = {"tool": "pip", "path": parts[1],
-                            "upgrade": "{tool} install -U {spec}"}
+        if parts[0] == "uvbin":
+            uv_path = uv_path or parts[1]      # the first hit is the canonical one
+        elif parts[0] == "pip":
+            stores_with_pip.add(parts[1].rsplit("/bin/", 1)[0])
+        elif parts[0] == "python":
+            python_only.add(parts[1].rsplit("/bin/", 1)[0])
+
+    found: dict[str, dict] = {}
+    for store in stores_with_pip:
+        found[store] = {"tool": "pip", "path": store + "/bin/pip",
+                        "upgrade": "{tool} install -U {spec}"}
+    for store in python_only - stores_with_pip:
+        if uv_path:
+            # uv-made venvs ship an interpreter and no pip: uv installs into that interpreter
+            found[store] = {"tool": "uv", "path": uv_path,
+                            "upgrade": "{tool} pip install --python {python} {spec}"}
         else:
-            # uv-made venvs ship an interpreter, not a pip: `uv pip install --python` uses that one
-            found[store] = {"tool": "uv", "path": "uv",
-                            "upgrade": "uv pip install --python {python} {spec}",
-                            "why": "this environment has no pip of its own (it was made by uv)"}
+            found[store] = {"tool": None, "path": None, "upgrade": None,
+                            "why": "no pip in this environment and uv is not installed on the host — "
+                                   "the command would have to be run after installing one of them"}
     return found
 
 
