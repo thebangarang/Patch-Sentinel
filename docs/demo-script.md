@@ -24,12 +24,12 @@ the Fedora VM, which is disposable.
 
 | # | time | on screen | say / type |
 |---|---|---|---|
-| 1 | 0:00–0:12 | `hermes chat -q "are we patched?"` — the tool line `⚡ Cve_scan` appears, then the answer | "Every scanner answers 'are we patched?'. This one answers it per host — and shows you what it could not look at." |
-| 2 | 0:12–0:30 | the pane: **NOW** row for `fedora-lab` amber, `109 pending`, `kernel 7.2.11-300.fc45 → kernel-update-available` | "Fedora, not my laptop. 109 updates, and a kernel that is installed… no — a kernel that is *installable* while an older one is *running*. Those are different facts, and it keeps them apart." |
-| 3 | 0:30–0:45 | `hermes chat -q "what about CVE-2026-98432?"` → `cve_explain`, the `disagreements[]` block on screen | "Ubuntu's own tracker still says *pending* for this CVE. This machine runs the version it calls the fix. The verdict follows the measurement, not the page." |
-| 4 | 0:45–1:00 | pane **GAPS** panel, then a scan with an unreachable host (`vps=nowhere.invalid`) → red row, `COULD NOT LOOK`, exit 2 | "Here's the part no other scanner does: when it can't look, it says so. Unreachable host — red, not green. Missing tool — red. That's the whole product." |
-| 5 | 1:00–1:25 | pane **APPLY** gate: type `fedora-lab` → **dry run** → step rc 100 · then **apply** (cut the 105 s) → receipt line | "Applying needs the host name typed by hand and the dry run passed first. It staged, it applied 107 packages, and then it re-measured the machine: kernel *installed* 7.2.15, *running* 7.2.11 — so it won't call that patched." |
-| 6 | 1:25–1:30 | terminal: `lab_vm.py ssh fedora -- uname -r` → `7.2.15-300.fc45.x86_64`; then the repo URL | "Rebooted. Now it's patched, and the receipt says so. Code's at github.com/thebangarang/Patch-Sentinel." |
+| 1 | 0:00–0:14 | pane top: the **verdict bar** — `2 servers · 3 updates pending · 1 exploited · 1 could not look · measured just now` — then `hermes chat -q "are we patched?"` with the `⚡ Cve_scan` line | "Every scanner answers 'are we patched?'. This one answers in one line, per host, and names what it could not look at." |
+| 2 | 0:14–0:30 | **OVERVIEW**: `fedora-lab` amber, `109 pending`, `kernel 7.2.11 → 7.2.15 installed, reboot needed` | "Fedora, not my laptop. 109 updates, and a kernel that is *installed* while an older one is *running* — it keeps those apart instead of calling it done." |
+| 3 | 0:30–0:46 | **LIBS & RUNTIMES** on the log4j fixture: `8 advisories · critical · fix 2.15.0`, chips `EXPLOITED · RANSOMWARE` and `EPSS 100.0%` | "This is the part that decides tonight: not 'critical', but *being used in ransomware campaigns right now*, from CISA's own catalogue, with the probability score beside it." |
+| 4 | 0:46–1:02 | **SERVERS → add a server**: type `debian-lab` / `debian@10.0.0.9:2223` → test fails at chip `STOPPED AT AUTH` with the `ssh-copy-id` command → copy, run, test again → `reached it: apt · debian/12 · kernel-current` | "Adding a fleet member never fails with 'it didn't work'. It tells you which hop failed and gives you the one command that fixes it — and it only saves the host once a real probe came back." |
+| 5 | 1:02–1:16 | **SYSTEM PACKAGES** for `debian-lab`: the vendor-lag block — `fix exists upstream, this archive does not carry it` — plus the `archive index is older than 48 h` warning | "A fix can exist and still not be installable here. That's its own state, and it never gets folded into 'nothing to do'." |
+| 6 | 1:16–1:30 | **APPLY**: type `fedora-lab` → stage → apply (cut the 105 s) → receipt: kernel *installed* 7.2.15, *running* 7.2.11 → then `uname -r` after reboot | "Applying needs the name typed by hand. It applied, re-measured, and refused to call itself patched until the reboot — which is the whole point." |
 
 Narration is optional; if you prefer silence, the six shots still tell it — subtitle them with those
 same lines.
@@ -53,6 +53,10 @@ same lines.
   no verified adapter yet.
 - **Not** "finds every CVE": in-image CVEs and per-project lockfiles are named gaps, on the GAPS
   panel, in the same breath as the findings.
+- **Not** "nothing is exploited" when KEV has no match — the catalogue is a US feed and absence is not
+  safety. The pane says `kev_state: measured`, never `safe`.
+- **Not** "EPSS says it will be exploited" — it is a 30-day forecast, shown as a percentage, never as a
+  verdict on its own.
 - **Not** "it patched my laptop": the real apply happened on a disposable Fedora VM, and saying so
   costs nothing.
 - The 109 pending updates are **the image's**, not a machine that was neglected — say "a fresh boot
