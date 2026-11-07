@@ -1161,6 +1161,10 @@ def cve_libraries(args: dict, **kwargs) -> str:
                   "threat": threat_summary,
                   "acknowledged": acked[:MAX_PENDING],
                   "acknowledged_count": len(acked),
+                  # an in-tree 0.0.0 install cannot be compared with a published version; the pane
+                  # says so on its own line instead of inside a sentence
+                  "unversioned": [{"package": c.get("package"), "source": c.get("source")}
+                                  for c in unversioned][:20],
                   "advisories_examined": len(records),
                   "advisories_truncated": len(wanted) > MAX_ADVISORY_RECORDS,
                   "exit_code": exit_code,

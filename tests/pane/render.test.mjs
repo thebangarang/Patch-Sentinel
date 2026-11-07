@@ -166,20 +166,19 @@ for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXT
     const header = html.slice(headerAt, headerAt + 220)
     if (header.includes('Hermes')) throw new Error(
       "the agent packages are counted in the libs header again: " + header)
-    if (!html.includes('in Hermes&#x27;s env (not counted)')) throw new Error(
-      'the breakdown line does not say the agent packages are excluded')
+    if (!html.includes('hermes update') || !html.includes('not counted above')) throw new Error(
+      'the summary does not say the agent packages are excluded')
     if (html.includes('ship with Hermes')) throw new Error(
       'the agent packages are mentioned although nothing there is exploited')
     if (html.includes('0 not yet')) throw new Error('the agent-package advisory paragraph is back')
     // the chip text is lowercase in the DOM (CSS uppercases it)
     if (!html.includes('exploited · ransomware')) throw new Error('the exploited-in-the-wild chip is missing')
     if (!html.includes('epss 97')) throw new Error('the EPSS chip is missing')
-    // a finding whose fix nobody published gets no arrow and no comment-formatted "command"
-    if (!html.includes('1 finding(s) on 2 package(s)')) {
-      // the fixture has two packages with findings; the count line must reflect that
-      if (!/\d+ finding\(s\) on \d+ package\(s\)/.test(html)) throw new Error(
-        'the findings/packages count line is missing')
-    }
+    // the summary is a labelled list now, one fact per line — not a paragraph
+    if (!html.includes('ADVISORIES') && !html.includes('advisories')) throw new Error(
+      'the advisories line is missing')
+    if (!/\d+ on \d+ package\(s\)/.test(html)) throw new Error(
+      'the advisories line does not say how many findings sit on how many packages')
     if (!html.includes('known-exploited list')) throw new Error('the KEV header line is missing')
     if (!html.includes('project: /tmp/demo-project')) throw new Error('project scope is not shown')
     if (!html.includes('machine-wide')) throw new Error('the way back to machine scope is missing')

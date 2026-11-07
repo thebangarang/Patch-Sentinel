@@ -1162,11 +1162,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
           },
             mine.length + ' package(s) · '
             + (findingsMine.length
-                ? (commandCount
-                    ? findingsMine.length + ' finding(s) · ' + mineWithFix.length + ' with a fix · '
-                      + commandCount + ' command(s) to run'
-                    : findingsMine.length + ' finding(s) · nothing to run — no published fix someone '
-                      + 'could install')
+                ? findingsMine.length + ' finding(s)'
                 : 'nothing to upgrade'))
         : null,
       flagged && flagged.length && commandCount
@@ -1241,30 +1237,42 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                   Object.entries(libraries.project.files).map(([name, state]) => name + ' — ' + state).join(' · '))
               ])
             : null,
-          jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, marginBottom: '4px' } },
-            (libraries.answer || '')
-            + (readEcosystems.length ? ' · read: ' + readEcosystems.join(', ') : '')
-            + (missingEcosystems.length
-                ? ' · not installed here: ' + missingEcosystems.join(', ') : '')),
-          // where that number comes from: the count mixes environments, stores and the agent's own
-          // env, and two readers of the same payload quoted two different totals when it did not say
-          packages.length
-            ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint, marginBottom: '5px' } },
-                [
-                  environmentCount
-                    ? environmentCount + ' project environment(s): ' + packages.filter((p) => envName(p.source)).length
-                    : 'no project environment found',
-                  packages.filter((p) => !envName(p.source) && p.owner !== 'hermes').length + ' from language stores',
-                  packages.filter((p) => p.owner === 'hermes').length + ' in Hermes\'s env (not counted)'
-                ].join(' · '))
-            : null,
-          vulnerable.length
-            ? jsx('div', {
-                style: { fontSize: '0.75rem', color: C.faint, marginBottom: '4px' },
-                title: 'One advisory per exact version; the fix column is the first version that closes it.'
-              }, findingsMine.length + ' finding(s) on ' + flagged.length
-                 + ' package(s) · one row per advisory, the fix column closes it')
-            : null,
+          // The answer used to be one paragraph carrying six facts in a single sentence. It is now a
+          // short list: one fact per line, a label you can skim past, and the long form in the title.
+          jsxs('div', {
+            style: { marginBottom: '6px' },
+            title: (libraries.answer || '')
+          }, [
+            jsx(Line, { key: 'a', name: 'advisories',
+              children: findingsMine.length
+                ? findingsMine.length + ' on ' + flagged.length + ' package(s) — '
+                  + (commandCount
+                      ? commandCount + ' command(s) to copy, ' + mineWithFix.length + ' with a fix'
+                      : 'nothing to run, no published fix')
+                : 'none against the exact versions installed' }),
+            jsx(Line, { key: 'r', name: 'read', children: [
+              packages.length + ' package(s)',
+              environmentCount
+                ? environmentCount + ' project environments ('
+                  + packages.filter((p) => envName(p.source)).length + ' packages)'
+                : null,
+              packages.filter((p) => !envName(p.source) && p.owner !== 'hermes').length + ' from language stores'
+            ].filter(Boolean).join(' · ') }),
+            packages.filter((p) => p.owner === 'hermes').length
+              ? jsx(Line, { key: 'h', name: 'hermes', children:
+                  packages.filter((p) => p.owner === 'hermes').length + ' package(s) ship with the agent — '
+                  + '`hermes update` is their lever, not counted above' })
+              : null,
+            (libraries.unversioned || []).length
+              ? jsx(Line, { key: 'u', name: 'not compared', children:
+                  (libraries.unversioned || []).map((row) => row.package).slice(0, 4).join(', ')
+                  + ' at version 0.0.0 — an in-tree install has no published version to match' })
+              : null,
+            missingEcosystems.length
+              ? jsx(Line, { key: 'm', name: 'not here', children:
+                  missingEcosystems.join(', ') + ' — not installed on this host, so not read' })
+              : null
+          ]),
           (libraries.threat && libraries.threat.kev_count)
             ? jsx('div', {
                 style: { fontSize: '0.8125rem', color: C.danger, marginBottom: '4px', fontWeight: 600 }
@@ -1568,6 +1576,21 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
  * never run silently: the section shows the last reading with its age, and a button takes a fresh one.
  * Three rows, each either measured or saying why not — and the section never prints "not compromised".
  */
+/** One labelled fact per line — the shape a person can skim, instead of a paragraph. */
+function Line({ name, children }) {
+  return jsxs('div', {
+    style: { display: 'flex', gap: '8px', alignItems: 'baseline', padding: '1px 0' }
+  }, [
+    jsx('span', {
+      style: {
+        minWidth: '104px', flex: '0 0 auto', fontFamily: MONO, fontSize: '0.6875rem',
+        letterSpacing: '0.06em', textTransform: 'uppercase', color: C.faint
+      }
+    }, name),
+    jsx('span', { style: { flex: 1, fontSize: '0.75rem', color: C.dim, lineHeight: 1.5 } }, children)
+  ])
+}
+
 function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport }) {
   const [limits, setLimits] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
