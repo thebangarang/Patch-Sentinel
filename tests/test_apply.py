@@ -104,23 +104,28 @@ class Gate(unittest.TestCase):
         self.assertEqual(self.receipts(), [])
 
     def test_dnf_exit_100_on_the_stage_is_success_not_failure(self):
+        # the stage only runs on a real apply now, so this asserts with dry_run=false
         # measured on Fedora 45: `dnf check-upgrade` returns 100 *because* updates exist
         def run(command, target, timeout=None, path_prefix=None):
             return (100, "curl.x86_64 8.21.0-9.fc45 updates") if "check-upgrade" in command else (0, "ok")
         with mock.patch.object(apply_mod.shell, "run", side_effect=run):
-            result = apply_mod.apply(host_entry(), "fedora@127.0.0.1:2222", "fedora-lab")
-        self.assertFalse(result["applied"])
+            result = apply_mod.apply(host_entry(), "fedora@127.0.0.1:2222", "fedora-lab",
+                                     dry_run=False)
+        # rc=100 from `dnf check-upgrade` means "updates exist", not "failed": the stage must pass
         self.assertTrue(result["steps"][0]["ok"], result["steps"][0])
-        self.assertIn("dnf", result["would_run"])
+        self.assertIn("apply", [step["action"] for step in result["steps"]],
+                      "the stage was treated as a failure and the apply never ran")
         self.assertNotIn("half-upgraded", result["reason"])
 
     def test_dry_run_is_the_default_and_applies_nothing(self):
         result = apply_mod.apply(host_entry(), "fedora@127.0.0.1:2222", "fedora-lab")
         self.assertFalse(result["applied"])
         self.assertTrue(result["dry_run"])
-        self.assertIn("dnf", result["would_run"])
+        self.assertIn("dnf", " ".join(result["would_run"]))
         commands = [step["action"] for step in result["steps"]]
-        self.assertEqual(commands, ["stage"], "a dry run stages, it never applies")
+        # a dry run runs nothing at all: the stage downloads packages, so "dry" must not stage either
+        self.assertEqual(commands, [], "a dry run must not run the stage")
+        self.assertEqual(len(result.get("would_run") or []), 2, "the dry run still says what it would do")
         self.assertEqual(len(self.receipts()), 1)
         self.assertTrue(self.receipts()[0]["dry_run"])
 

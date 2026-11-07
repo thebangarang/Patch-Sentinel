@@ -305,9 +305,9 @@ def parse(text: str, host: str, data_dir: str) -> dict:
         # exact command instead, the same way APPLY hands over its commands when sudo has no NOPASSWD
         # complete and standalone: the model relays this sentence, and the pane renders the part
         # between backticks as the command to run
-        note = (f"{who}: {len(unreadable)} packaged file(s) could not be read, so this check cannot "
-                f"see them. The pane runs as {who} and does not elevate — run `{command}` on that host "
-                f"to cover them, or scan a host you reach as root over SSH.")
+        note = (f"{who}: {len(unreadable)} packaged file(s) could not be verified, so this check "
+                f"cannot see them. The pane runs as {who} and does not elevate — run `{command}` on "
+                f"that host to cover them, or scan a host you reach as root over SSH.")
 
     baseline = _read_baseline(data_dir, host)
     exposed, stable_new, drift, widened = [], [], [], []

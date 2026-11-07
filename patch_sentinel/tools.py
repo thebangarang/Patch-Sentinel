@@ -595,6 +595,15 @@ def cve_image(args: dict, **kwargs) -> str:
             "layers": state.get("layers"), "ecosystem": state.get("ecosystem"),
             "summary": state.get("summary")}
     if not state.get("packages"):
+        why = str(state.get("why") or "")
+        # the common case on a fresh machine is not "unreadable image" but "no container runtime at
+        # all" — saying that plainly beats a sentence about rpm databases and osv-scanner
+        if "not found" in why or "rc=127" in why:
+            return _json({**base, "exit_code": 2,
+                          "reason": "no container runtime on this host — docker (or podman) is not "
+                                    "installed, so an image cannot be unpacked. The image surface is "
+                                    "unmeasured here, not clean.",
+                          "detail": why[:200]})
         # The reader could not understand this image (an rpm database, a foreign layout). If the
         # operator installed osv-scanner, use it; if not, say the image is unmeasured and why.
         fallback = image_db.osv_scanner_fallback(image, target, timeout=300)

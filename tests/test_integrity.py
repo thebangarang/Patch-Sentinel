@@ -79,7 +79,7 @@ class TheThreeStates(unittest.TestCase):
                                     "beelink", tmp)
             self.assertEqual(state["tamper"]["state"], "ok")
             self.assertIn("in the surfaces read", integrity.summarise(state))
-            self.assertIn("could not be read", state["note"])
+            self.assertIn("could not be verified", state["note"])
 
     def test_a_second_reading_compares_the_socket_set(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -221,7 +221,7 @@ class TheRootReadingComesBackAsAPaste(unittest.TestCase):
     def test_a_clean_root_run_completes_the_coverage_claim(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = self.state(tmp)
-            self.assertIn("could not be read", state["note"])
+            self.assertIn("could not be verified", state["note"])
             merged = integrity.merge_pasted(state, "??5?????? c /etc/default/ufw\n"
                                                   "??5?????? c /etc/apt/sources.list.d/x.list")
             self.assertTrue(merged["ok"])

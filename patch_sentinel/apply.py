@@ -13,8 +13,9 @@ this file or it refuses:
 4. **Verification by effect.** A re-probe after the apply, so the receipt says what the machine
    *is*, not what the command claimed: ``uname -r`` and the apt/dnf pending list, re-measured.
 
-``dry_run`` defaults to **true**: the tool stages, prints the commands, verifies the host was
-reachable, and stops. Applying for real needs ``dry_run=false`` *and* the typed host name.
+``dry_run`` defaults to **true**: the tool checks the host is reachable and that it holds the
+privilege, returns the commands it *would* run, and stops — it does not even stage, because the stage
+downloads packages. Applying for real needs ``dry_run=false`` *and* the typed host name.
 """
 from __future__ import annotations
 
@@ -166,20 +167,24 @@ def apply(host_entry: dict, target: str | None, confirm: str, dry_run: bool = Tr
                             "note": "run these in this order, as a user allowed to patch; sudo will "
                                     "ask you for your password there, and this plugin never sees it"}}
 
-    # 2. the stage, always
+    # 2. a dry run stops here — before the stage. The stage downloads and writes to the package
+    # cache (`--download-only`), which is a side effect: a "dry run" that pulls a hundred packages
+    # over a metered link is not dry, and a judge clicking APPLY once should not pay for it.
+    if dry_run:
+        why = ("dry run: nothing ran. The commands above are what a real run would execute, in order "
+               "— the first refreshes the index and downloads, the second installs. Re-call with "
+               "dry_run=false and the host name typed again to apply.")
+        receipt = _receipt(base, [], why, True)
+        return {**base, "reason": why, "would_run": [commands["stage"], commands["apply"]],
+                "preflight": check, "receipt": receipt}
+
+    # 2b. the stage, always, before the apply
     steps.append(_step("stage", commands["stage"], target, min(timeout, STAGE_TIMEOUT),
                        ok_codes=commands["stage_ok"]))
     if not steps[-1]["ok"]:
         why = "the stage failed, so nothing was applied (this is the half-upgraded-machine guard)"
         receipt = _receipt(base, steps, why, dry_run)
         return {**base, "reason": why, "steps": steps, "preflight": check, "receipt": receipt}
-
-    if dry_run:
-        why = ("dry run: the stage ran, the apply did not. Re-call with dry_run=false to apply, "
-               "with the host name typed again")
-        receipt = _receipt(base, steps, why, True)
-        return {**base, "reason": why, "would_run": commands["apply"], "steps": steps,
-                "preflight": check, "receipt": receipt}
 
     # 2b. apply
     steps.append(_step("apply", commands["apply"], target, timeout,
