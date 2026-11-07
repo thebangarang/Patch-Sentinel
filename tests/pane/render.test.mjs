@@ -34,8 +34,9 @@ const integrityFinding = {
     { check: 'preload hook', state: 'ok', detail: '/etc/ld.so.preload is empty', items: [] },
     { check: 'listening sockets', state: 'finding', detail: '1 reachable from the network',
       items: ['tcp:4444 · reachable from the network · python'],
-      advice: "Compare with what you deployed. If you did not open these, ask who owns them — "
-              + "`sudo ss -lntup | grep -F ':4444'` — and only re-baseline ports you meant to open." }
+      advice: "Held by python (pid 77): `python -m http.server 4444`. If you did not start that, "
+              + "look closer — `sudo ss -lntup | grep -F ':4444'` names the program and its pid. If you "
+              + "did, re-baseline so these stop being new." }
   ],
   answer: 'integrity: 1 package-managed file(s) no longer match (or are gone) — first: /usr/bin/ssh'
 }
@@ -46,7 +47,7 @@ if (!integrityHtml.includes('package checksums')) throw new Error('the integrity
 if (!integrityHtml.includes('tcp:4444')) throw new Error('the new socket is not named')
 if (!integrityHtml.includes('what this cannot see')) throw new Error('the limits toggle is missing')
 // the finding must say what to do next, with a command that can be pasted
-if (!integrityHtml.includes('only re-baseline ports you meant to open')) throw new Error(
+if (!integrityHtml.includes('If you did, re-baseline so these stop being new')) throw new Error(
   'the socket finding carries no advice')
 if (!integrityHtml.includes('ss -lntup')) throw new Error('the advice names no command')
 if (!integrityHtml.includes('could not be read')) throw new Error('the non-root caveat is missing')
@@ -61,7 +62,7 @@ if (!libsBusy.includes('every project virtualenv')) throw new Error(
 
 const integrityEmpty = renderToStaticMarkup(
   createElement(IntegrityPanel, { reading: null, busy: false, seconds: 0, onRead: noop, onRebaseline: noop }))
-if (!integrityEmpty.includes('read integrity')) throw new Error('the not-read-yet state has no button')
+if (!integrityEmpty.includes('read it')) throw new Error('the not-read-yet state has no button')
 
 const panes = [
   ['servers (closed)', createElement(HostsPanel, { onChanged: noop })],

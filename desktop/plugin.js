@@ -1569,24 +1569,60 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
  * Three rows, each either measured or saying why not — and the section never prints "not compromised".
  */
 function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport }) {
-  const [open, setOpen] = useState(false)
+  const [limits, setLimits] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [pasteText, setPasteText] = useState('')
+  const [error, setError] = useState(null)
+
   const state = reading && reading.integrity
   const answers = (reading && reading.answers) || []
+  const tamper = (state && state.tamper) || {}
+  const listeners = (state && state.listeners) || {}
+  const coverage = state && state.root_coverage
   const age = agoAt(reading && reading.read_at)
   const tone = (value) => (value === 'finding' ? C.danger
-    : value === 'ok' ? C.ok
-    : value === 'baseline' ? C.warn : C.faint)
+    : value === 'ok' ? C.ok : value === 'baseline' ? C.warn : C.faint)
+
+  // One action per row, where the row is. A pile of buttons under the table made the operator ask
+  // "what are these for" — each control now sits next to the reading it acts on.
+  const smallButton = (text, onClick, title, disabled) => jsx('button', {
+    type: 'button', onClick, title, disabled,
+    style: {
+      fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 8px', whiteSpace: 'nowrap',
+      cursor: disabled ? 'default' : 'pointer', color: disabled ? C.faint : C.accent,
+      background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
+    }
+  }, text)
+
+  const submitPaste = async () => {
+    setError(null)
+    const answer = await onImport(pasteText)
+    if (!answer || answer === false || answer.exit_code === 2) {
+      setError((answer && answer.reason)
+        || 'that paste was not read — it was empty, or this host has no package database to compare '
+           + 'it with. Nothing changed.')
+      return
+    }
+    setPasteOpen(false)
+    setPasteText('')
+  }
 
   return jsxs('section', { style: sectionStyle('integrity') }, [
-    jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
+    jsxs('div', {
+      style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }
+    }, [
       label(SECTION.integrity.title, null, SECTION.integrity.long),
-      jsx('span', {
-        style: { fontSize: '0.6875rem', color: C.faint }
-      }, state
-        ? (age ? 'read ' + age : 'read')
-        : 'not read yet'),
+      jsx('span', { style: { fontSize: '0.75rem', color: C.faint } },
+        state ? (age ? 'read ' + age : 'read') : 'not read yet'),
+      jsx('button', {
+        type: 'button',
+        onClick: () => setLimits((current) => !current),
+        style: {
+          marginLeft: 'auto', fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px',
+          cursor: 'pointer', color: limits ? C.accent : C.faint, background: 'transparent',
+          border: '1px solid ' + C.border, borderRadius: '3px'
+        }
+      }, limits ? 'hide the limits' : 'what this cannot see'),
       jsx('button', {
         type: 'button',
         onClick: () => onRead(),
@@ -1594,184 +1630,149 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
         title: 'verifies package checksums, the preload hook and the listening sockets — about a '
                + 'minute on a full package database',
         style: {
-          marginLeft: 'auto', fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px',
-          cursor: busy ? 'default' : 'pointer', color: busy ? C.faint : C.accent,
-          background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
+          fontFamily: MONO, fontSize: '0.75rem', padding: '3px 10px', cursor: busy ? 'default' : 'pointer',
+          color: busy ? C.faint : C.accent, background: 'transparent',
+          border: '1px solid ' + C.border, borderRadius: '3px'
         }
       }, busy
-        ? [jsx('span', { key: 'dot', className: 'ps-dot' }), ' reading' + (seconds ? ' ' + seconds + 's' : '')]
-        : (state ? 'read again' : 'read integrity'))
+        ? [jsx('span', { key: 'ring', className: 'ps-ring' }), 'reading' + (seconds ? ' ' + seconds + 's' : '')]
+        : (state ? 'read again' : 'read it'))
     ]),
+    limits
+      ? jsx('div', {
+          style: { fontSize: '0.75rem', color: C.faint, marginBottom: '6px', lineHeight: 1.55 }
+        }, 'A rootkit that hides from dpkg and ss, a fileless attack, an intrusion that restored the '
+           + 'checksums afterwards, and anything living only in memory are invisible here. A clean '
+           + 'reading means no evidence of tampering in the three surfaces below — not that this host '
+           + 'is uncompromised. For that you need an EDR (Wazuh, auditd rules, Falco) and a place to '
+           + 'send its alerts.')
+      : null,
     busy
-      ? jsx(ScanLine, { label: 'verifying package checksums, the preload hook and the listening sockets'
-                               + (seconds ? ' · ' + seconds + ' s' : '') })
+      ? jsx(ScanLine, {
+          label: 'verifying package checksums, the preload hook and the listening sockets'
+                 + (seconds ? ' · ' + seconds + ' s' : '')
+        })
       : null,
     !state && !busy
       ? jsx('div', { style: { fontSize: '0.8125rem', color: C.dim, lineHeight: 1.5 } },
           'Not read yet — this is the check that answers “has anything on this host changed without '
           + 'the package manager?” It takes about a minute and runs only when you press the button.')
-      : state ? jsxs('div', {}, [
+      : null,
+    state
+      ? jsxs('div', {}, [
           jsx('div', {
-            style: { fontSize: '0.8125rem', color: tone(state.state), marginBottom: '4px' }
+            style: { fontSize: '0.8125rem', color: tone(state.state), marginBottom: '4px', lineHeight: 1.5 }
           }, reading.answer || ''),
-          jsx('div', {
-            style: {
-              border: '1px solid ' + C.border, borderRadius: '3px', background: C.panel,
-              padding: '4px 7px'
-            }
-          }, answers.map((row, index) => jsxs('div', {
-            key: index,
-            style: { padding: '2px 0', borderTop: index ? '1px solid ' + C.border : 'none' }
-          }, [
-            jsxs('div', {
-              key: 'line',
-              style: { display: 'flex', gap: '8px', alignItems: 'baseline' }
+          answers.map((row, index) => {
+            const isChecksums = row.check === 'package checksums'
+            const isSockets = row.check === 'listening sockets'
+            return jsxs('div', {
+              key: index,
+              style: { padding: '5px 0', borderTop: '1px solid ' + C.border }
             }, [
-            jsx('span', {
-              key: 'chip',
-              style: {
-                fontFamily: MONO, fontSize: '0.6875rem', textTransform: 'uppercase',
-                letterSpacing: '0.04em', color: tone(row.state), minWidth: '74px'
-              }
-            }, row.state === 'baseline' ? 'baseline' : row.state === 'ok' ? 'measured'
-              : row.state === 'finding' ? 'finding' : 'could not look'),
-            jsx('span', {
-              key: 'what', style: { fontSize: '0.8125rem', color: C.text, minWidth: '132px' }
-            }, row.check),
-            jsx('span', {
-              key: 'detail',
-              style: { flex: 1, fontSize: '0.75rem', color: C.dim, wordBreak: 'break-word' }
-            }, (row.detail || '')
-               + ((row.items || []).length ? ' — ' + row.items.slice(0, 4).join(', ') : ''))
-            ]),
-            row.advice
-              ? jsx('div', {
-                  key: 'advice',
-                  style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px', lineHeight: 1.55 }
-                }, withCode(row.advice))
-              : null
-          ]))),
-          reading.integrity && reading.integrity.note
-            ? jsx('div', {
-                style: { fontSize: '0.75rem', color: C.warn, marginTop: '4px', lineHeight: 1.55 }
-              }, withCode(reading.integrity.note))
-            : null,
-          // a reading only root can take: the operator runs the command, the pane reads the paste.
-          // Labelled as theirs — this is coverage the plugin did not measure itself.
-          reading.integrity && reading.integrity.tamper && reading.integrity.tamper.command
-            ? (pasteOpen
-                ? jsxs('div', { style: { marginTop: '5px' } }, [
-                    jsx('div', {
-                      key: 'hint',
-                      style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '3px' }
-                    }, 'Paste what ' + reading.integrity.tamper.command + ' printed — even a run that '
-                       + 'printed nothing. The pane reads it and says what it found; it never runs '
-                       + 'sudo itself.'),
-                    jsx('textarea', {
-                      key: 'box',
-                      value: pasteText,
-                      onChange: (event) => setPasteText(event.target.value),
-                      rows: 4,
-                      spellCheck: false,
-                      placeholder: '??5?????? c /etc/default/ufw',
-                      style: {
-                        width: '100%', fontFamily: MONO, fontSize: '0.6875rem', padding: '4px 6px',
-                        background: 'transparent', color: C.text, border: '1px solid ' + C.border,
-                        borderRadius: '3px', resize: 'vertical'
-                      }
-                    }),
-                    jsxs('div', {
-                      key: 'row', style: { display: 'flex', gap: '5px', marginTop: '4px' }
-                    }, [
-                      jsx('button', {
-                        key: 'go', type: 'button', disabled: busy || !pasteText.trim(),
-                        onClick: async () => {
-                          const answer = await onImport(pasteText)
-                          if (answer !== false) { setPasteOpen(false); setPasteText('') }
-                        },
-                        style: {
-                          fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 8px',
-                          cursor: pasteText.trim() ? 'pointer' : 'default',
-                          color: pasteText.trim() ? C.accent : C.faint, background: 'transparent',
-                          border: '1px solid ' + C.border, borderRadius: '3px'
-                        }
-                      }, 'read the paste'),
-                      jsx('button', {
-                        key: 'x', type: 'button',
-                        onClick: () => { setPasteOpen(false); setPasteText('') },
-                        style: {
-                          fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 8px',
-                          cursor: 'pointer', color: C.dim, background: 'transparent',
-                          border: '1px solid ' + C.border, borderRadius: '3px'
-                        }
-                      }, 'cancel')
-                    ])
-                  ])
-                : jsxs('div', {
-                    style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }
-                  }, [
-                    jsx('button', {
-                      key: 'paste',
-                      type: 'button',
-                      onClick: () => setPasteOpen(true),
-                      title: 'the pane cannot elevate; paste the output of the command above and it '
-                             + 'will read it, labelled as a run you made',
-                      style: {
-                        fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px', cursor: 'pointer',
-                        color: (reading.integrity.tamper.covered ? C.ok : C.dim),
-                        background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
-                      }
-                    }, reading.integrity.tamper.covered
-                      ? 'paste another root reading'
-                      : 'paste the root output'),
-                    reading.integrity.root_reading
+              jsxs('div', {
+                key: 'line', style: { display: 'flex', gap: '8px', alignItems: 'baseline', flexWrap: 'wrap' }
+              }, [
+                chip(row.state === 'baseline' ? 'baseline'
+                  : row.state === 'ok' ? 'measured'
+                  : row.state === 'finding' ? 'finding' : 'not looked', tone(row.state)),
+                jsx('span', {
+                  key: 'what', style: { fontSize: '0.8125rem', color: C.text, minWidth: '150px' }
+                }, row.check),
+                jsx('span', {
+                  key: 'detail', style: { flex: 1, fontSize: '0.75rem', color: C.dim, lineHeight: 1.5 }
+                }, (row.detail || '')
+                   + ((row.items || []).length ? ' — ' + row.items.slice(0, 4).join(' · ') : '')),
+                isChecksums && tamper.state !== 'unmeasured'
+                  ? (coverage
                       ? jsx('span', {
-                          key: 'when', style: { fontSize: '0.6875rem', color: C.faint }
-                        }, 'root reading pasted ' + (agoAt(reading.integrity.root_reading.at)
-                          || 'earlier') + ': ' + reading.integrity.root_reading.changed_count
-                          + ' file(s) changed, ' + reading.integrity.root_reading.conffile_count
-                          + ' conffile(s)')
-                      : null
-                  ]))
-            : null,
-          jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '5px' } }, [
-            jsx('button', {
-              key: 'why',
-              type: 'button',
-              onClick: () => setOpen((current) => !current),
-              style: {
-                fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px', cursor: 'pointer',
-                color: open ? C.accent : C.faint, background: 'transparent',
-                border: '1px solid ' + C.border, borderRadius: '3px'
-              }
-            }, open ? 'hide what this cannot see' : 'what this cannot see'),
-            reading.integrity && reading.integrity.listeners
-              && reading.integrity.listeners.state !== 'unmeasured'
-              ? jsx('button', {
-                  key: 'rebase',
-                  type: 'button',
-                  onClick: () => onRebaseline(),
-                  disabled: busy,
-                  title: 'accepts the sockets listening right now as the known set — use it after you '
-                         + 'deploy something, not to silence a port you do not recognise',
+                          key: 'covered',
+                          style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.ok, whiteSpace: 'nowrap' }
+                        }, 'root run ' + (agoAt(coverage.at) || 'on file'))
+                      : smallButton('paste the root output',
+                          () => { setPasteOpen(true); setError(null) },
+                          'the pane cannot run sudo; paste what the command above printed and it will '
+                          + 'read it'))
+                  : null,
+                isSockets && row.state === 'finding'
+                  ? smallButton('these are mine — accept them',
+                      () => onRebaseline(),
+                      'accepts the sockets listening now as the known set; only for ports you meant '
+                      + 'to open')
+                  : null
+              ]),
+              row.advice
+                ? jsx('div', {
+                    key: 'advice',
+                    style: { fontSize: '0.6875rem', color: C.faint, marginTop: '3px', lineHeight: 1.55 }
+                  }, withCode(row.advice))
+                : null
+            ])
+          }),
+          pasteOpen
+            ? jsxs('div', {
+                style: {
+                  marginTop: '6px', padding: '7px 9px', border: '1px solid ' + C.border,
+                  borderLeft: '2px solid ' + C.accent, borderRadius: '4px'
+                }
+              }, [
+                jsx('div', {
+                  key: 'hint', style: { fontSize: '0.75rem', color: C.faint, marginBottom: '4px' }
+                }, 'Run ' + (tamper.command || 'the command') + ' in a terminal, then paste what it '
+                   + 'printed here. The pane reads it and labels it as your run, not its own.'),
+                jsx('textarea', {
+                  key: 'box', value: pasteText,
+                  onChange: (event) => setPasteText(event.target.value),
+                  rows: 4, spellCheck: false, placeholder: '??5?????? c /etc/default/ufw',
                   style: {
-                    fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px',
-                    cursor: busy ? 'default' : 'pointer', color: C.dim, background: 'transparent',
-                    border: '1px solid ' + C.border, borderRadius: '3px'
+                    width: '100%', fontFamily: MONO, fontSize: '0.75rem', padding: '5px 7px',
+                    background: 'transparent', color: C.text, border: '1px solid ' + C.border,
+                    borderRadius: '3px', resize: 'vertical'
                   }
-                }, 're-baseline the sockets')
-              : null
-          ]),
-          open
+                }),
+                jsxs('div', {
+                  key: 'row', style: { display: 'flex', gap: '5px', marginTop: '4px' }
+                }, [
+                  jsx('button', {
+                    key: 'go', type: 'button', disabled: busy || !pasteText.trim(), onClick: submitPaste,
+                    style: {
+                      fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 9px',
+                      cursor: pasteText.trim() ? 'pointer' : 'default',
+                      color: pasteText.trim() ? C.accent : C.faint, background: 'transparent',
+                      border: '1px solid ' + C.border, borderRadius: '3px'
+                    }
+                  }, 'read the paste'),
+                  jsx('button', {
+                    key: 'x', type: 'button',
+                    onClick: () => { setPasteOpen(false); setPasteText(''); setError(null) },
+                    style: {
+                      fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 9px', cursor: 'pointer',
+                      color: C.dim, background: 'transparent', border: '1px solid ' + C.border,
+                      borderRadius: '3px'
+                    }
+                  }, 'cancel')
+                ])
+              ])
+            : null,
+          error
             ? jsx('div', {
-                style: { fontSize: '0.75rem', color: C.faint, marginTop: '4px', lineHeight: 1.5 }
-              }, 'A rootkit that hides from dpkg and ss, a fileless attack, an intrusion that restored the '
-               + 'checksums afterwards, and anything living only in memory are all invisible here. A '
-               + 'clean reading means no evidence of tampering in the three surfaces above — not that '
-               + 'this host is uncompromised. For that you need an EDR (Wazuh, auditd rules, Falco) and '
-               + 'a place to send its alerts.')
+                style: { fontSize: '0.75rem', color: C.danger, marginTop: '5px', lineHeight: 1.5 }
+              }, error)
+            : null,
+          coverage
+            ? jsx('div', {
+                style: { fontSize: '0.6875rem', color: C.dim, marginTop: '5px' }
+              }, 'your last root run: ' + (coverage.changed_count || 0) + ' file(s) changed, '
+                 + (coverage.conffile_count || 0) + ' conffile(s), ' + (agoAt(coverage.at) || 'undated')
+                 + (coverage.tool ? ' · ' + coverage.tool : ''))
+            : null,
+          state.note
+            ? jsx('div', {
+                style: { fontSize: '0.75rem', color: C.warn, marginTop: '5px', lineHeight: 1.55 }
+              }, withCode(state.note))
             : null
-        ]) : null
+        ])
+      : null
   ])
 }
 

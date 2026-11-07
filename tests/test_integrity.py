@@ -145,7 +145,26 @@ class SocketsAreClassifiedBeforeTheyAreAccused(unittest.TestCase):
                              "the agent's own ephemeral port was raised as a finding")
             self.assertEqual(state["listeners"]["drift_count"], 1)
             self.assertEqual(state["listeners"]["new"], [])
-            self.assertIn("normal churn", integrity.summarise(state))
+            self.assertIn("close by themselves, not counted", integrity.summarise(state))
+
+    def test_a_udp_socket_on_an_ephemeral_port_is_a_client_not_a_door(self):
+        # the operator's lab VM (qemu-system-x86_64) binds short-lived UDP sockets on 0.0.0.0 for DNS;
+        # three of them became findings, and they were gone two minutes later
+        with tempfile.TemporaryDirectory() as tmp:
+            self.read(tmp)
+            state = self.read(tmp, "udp UNCONN 0 0 0.0.0.0:41241 0.0.0.0:* "
+                                   "users:((\"qemu-system-x86\",pid=42,fd=9))")
+            self.assertEqual(state["listeners"]["state"], "ok")
+            self.assertEqual(state["listeners"]["drift_count"], 1)
+            self.assertEqual(state["listeners"]["drift_public"], ["udp:41241"])
+            self.assertIn("clients do", integrity.summarise(state))
+
+    def test_a_tcp_socket_on_an_ephemeral_port_is_still_a_finding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.read(tmp)
+            state = self.read(tmp, "tcp LISTEN 0 128 0.0.0.0:41241 0.0.0.0:*")
+            self.assertEqual(state["listeners"]["state"], "finding")
+            self.assertEqual([s["id"] for s in state["listeners"]["exposed"]], ["tcp:41241"])
 
     def test_a_socket_reachable_from_anywhere_is_a_finding(self):
         with tempfile.TemporaryDirectory() as tmp:

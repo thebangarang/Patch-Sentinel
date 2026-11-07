@@ -1190,7 +1190,8 @@ def cve_integrity(args: dict, **kwargs) -> str:
                           "reason": "there is no reading to attach this to — take an integrity reading "
                                     "first, then paste the root run of the command it names"})
         state = saved["state"]
-        merged = integrity.merge_pasted(state, str(args.get("output") or ""))
+        merged = integrity.merge_pasted(state, str(args.get("output") or ""),
+                                        data_dir=data_dir, host=host["label"])
         if not merged.get("ok"):
             return _json({"tool": "cve_integrity", "exit_code": 2, "reason": merged.get("reason")})
         integrity.save_result(data_dir, host["label"], state)

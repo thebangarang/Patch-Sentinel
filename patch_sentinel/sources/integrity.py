@@ -33,6 +33,7 @@ from . import shell
 MARK_DB = "--ps-db--"
 MARK_PRELOAD = "--ps-preload--"
 MARK_LISTEN = "--ps-listen--"
+MARK_PROC = "--ps-proc--"
 MARK_TAMPER = "--ps-tamper--"
 MARK_END = "--ps-end--"
 
@@ -47,6 +48,9 @@ PROBE = (
     "cat /proc/sys/net/ipv4/ip_local_port_range 2>/dev/null; "
     "(ss -lntupH 2>/dev/null || ss -lntup 2>/dev/null || ss -lntuH 2>/dev/null "
     "|| netstat -lntup 2>/dev/null) | head -300; "
+    # pid → command line, so a socket the operator did not expect can name the program that holds it
+    "echo " + MARK_PROC + "; "
+    "ps -eo pid=,args= 2>/dev/null | cut -c1-140 | head -400; "
     "echo " + MARK_TAMPER + "; "
     "if command -v dpkg >/dev/null 2>&1; then dpkg -V 2>/dev/null | head -400; "
     "elif command -v rpm >/dev/null 2>&1; then rpm -Va 2>/dev/null | head -400; "
@@ -114,13 +118,14 @@ def read_listeners(lines: list[str]) -> list[dict]:
         if not port_text.isdigit():
             continue
         port = int(port_text)
-        owner = re.search(r'users:\(\("([^"]+)"', line)
+        owner = re.search(r'users:\(\("([^"]+)"(?:,pid=(\d+))?', line)
         loopback = (address.startswith("127.") or address in ("::1", "[::1]", "::1%lo")
                     or "%lo" in address or address.startswith("[::ffff:127."))
         key = ("tcp" if proto.startswith("tcp") else "udp") + ":" + str(port)
         records[key] = {"id": key, "proto": key.split(":")[0], "port": port, "address": address,
                         "scope": "loopback" if loopback else "any",
-                        "owner": owner.group(1) if owner else None}
+                        "owner": owner.group(1) if owner else None,
+                        "pid": int(owner.group(2)) if owner and owner.group(2) else None}
     return sorted(records.values(), key=lambda r: (r["proto"], r["port"]))
 
 
@@ -253,7 +258,12 @@ def parse(text: str, host: str, data_dir: str) -> dict:
     has_preload = not (len(preload_lines) == 1 and preload_lines[0].strip() == "NO-PRELOAD")
     preload_entries = [l.split()[0] for l in preload_lines if l.strip() and "NO-PRELOAD" not in l]
 
-    listen_lines = _section(text, MARK_LISTEN, MARK_TAMPER)
+    listen_lines = _section(text, MARK_LISTEN, MARK_PROC)
+    processes = {}
+    for line in _section(text, MARK_PROC, MARK_TAMPER):
+        head, _, cmd = line.strip().partition(" ")
+        if head.isdigit():
+            processes[int(head)] = cmd.strip()
     range_lines = [l for l in listen_lines if re.fullmatch(r"\s*\d{2,5}\s+\d{2,5}\s*", l)]
     ephemeral = ephemeral_range(range_lines[0] if range_lines else "")
     sockets = read_listeners([l for l in listen_lines if l not in range_lines])
@@ -312,9 +322,15 @@ def parse(text: str, host: str, data_dir: str) -> dict:
         # out for seconds at a time is a process finding a free port (the agent's own port, a browser's
         # QUIC socket). Calling the second a finding is how a security panel teaches people to ignore
         # it — so it is reported, counted, and not raised as a finding.
-        exposed = [s for s in fresh if s["scope"] == "any" or s["port"] < 1024]
-        drift = [s for s in fresh if s not in exposed
-                 and ephemeral[0] <= s["port"] <= ephemeral[1]]
+        exposed = [s for s in fresh
+                   if s["port"] < 1024 or (s["scope"] == "any" and s["proto"] == "tcp")]
+        # A UDP socket bound to 0.0.0.0 on an ephemeral port is what a *client* does when it registers
+        # for a reply: QEMU's user-mode DNS, a browser's STUN, mDNS. They close within seconds, and
+        # calling them "reachable from the network" is how the operator's own lab VM turned into three
+        # phantom findings. They are reported as churn with their owner, and a TCP listen on 0.0.0.0
+        # — a real service — is always a finding.
+        ephemeral_drift = [s for s in fresh if ephemeral[0] <= s["port"] <= ephemeral[1]]
+        drift = [s for s in ephemeral_drift if s not in exposed]
         stable_new = [s for s in fresh if s not in exposed and s not in drift]
         # the same port, now reachable from outside: the change that matters most, and it is not a
         # new id, so it would slip through a diff that compared ids only
@@ -357,17 +373,17 @@ def parse(text: str, host: str, data_dir: str) -> dict:
             "baseline_at": (baseline or {}).get("at"),
             "baseline_count": (baseline or {}).get("count"),
             # three buckets, because they mean three different things to the person reading them
-            "exposed": [{"id": s["id"], "address": s["address"], "owner": s["owner"]}
-                        for s in exposed[:12]],
-            "stable": [{"id": s["id"], "address": s["address"], "owner": s["owner"]}
-                       for s in stable_new[:12]],
-            "widened": [{"id": s["id"], "address": s["address"], "owner": s["owner"]}
-                        for s in widened[:12]],
-            "drift": [{"id": s["id"], "address": s["address"], "owner": s["owner"]}
-                      for s in drift[:12]],
+            "exposed": [_describe(s, processes) for s in exposed[:12]],
+            "stable": [_describe(s, processes) for s in stable_new[:12]],
+            "widened": [_describe(s, processes) for s in widened[:12]],
+            "drift": [_describe(s, processes) for s in drift[:12]],
             "drift_count": len(drift),
+            "drift_public": [d["id"] for d in
+                             [_describe(s, processes) for s in drift] if d["address"] in ("0.0.0.0", "[::]")],
             "ephemeral_range": list(ephemeral),
         },
+        # the last root run the operator pasted, with its own timestamp — it survives new readings
+        "root_coverage": read_root_coverage(data_dir, host),
     }
 
 
@@ -389,7 +405,8 @@ def collect(target: str | None, data_dir: str, host: str, timeout: int = 120) ->
 PARSERS = {"dpkg -V": parse_dpkg, "rpm -Va": parse_rpm, "apk audit": parse_apk}
 
 
-def merge_pasted(state: dict, output: str, now: float | None = None) -> dict:
+def merge_pasted(state: dict, output: str, now: float | None = None,
+                 data_dir: str | None = None, host: str | None = None) -> dict:
     """Take a reading the operator ran as root and paste-read it.
 
     The plugin cannot elevate, so the full set is one command away and out of its reach. Reading that
@@ -416,6 +433,10 @@ def merge_pasted(state: dict, output: str, now: float | None = None) -> dict:
                "unreadable_count": len(parsed.get("unreadable") or []),
                "changed": parsed["changed"][:20], "conffiles": parsed["conffiles"][:10]}
     state["root_reading"] = reading
+    if data_dir and host:
+        # kept apart from the reading it arrived with: a later non-root read must not erase the one
+        # piece of evidence that covered the files this account cannot read
+        save_root_coverage(data_dir, host, reading)
     tamper = state.setdefault("tamper", {})
     if parsed["changed"] or parsed.get("missing"):
         # a root run that names mismatches is evidence, and it outranks the limited reading
@@ -436,6 +457,13 @@ def merge_pasted(state: dict, output: str, now: float | None = None) -> dict:
                        + ("a finding" if parsed["changed"] else "coverage is complete"))}
 
 
+def _describe(socket: dict, processes: dict) -> dict:
+    """A socket plus what it is: the process name, its pid, and the command line that started it."""
+    command = processes.get(socket.get("pid") or -1) if socket.get("pid") else None
+    return {"id": socket["id"], "address": socket["address"], "owner": socket.get("owner"),
+            "pid": socket.get("pid"), "command": (command or "")[:120] or None}
+
+
 def _sockets(rows: list[dict]) -> str:
     """`tcp:4444 (python), tcp:8080` — the port and, when it is visible, who owns it."""
     names = []
@@ -443,6 +471,34 @@ def _sockets(rows: list[dict]) -> str:
         names.append(row["id"] + (f" ({row['owner']})" if row.get("owner") else ""))
     more = len(rows) - len(names)
     return ", ".join(names) + (f" and {more} more" if more > 0 else "")
+
+
+def save_root_coverage(data_dir: str, host: str, reading: dict) -> dict:
+    """Keep the last root run the operator pasted, apart from the reading it arrived with."""
+    path = Path(data_dir or ".") / "integrity.json"
+    try:
+        payload = json.loads(path.read_text())
+        if not isinstance(payload.get("hosts"), dict):
+            payload["hosts"] = {}
+    except (OSError, ValueError):
+        payload = {"hosts": {}}
+    payload["hosts"].setdefault(str(host).lower(), {})["root"] = reading
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+    os.replace(tmp, path)
+    return reading
+
+
+def read_root_coverage(data_dir: str, host: str) -> dict | None:
+    try:
+        payload = json.loads((Path(data_dir or ".") / "integrity.json").read_text())
+    except (OSError, ValueError):
+        return None
+    record = ((payload or {}).get("hosts", {}).get(str(host).lower()) or {}).get("root")
+    return record if isinstance(record, dict) else None
 
 
 def save_result(data_dir: str, host: str, state: dict) -> dict:
@@ -507,9 +563,12 @@ def summarise(state: dict) -> str:
                 "preload hook, listening sockets)")
     # the state of the baseline is a fact about the reading, not a replacement for its verdict
     if listen.get("drift_count"):
-        main += (f" · {listen['drift_count']} local socket(s) appeared on ephemeral ports "
+        reach = len(listen.get("drift_public") or [])
+        main += (f" · {listen['drift_count']} socket(s) on ephemeral ports "
                  f"({listen.get('ephemeral_range', ['?', '?'])[0]}–"
-                 f"{listen.get('ephemeral_range', ['?', '?'])[1]}) — normal churn, not counted")
+                 f"{listen.get('ephemeral_range', ['?', '?'])[1]}), "
+                 + (f"{reach} of them bound to 0.0.0.0 as clients do — " if reach else "")
+                 + "they close by themselves, not counted")
     if listen.get("state") == "baseline" and listen.get("reason"):
         main += " · " + str(listen["reason"])
     # the note is not repeated here: the pane prints it once, next to the command that lifts it, and
@@ -551,11 +610,17 @@ def answers(state: dict) -> list[dict]:
         if listen.get("drift_count"):
             bits.append(str(listen["drift_count"]) + " local churn ignored")
         detail = " · ".join(bits)
-        advice = ("Compare with what you deployed. If you did not open these, ask who owns them — "
-                  "`sudo ss -lntup | grep -F ':" + str((listen.get("exposed") or listen.get("stable")
-                                                        or listen.get("widened") or [{}])[0]
-                                                       .get("id", "0").split(":")[-1])
-                  + "'` — and only re-baseline ports you meant to open.")
+        first = (listen.get("exposed") or listen.get("stable") or listen.get("widened") or [{}])[0]
+        port = str(first.get("id", "0").split(":")[-1])
+        owner = first.get("owner")
+        who = ""
+        if first.get("command"):
+            who = ("Held by " + (owner or "a process") + (f" (pid {first['pid']})" if first.get("pid") else "")
+                   + ": `" + first["command"] + "`. ")
+        elif owner:
+            who = "Held by " + owner + ". "
+        advice = (who + "If you did not start that, look closer — `sudo ss -lntup | grep -F ':" + port
+                  + "'` names the program and its pid. If you did, re-baseline so these stop being new.")
         items = shaped("exposed") + shaped("widened") + shaped("stable")
     elif listen.get("state") == "baseline":
         detail = listen.get("reason") or ""
