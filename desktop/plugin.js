@@ -71,6 +71,12 @@ function call(path, options) {
   return REST(path, options)
 }
 
+/** `read_at` is an epoch second, `ago` takes an age. Mixing them printed "20765 d ago". */
+function agoAt(epoch) {
+  if (!epoch) return null
+  return ago(Math.max(0, Math.floor(Date.now() / 1000 - epoch)))
+}
+
 function ago(seconds) {
   if (seconds === null || seconds === undefined) return 'never measured'
   if (seconds < 90) return 'just now'
@@ -362,7 +368,7 @@ function ScanLine({ label }) {
     jsx('div', { className: 'ps-scan-track' }),
     label
       ? jsx('div', {
-          style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.dim, marginTop: '4px',
+          style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim, marginTop: '4px',
                    letterSpacing: '0.06em' }
         }, label)
       : null
@@ -374,7 +380,7 @@ function chip(text, colour, title) {
   return jsx('span', {
     title: title || text,
     style: {
-      fontFamily: MONO, fontSize: '0.5625rem', letterSpacing: '0.08em', textTransform: 'uppercase',
+      fontFamily: MONO, fontSize: '0.6875rem', letterSpacing: '0.08em', textTransform: 'uppercase',
       padding: '1px 6px', borderRadius: '8px', whiteSpace: 'nowrap',
       color: colour, border: '1px solid ' + colour, background: 'transparent'
     }
@@ -411,7 +417,7 @@ function Copy({ text, what, label }) {
     onClick,
     title: what ? 'Copy ' + what : 'Copy',
     style: {
-      fontFamily: MONO, fontSize: '0.625rem', padding: '2px 8px', cursor: 'pointer',
+      fontFamily: MONO, fontSize: '0.75rem', padding: '2px 8px', cursor: 'pointer',
       color: done ? C.ok : C.dim, background: 'transparent',
       border: '1px solid ' + C.border, borderRadius: '3px'
     }
@@ -460,7 +466,7 @@ function VerdictBar({ status }) {
                          'a kernel was installed but the running one is older') : null,
     blind ? chip(blind + ' could not look', C.danger, 'see gaps — this is a fact about the scan') : null,
     jsx('span', { style: { flex: 1 } }),
-    jsx('span', { style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint } },
+    jsx('span', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint } },
       'measured ' + ago(status.age_seconds))
   ])
 }
@@ -543,13 +549,13 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.servers.title),
       jsx('span', { style: { flex: 1 } }),
-      jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: C.faint } },
+      jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.faint } },
         hosts ? hosts.length + ' server(s)' : '…'),
       jsx('button', {
         type: 'button',
         onClick: () => { setOpen((v) => !v); setTest(null) },
         style: {
-          fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: 'pointer',
+          fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px', cursor: 'pointer',
           color: open ? C.accent : C.dim, background: 'transparent',
           border: '1px solid ' + (open ? C.accent : C.border), borderRadius: '3px'
         }
@@ -559,7 +565,7 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
       key: host.label,
       style: {
         display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'baseline',
-        fontFamily: MONO, fontSize: '0.625rem', padding: '3px 0',
+        fontFamily: MONO, fontSize: '0.75rem', padding: '3px 0',
         borderTop: '1px solid ' + C.border
       }
     }, [
@@ -572,7 +578,7 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
               onChange: (event) => setTyped(event.target.value),
               placeholder: 'type ' + host.label,
               style: {
-                width: '7rem', fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 4px',
+                width: '7rem', fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 4px',
                 background: 'transparent', color: C.text, border: '1px solid ' + C.danger,
                 borderRadius: '2px'
               }
@@ -583,7 +589,7 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
               disabled: busy || typed !== host.label,
               title: 'removes the host and its measurement history',
               style: {
-                fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 6px',
+                fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 6px',
                 cursor: typed === host.label ? 'pointer' : 'not-allowed',
                 color: typed === host.label ? C.danger : C.faint, background: 'transparent',
                 border: '1px solid ' + C.border, borderRadius: '2px'
@@ -598,7 +604,7 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
               ? 'the machine this plugin runs on is always in the inventory'
               : 'remove this host',
             style: {
-              fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 6px',
+              fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 6px',
               cursor: host.target === 'local' ? 'default' : 'pointer',
               color: host.target === 'local' ? C.faint : C.dim, background: 'transparent',
               border: '1px solid ' + C.border, borderRadius: '2px'
@@ -612,7 +618,7 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
               value: newLabel, onChange: (e) => { setNewLabel(e.target.value); setTest(null) },
               placeholder: 'name it (e.g. vps)', 
               style: {
-                flex: '0 0 30%', fontFamily: MONO, fontSize: '0.625rem', padding: '3px 6px',
+                flex: '0 0 30%', fontFamily: MONO, fontSize: '0.75rem', padding: '3px 6px',
                 background: 'transparent', color: C.text, border: '1px solid ' + C.border,
                 borderRadius: '3px'
               }
@@ -621,7 +627,7 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
               value: newTarget, onChange: (e) => { setNewTarget(e.target.value); setTest(null) },
               placeholder: 'user@host:port, an ssh alias, or local',
               style: {
-                flex: 1, fontFamily: MONO, fontSize: '0.625rem', padding: '3px 6px',
+                flex: 1, fontFamily: MONO, fontSize: '0.75rem', padding: '3px 6px',
                 background: 'transparent', color: C.text, border: '1px solid ' + C.border,
                 borderRadius: '3px'
               }
@@ -631,7 +637,7 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
             jsx('button', {
               type: 'button', onClick: runTest, disabled: busy || !newLabel,
               style: {
-                fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
+                fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px',
                 cursor: busy || !newLabel ? 'default' : 'pointer',
                 color: C.accent, background: 'transparent',
                 border: '1px solid ' + C.border, borderRadius: '3px'
@@ -641,19 +647,19 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
               type: 'button', onClick: add, disabled: busy || !test || !test.ok,
               title: test && test.ok ? 'save it to the inventory' : 'a host is only added after a probe of it succeeded',
               style: {
-                fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
+                fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px',
                 cursor: test && test.ok ? 'pointer' : 'not-allowed',
                 color: test && test.ok ? C.ok : C.faint, background: 'transparent',
                 border: '1px solid ' + (test && test.ok ? C.ok : C.border), borderRadius: '3px'
               }
             }, 'add'),
-            jsx('span', { style: { fontSize: '0.625rem', color: C.faint } },
+            jsx('span', { style: { fontSize: '0.75rem', color: C.faint } },
               'addresses only — the key stays in ssh')
           ]),
           test
             ? jsxs('div', { style: { marginTop: '6px' } }, [
                 test.ok
-                  ? jsx('div', { style: { fontSize: '0.625rem', color: C.ok, lineHeight: 1.4 } },
+                  ? jsx('div', { style: { fontSize: '0.75rem', color: C.ok, lineHeight: 1.4 } },
                       'reached it: ' + (test.adapter || '?') + ' · ' + ((test.os && test.os.id) || '?') + '/'
                       + ((test.os && test.os.codename) || '?') + ' · kernel '
                       + ((test.kernel && test.kernel.verdict) || '?') + ' · ' + (test.pending || 0) + ' pending')
@@ -661,18 +667,18 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
                       jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline' } }, [
                         chip('stopped at ' + (test.stage || 'unknown'), C.danger,
                              'the stage ssh failed at, in the order it tries them'),
-                        jsx('span', { style: { fontSize: '0.625rem', color: C.dim } },
+                        jsx('span', { style: { fontSize: '0.75rem', color: C.dim } },
                           test.reason || 'the host did not answer')
                       ]),
                       test.hint
-                        ? jsx('div', { style: { fontSize: '0.625rem', color: C.text, marginTop: '3px', lineHeight: 1.45 } },
+                        ? jsx('div', { style: { fontSize: '0.75rem', color: C.text, marginTop: '3px', lineHeight: 1.45 } },
                             test.hint)
                         : null,
                       test.fix
                         ? jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline', marginTop: '4px' } }, [
                             jsx('code', {
                               style: {
-                                fontFamily: MONO, fontSize: '0.5625rem', color: C.accent,
+                                fontFamily: MONO, fontSize: '0.6875rem', color: C.accent,
                                 background: C.panel, padding: '2px 6px', borderRadius: '3px',
                                 border: '1px solid ' + C.border, wordBreak: 'break-all'
                               }
@@ -708,27 +714,27 @@ function NowPanel({ status }) {
         jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
           deviceIcon(deviceKind(entry)),
           jsx('span', { style: { fontWeight: 600, fontSize: '0.8125rem' } }, entry.label),
-          jsx('span', { fontFamily: MONO, fontSize: '0.5625rem', color: C.accent },
+          jsx('span', { fontFamily: MONO, fontSize: '0.6875rem', color: C.accent },
             (entry.adapter || '?') + ' · ' + ((entry.os && entry.os.id) || '?') + '/' + ((entry.os && entry.os.codename) || '?')),
           // where the answer came from: this machine, or a host the operator declared
-          jsx('span', { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint },
+          jsx('span', { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint },
             entry.target && entry.target !== 'local' ? 'ssh ' + entry.target : 'this machine')
         ]),
-        jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim, marginTop: '2px' } },
+        jsx('div', { style: { fontFamily: MONO, fontSize: '0.8125rem', color: C.dim, marginTop: '2px' } },
           'kernel ' + (kernel.running || '?') + ' → ' + (kernel.verdict || '?')),
-        jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px' } },
+        jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, marginTop: '2px' } },
           (entry.pending_count || 0) + ' pending · ' + ((entry.vendor_lag || []).length)
           + ' fix(es) waiting on the vendor · ' + (entry.images || []).length + ' image(s) · ' + level.level),
         (entry.pending || []).length
-          ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.625rem', color: C.dim, marginTop: '3px' } },
+          ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.dim, marginTop: '3px' } },
               (entry.pending || []).slice(0, 3).map((row) => row.package + ' ' + (row.from || '?') + '→' + row.to).join(' · ') +
               (entry.pending_count > 3 ? ' · +' + (entry.pending_count - 3) + ' more' : ''))
           : null
       ]),
       jsxs('div', { style: { textAlign: 'right' } }, [
-        jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim } },
+        jsx('div', { style: { fontFamily: MONO, fontSize: '0.8125rem', color: C.dim } },
           entry.measured_at ? entry.measured_at.replace('T', ' ').slice(0, 19) : '—'),
-        jsx('div', { style: { fontSize: '0.625rem', color: C.faint } }, 'measured')
+        jsx('div', { style: { fontSize: '0.75rem', color: C.faint } }, 'measured')
       ])
     ])
   })
@@ -737,13 +743,13 @@ function NowPanel({ status }) {
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.overview.title),
       jsx('span', { style: { flex: 1 } }),
-      jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: C.faint } },
+      jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.faint } },
         ago(status ? status.age_seconds : null) + ' · exit ' + (status && status.exit_code !== null && status.exit_code !== undefined ? status.exit_code : '—'))
     ]),
     hosts.length ? rows : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, padding: '6px 0' } },
       (status && status.note) || 'no measurement yet'),
     blind.length
-      ? jsx('div', { style: { marginTop: '6px', fontSize: '0.6875rem', color: C.danger } },
+      ? jsx('div', { style: { marginTop: '6px', fontSize: '0.8125rem', color: C.danger } },
           blind.length + ' check(s) could not look — '
           + blind.map((b) => b.host || 'this machine').join(', ') + ' · see GAPS')
       : null
@@ -772,9 +778,9 @@ function UpdatesPanel({ entry, hostLabel }) {
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.packages.title),
       jsx('span', { style: { flex: 1 } }),
-      jsx('span', { fontFamily: MONO, fontSize: '0.625rem', color: total ? C.warn : C.faint },
+      jsx('span', { fontFamily: MONO, fontSize: '0.75rem', color: total ? C.warn : C.faint },
         hostLabel ? total + ' available' : '—'),
-      jsx('span', { style: { fontSize: '0.625rem', color: C.faint } },
+      jsx('span', { style: { fontSize: '0.75rem', color: C.faint } },
         entry && entry.measured_at ? 'measured ' + entry.measured_at.replace('T', ' ').slice(11, 16) + ' UTC' : ''),
       rows.length && commandBlock
         ? jsx(Copy, { text: commandBlock, label: 'copy the commands',
@@ -783,7 +789,7 @@ function UpdatesPanel({ entry, hostLabel }) {
       rows.length ? jsx(Copy, { text, label: 'copy list', what: 'the package list' }) : null
     ]),
     entry && entry.where && (rows.length || (entry.vendor_lag || []).length)
-      ? jsxs('div', { style: { fontSize: '0.625rem', color: C.faint, marginBottom: '5px', lineHeight: 1.45 } }, [
+      ? jsxs('div', { style: { fontSize: '0.75rem', color: C.faint, marginBottom: '5px', lineHeight: 1.45 } }, [
           jsx('span', { style: { fontFamily: MONO, color: C.dim } },
             (entry.where.kind === 'remote' ? 'run them on ' + entry.where.machine : 'run them on this machine')
             + ' — ' + (entry.where.how || 'in a terminal there')),
@@ -798,9 +804,9 @@ function UpdatesPanel({ entry, hostLabel }) {
             marginBottom: '6px', borderRadius: '3px'
           }
         }, [
-          jsx('div', { style: { fontSize: '0.6875rem', color: C.danger, fontWeight: 600 } },
+          jsx('div', { style: { fontSize: '0.8125rem', color: C.danger, fontWeight: 600 } },
             'this release is past standard support (ended ' + entry.support.ends + ')'),
-          jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
+          jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
             'No new fixes are published for it, so an empty pending list here means nobody is going to '
             + 'publish one — not that the machine is patched.'
             + (entry.support.pro && entry.support.pro.outcome === 'ok' && (entry.support.pro.enabled || []).length
@@ -813,7 +819,7 @@ function UpdatesPanel({ entry, hostLabel }) {
     entry && entry.pockets && entry.pockets.outcome === 'ok'
       && !(entry.pockets.pockets || {}).security
       ? jsx('div', {
-          style: { fontSize: '0.625rem', color: C.warn, marginBottom: '5px' }
+          style: { fontSize: '0.75rem', color: C.warn, marginBottom: '5px' }
         }, 'no security pocket is enabled on this host — a fix the vendor published may not be '
            + 'delivered here at all')
       : null,
@@ -826,12 +832,12 @@ function UpdatesPanel({ entry, hostLabel }) {
             marginBottom: '6px', borderRadius: '3px'
           }
         }, [
-          jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, fontWeight: 600 } },
+          jsx('div', { style: { fontSize: '0.8125rem', color: C.warn, fontWeight: 600 } },
             (entry.vendor_feed.product || 'the vendor feed') + ' was last refreshed '
             + String(entry.vendor_feed.feed_date || '').replace(' GMT', '')
             + (entry.vendor_feed.age_days !== null && entry.vendor_feed.age_days !== undefined
                 ? ' — ' + entry.vendor_feed.age_days + ' days ago' : '')),
-          jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
+          jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
             'A stale feed is not a vendor delay: the release has probably left support, so no new '
             + 'fixes are published for it. Lag rows below are a snapshot of that feed\'s last run.')
         ])
@@ -845,9 +851,9 @@ function UpdatesPanel({ entry, hostLabel }) {
             marginBottom: '6px', borderRadius: '3px'
           }
         }, [
-          jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, fontWeight: 600 } },
+          jsx('div', { style: { fontSize: '0.8125rem', color: C.warn, fontWeight: 600 } },
             'vendor lag: ' + (entry.vendor_state === 'unsupported' ? 'no feed for this family' : 'unmeasured')),
-          jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
+          jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
             entry.vendor_reason || 'the vendor-lag check did not run here')
         ])
       : null,
@@ -856,7 +862,7 @@ function UpdatesPanel({ entry, hostLabel }) {
     entry && entry.vendor_index_fresh === false
       && ((entry.pending || []).length || (entry.vendor_lag || []).length)
       ? jsxs('div', {
-          style: { fontSize: '0.625rem', color: C.warn, marginBottom: '4px', lineHeight: 1.45 }
+          style: { fontSize: '0.75rem', color: C.warn, marginBottom: '4px', lineHeight: 1.45 }
         }, [
           jsx('span', {}, (entry.vendor_index_note
             || 'the archive index on this host is older than 48 h') + ' — '),
@@ -873,14 +879,14 @@ function UpdatesPanel({ entry, hostLabel }) {
             marginBottom: '6px', borderRadius: '3px'
           }
         }, [
-          jsx('div', { style: { fontSize: '0.6875rem', color: C.danger, fontWeight: 600 } },
+          jsx('div', { style: { fontSize: '0.8125rem', color: C.danger, fontWeight: 600 } },
             entry.vendor_lag.length + ' fix(es) exist upstream but not in this archive yet'),
-          jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px', lineHeight: 1.4 } },
+          jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginTop: '2px', lineHeight: 1.4 } },
             'The advisory names a fixed version the archive does not offer, so nothing on this host can '
             + 'close it yet. Not the same as "nothing to do".'),
           entry.vendor_lag.slice(0, 6).map((row, index) => jsx('div', {
             key: index,
-            style: { fontFamily: MONO, fontSize: '0.625rem', color: C.text, marginTop: '3px' }
+            style: { fontFamily: MONO, fontSize: '0.75rem', color: C.text, marginTop: '3px' }
           }, row.package + '  ' + row.installed + ' → ' + row.fixed_version
              + '  (' + (row.notice || 'advisory') + ')'))
         ])
@@ -892,7 +898,7 @@ function UpdatesPanel({ entry, hostLabel }) {
             onChange: (event) => setQuery(event.target.value),
             placeholder: 'filter by package name',
             style: {
-              width: '100%', boxSizing: 'border-box', fontFamily: MONO, fontSize: '0.6875rem',
+              width: '100%', boxSizing: 'border-box', fontFamily: MONO, fontSize: '0.8125rem',
               padding: '3px 7px', marginBottom: '5px', background: 'transparent', color: C.text,
               border: '1px solid ' + C.border, borderRadius: '3px'
             }
@@ -907,7 +913,7 @@ function UpdatesPanel({ entry, hostLabel }) {
               key: index,
               style: {
                 display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px',
-                fontFamily: MONO, fontSize: '0.625rem', padding: '2px 0',
+                fontFamily: MONO, fontSize: '0.75rem', padding: '2px 0',
                 borderTop: '1px solid ' + C.border
               }
             }, [
@@ -916,11 +922,11 @@ function UpdatesPanel({ entry, hostLabel }) {
                 (row.from || '?') + ' → ' + row.to)
             ]))),
           filtered.length
-            ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '4px' } },
+            ? jsx('div', { style: { fontSize: '0.75rem', color: C.faint, marginTop: '4px' } },
                 filtered.length + ' row(s) in the box above — it scrolls; copy gets all of them')
             : null,
           entry && entry.pending_truncated
-            ? jsx('div', { style: { fontSize: '0.625rem', color: C.warn, marginTop: '3px' } },
+            ? jsx('div', { style: { fontSize: '0.75rem', color: C.warn, marginTop: '3px' } },
                 'the stored scan kept the first ' + rows.length + ' of ' + total + ' — rescan for the rest')
             : null
         ])
@@ -1089,7 +1095,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
       libraries
         ? jsx('span', {
             style: {
-              fontFamily: MONO, fontSize: '0.625rem',
+              fontFamily: MONO, fontSize: '0.75rem',
               // red is for something to do: an exploited finding, or one with a command to run.
               // A finding nobody has fixed yet is neutral — it is a fact, not a task.
               color: findingsMine.some((v) => v.kev) ? C.danger
@@ -1117,7 +1123,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
         disabled: busy,
         title: 'Reads the global npm tree and the pip environment on PATH, then asks osv.dev',
         style: {
-          fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: busy ? 'default' : 'pointer',
+          fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px', cursor: busy ? 'default' : 'pointer',
           color: busy ? C.faint : C.accent, background: 'transparent',
           border: '1px solid ' + C.border, borderRadius: '3px'
         }
@@ -1132,7 +1138,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
               onChange: (event) => setProjectPath(event.target.value),
               placeholder: "a project's lockfiles — /path/to/repo (npm, pip, go, cargo, composer, bundler, pub)",
               style: {
-                flex: 1, fontFamily: MONO, fontSize: '0.625rem', padding: '3px 7px',
+                flex: 1, fontFamily: MONO, fontSize: '0.75rem', padding: '3px 7px',
                 background: 'transparent', color: C.text, border: '1px solid ' + C.border,
                 borderRadius: '3px'
               }
@@ -1143,7 +1149,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
               disabled: busy || !projectPath.trim(),
               title: 'reads every lockfile under that directory and asks OSV about the pinned versions',
               style: {
-                fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
+                fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px',
                 cursor: busy || !projectPath.trim() ? 'default' : 'pointer',
                 color: busy || !projectPath.trim() ? C.faint : C.accent, background: 'transparent',
                 border: '1px solid ' + C.border, borderRadius: '3px'
@@ -1156,7 +1162,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                   disabled: busy,
                   title: 'back to what this machine has installed',
                   style: {
-                    fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: 'pointer',
+                    fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px', cursor: 'pointer',
                     color: C.dim, background: 'transparent',
                     border: '1px solid ' + C.border, borderRadius: '3px'
                   }
@@ -1165,13 +1171,13 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
           ]),
           libraries.scope === 'project' && libraries.project
             ? jsxs('div', { style: { marginBottom: '5px' } }, [
-                jsx('div', { style: { fontSize: '0.6875rem', color: C.text } },
+                jsx('div', { style: { fontSize: '0.8125rem', color: C.text } },
                   'project: ' + libraries.project.root),
-                jsx('div', { style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
+                jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
                   Object.entries(libraries.project.files).map(([name, state]) => name + ' — ' + state).join(' · '))
               ])
             : null,
-          jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '4px' } },
+          jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, marginBottom: '4px' } },
             (libraries.answer || '')
             + (readEcosystems.length ? ' · read: ' + readEcosystems.join(', ') : '')
             + (missingEcosystems.length
@@ -1179,7 +1185,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
           // where that number comes from: the count mixes environments, stores and the agent's own
           // env, and two readers of the same payload quoted two different totals when it did not say
           packages.length
-            ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint, marginBottom: '5px' } },
+            ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint, marginBottom: '5px' } },
                 [
                   environmentCount
                     ? environmentCount + ' project environment(s): ' + packages.filter((p) => envName(p.source)).length
@@ -1190,20 +1196,20 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
             : null,
           vulnerable.length
             ? jsx('div', {
-                style: { fontSize: '0.625rem', color: C.faint, marginBottom: '4px' },
+                style: { fontSize: '0.75rem', color: C.faint, marginBottom: '4px' },
                 title: 'One advisory per exact version; the fix column is the first version that closes it.'
               }, findingsMine.length + ' finding(s) on ' + flagged.length
                  + ' package(s) · one row per advisory, the fix column closes it')
             : null,
           (libraries.threat && libraries.threat.kev_count)
             ? jsx('div', {
-                style: { fontSize: '0.6875rem', color: C.danger, marginBottom: '4px', fontWeight: 600 }
+                style: { fontSize: '0.8125rem', color: C.danger, marginBottom: '4px', fontWeight: 600 }
               }, libraries.threat.kev_count + ' advisory(ies) here are in CISA\'s known-exploited list'
                 + (libraries.threat.ransomware && libraries.threat.ransomware.length
                     ? ' — ' + libraries.threat.ransomware.length + ' used in ransomware campaigns' : ''))
             : null,
           !Array.isArray(libraries.packages)
-            ? jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, marginBottom: '4px' } },
+            ? jsx('div', { style: { fontSize: '0.8125rem', color: C.warn, marginBottom: '4px' } },
                 'this answer carries no package list — the backend behind this pane is older than the pane. '
                 + 'Restart the app so both halves load the same build.')
             : null,
@@ -1213,7 +1219,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
               onChange: (event) => setQuery(event.target.value),
               placeholder: 'filter packages',
               style: {
-                flex: 1, fontFamily: MONO, fontSize: '0.6875rem', padding: '3px 7px',
+                flex: 1, fontFamily: MONO, fontSize: '0.8125rem', padding: '3px 7px',
                 background: 'transparent', color: C.text, border: '1px solid ' + C.border,
                 borderRadius: '3px'
               }
@@ -1224,7 +1230,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                   onClick: () => setShowAll((current) => !current),
                   title: 'the packages with no advisory are still counted, just not listed',
                   style: {
-                    fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px', cursor: 'pointer',
+                    fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px', cursor: 'pointer',
                     color: showAll ? C.accent : C.dim, background: 'transparent',
                     border: '1px solid ' + (showAll ? C.accent : C.border), borderRadius: '3px'
                   }
@@ -1247,7 +1253,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
               jsxs('div', {
                 style: {
                   display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px',
-                  fontFamily: MONO, fontSize: '0.625rem'
+                  fontFamily: MONO, fontSize: '0.75rem'
                 }
               }, [
                 jsx('span', { style: { color: C.text, wordBreak: 'break-all' } },
@@ -1284,14 +1290,14 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
               found && !String(buildFixCommand(row, found)).startsWith('#')
                 ? jsx('div', {
                     style: {
-                      fontFamily: MONO, fontSize: '0.5625rem', color: C.faint,
+                      fontFamily: MONO, fontSize: '0.6875rem', color: C.faint,
                       marginTop: '1px', wordBreak: 'break-all'
                     }
                   }, '→ ' + buildFixCommand(row, found))
                 : null,
               found && found.workaround
                 ? jsx('div', {
-                    style: { fontSize: '0.5625rem', color: C.warn, marginTop: '2px', lineHeight: 1.4 }
+                    style: { fontSize: '0.6875rem', color: C.warn, marginTop: '2px', lineHeight: 1.4 }
                   }, 'workaround, from the advisory: ' + found.workaround.slice(0, 260)
                      + (found.workaround.length > 260 ? '…' : ''))
                 : null,
@@ -1306,7 +1312,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                           onChange: (event) => setAckReason(event.target.value),
                           placeholder: 'why is this accepted? (required, kept with the record)',
                           style: {
-                            flex: 1, fontFamily: MONO, fontSize: '0.5625rem', padding: '2px 6px',
+                            flex: 1, fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 6px',
                             background: 'transparent', color: C.text,
                             border: '1px solid ' + C.border, borderRadius: '3px'
                           }
@@ -1315,7 +1321,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                           key: 'ok', type: 'button', disabled: ackBusy || !ackReason.trim(),
                           onClick: () => recordAck(row),
                           style: {
-                            fontFamily: MONO, fontSize: '0.5625rem', padding: '2px 7px',
+                            fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 7px',
                             cursor: ackReason.trim() ? 'pointer' : 'default',
                             color: ackReason.trim() ? C.accent : C.faint,
                             background: 'transparent', border: '1px solid ' + C.border,
@@ -1326,7 +1332,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                           key: 'no', type: 'button',
                           onClick: () => { setAckFor(null); setAckReason('') },
                           style: {
-                            fontFamily: MONO, fontSize: '0.5625rem', padding: '2px 7px',
+                            fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 7px',
                             cursor: 'pointer', color: C.dim, background: 'transparent',
                             border: '1px solid ' + C.border, borderRadius: '3px'
                           }
@@ -1337,7 +1343,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                         onClick: () => { setAckFor(keyOf(row)); setAckReason('') },
                         title: 'records this advisory as accepted, with your reason, for 90 days',
                         style: {
-                          marginTop: '3px', fontFamily: MONO, fontSize: '0.5625rem',
+                          marginTop: '3px', fontFamily: MONO, fontSize: '0.6875rem',
                           padding: '1px 7px', cursor: 'pointer', color: C.dim,
                           background: 'transparent', border: '1px solid ' + C.border,
                           borderRadius: '3px'
@@ -1355,7 +1361,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                   type: 'button',
                   onClick: () => setShowAcked((current) => !current),
                   style: {
-                    fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 7px', cursor: 'pointer',
+                    fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px', cursor: 'pointer',
                     color: showAcked ? C.accent : C.faint, background: 'transparent',
                     border: '1px solid ' + C.border, borderRadius: '3px'
                   }
@@ -1369,7 +1375,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                         key: index,
                         style: {
                           display: 'flex', gap: '6px', alignItems: 'baseline',
-                          fontSize: '0.5625rem', color: C.faint, marginBottom: '2px'
+                          fontSize: '0.6875rem', color: C.faint, marginBottom: '2px'
                         }
                       }, [
                         jsx('span', { key: 'id', style: { fontFamily: MONO, color: C.dim } },
@@ -1382,7 +1388,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                           onClick: () => reopenAck(row),
                           title: 'puts the finding back into the count',
                           style: {
-                            fontFamily: MONO, fontSize: '0.5625rem', padding: '0 6px',
+                            fontFamily: MONO, fontSize: '0.6875rem', padding: '0 6px',
                             cursor: 'pointer', color: C.dim, background: 'transparent',
                             border: '1px solid ' + C.border, borderRadius: '3px'
                           }
@@ -1403,18 +1409,18 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                   title: 'an advisory with no fixed version cannot be installed — the operator can '
                          + 'record it as accepted, with a reason and an end date',
                   style: {
-                    fontFamily: MONO, fontSize: '0.625rem', padding: '2px 8px', cursor: 'pointer',
+                    fontFamily: MONO, fontSize: '0.75rem', padding: '2px 8px', cursor: 'pointer',
                     color: showNoFix ? C.accent : C.dim, background: 'transparent',
                     border: '1px solid ' + (showNoFix ? C.accent : C.border), borderRadius: '3px'
                   }
                 }, (showNoFix ? 'hide ' : 'show ') + noFixKeys.size + ' package(s) / '
                    + noFixRows.length + ' advisory(ies) with no published fix'),
-                jsx('span', { key: 'why', style: { fontSize: '0.5625rem', color: C.faint } },
+                jsx('span', { key: 'why', style: { fontSize: '0.6875rem', color: C.faint } },
                   'nothing to run — the advisory names no fixed version')
               ])
             : null,
           !rows.length
-            ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint } },
+            ? jsx('div', { style: { fontSize: '0.8125rem', color: C.faint } },
                 needle ? 'nothing matches the filter'
                   : noFixKeys.size ? 'no finding here has a fix to install — the line above lists the '
                                      + 'ones that do not'
@@ -1423,16 +1429,16 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
           // "3 packages, 0 findings" with no explanation is the empty state that reads as broken
           libraries && mine.length && !flagged.length
             ? jsx('div', {
-                style: { fontSize: '0.6875rem', color: C.ok, marginTop: '3px' }
+                style: { fontSize: '0.8125rem', color: C.ok, marginTop: '3px' }
               }, 'nothing to upgrade here: ' + mine.length + ' package(s) read and no published '
                + 'advisory names these versions. The copy control appears when there is a command '
                + 'to copy.')
             : null,
           hidden > 0
-            ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '3px' } },
+            ? jsx('div', { style: { fontSize: '0.75rem', color: C.faint, marginTop: '3px' } },
                 hidden + ' more package(s) read and clean (no advisory names their version) — '
                 + '“show all ' + matching.length + '” lists them')
-            : jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '3px' } },
+            : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, marginTop: '3px' } },
                 rows.length + ' row(s) in the box above — it scrolls, the filter narrows'),
           // Hermes's own environment is measured, but it is not an alert. The only lever is
           // `hermes update`, and an advisory there clears when the agent ships past it — so a count
@@ -1446,7 +1452,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 }
               }, [
                 jsxs('div', {
-                  style: { display: 'flex', alignItems: 'baseline', gap: '8px', fontSize: '0.625rem', color: C.warn }
+                  style: { display: 'flex', alignItems: 'baseline', gap: '8px', fontSize: '0.75rem', color: C.warn }
                 }, [
                   jsx('span', {}, findingsAgent.filter((v) => v.kev).length
                     + ' exploited advisory(ies) sit in packages Hermes itself ships — `hermes update` '
@@ -1456,7 +1462,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                     type: 'button',
                     onClick: () => setShowHermes((current) => !current),
                     style: {
-                      fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 7px', cursor: 'pointer',
+                      fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px', cursor: 'pointer',
                       color: showHermes ? C.accent : C.faint, background: 'transparent',
                       border: '1px solid ' + C.border, borderRadius: '2px'
                     }
@@ -1465,7 +1471,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
                 showHermes
                   ? jsx('div', {
                       style: {
-                        fontFamily: MONO, fontSize: '0.5625rem', color: C.faint, marginTop: '3px',
+                        fontFamily: MONO, fontSize: '0.6875rem', color: C.faint, marginTop: '3px',
                         maxHeight: '90px', overflowY: 'auto', wordBreak: 'break-all'
                       }
                     }, agentOwned.map((row) => jsx('div', { key: keyOf(row) },
@@ -1495,7 +1501,7 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline }) {
   const [open, setOpen] = useState(false)
   const state = reading && reading.integrity
   const answers = (reading && reading.answers) || []
-  const age = reading && reading.read_at ? ago(reading.read_at) : null
+  const age = agoAt(reading && reading.read_at)
   const tone = (value) => (value === 'finding' ? C.danger
     : value === 'ok' ? C.ok
     : value === 'baseline' ? C.warn : C.faint)
@@ -1504,7 +1510,7 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline }) {
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.integrity.title),
       jsx('span', {
-        style: { fontSize: '0.5625rem', color: C.faint }
+        style: { fontSize: '0.6875rem', color: C.faint }
       }, state
         ? (age ? 'read ' + age : 'read')
         : 'not read yet'),
@@ -1515,7 +1521,7 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline }) {
         title: 'verifies package checksums, the preload hook and the listening sockets — about a '
                + 'minute on a full package database',
         style: {
-          marginLeft: 'auto', fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
+          marginLeft: 'auto', fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px',
           cursor: busy ? 'default' : 'pointer', color: busy ? C.faint : C.accent,
           background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
         }
@@ -1523,14 +1529,18 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline }) {
         ? [jsx('span', { key: 'dot', className: 'ps-dot' }), ' reading' + (seconds ? ' ' + seconds + 's' : '')]
         : (state ? 'read again' : 'read integrity'))
     ]),
-    !state
-      ? jsx('div', { style: { fontSize: '0.6875rem', color: C.dim, lineHeight: 1.5 } },
+    busy
+      ? jsx(ScanLine, { label: 'verifying package checksums, the preload hook and the listening sockets'
+                               + (seconds ? ' · ' + seconds + ' s' : '') })
+      : null,
+    !state && !busy
+      ? jsx('div', { style: { fontSize: '0.8125rem', color: C.dim, lineHeight: 1.5 } },
           'Not measured yet. This is the one check that answers whether what is installed is still '
           + 'what was installed — package checksums, a preloaded library hook, and sockets that were '
           + 'not there before. It takes about a minute and runs only when you ask.')
-      : jsxs('div', {}, [
+      : state ? jsxs('div', {}, [
           jsx('div', {
-            style: { fontSize: '0.6875rem', color: tone(state.state), marginBottom: '4px' }
+            style: { fontSize: '0.8125rem', color: tone(state.state), marginBottom: '4px' }
           }, reading.answer || ''),
           jsx('div', {
             style: {
@@ -1547,23 +1557,28 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline }) {
             jsx('span', {
               key: 'chip',
               style: {
-                fontFamily: MONO, fontSize: '0.5625rem', textTransform: 'uppercase',
+                fontFamily: MONO, fontSize: '0.6875rem', textTransform: 'uppercase',
                 letterSpacing: '0.04em', color: tone(row.state), minWidth: '74px'
               }
             }, row.state === 'baseline' ? 'baseline' : row.state === 'ok' ? 'measured'
               : row.state === 'finding' ? 'finding' : 'could not look'),
             jsx('span', {
-              key: 'what', style: { fontSize: '0.6875rem', color: C.text, minWidth: '132px' }
+              key: 'what', style: { fontSize: '0.8125rem', color: C.text, minWidth: '132px' }
             }, row.check),
             jsx('span', {
               key: 'detail',
-              style: { flex: 1, fontSize: '0.625rem', color: C.dim, wordBreak: 'break-word' }
+              style: { flex: 1, fontSize: '0.75rem', color: C.dim, wordBreak: 'break-word' }
             }, (row.detail || '')
                + ((row.items || []).length ? ' — ' + row.items.slice(0, 4).join(', ') : ''))
           ]))),
           reading.integrity && reading.integrity.note
-            ? jsx('div', { style: { fontSize: '0.5625rem', color: C.warn, marginTop: '4px' } },
-                reading.integrity.note)
+            ? jsx('div', {
+                style: { fontSize: '0.75rem', color: C.warn, marginTop: '4px', lineHeight: 1.55 }
+              }, String(reading.integrity.note).split('`').map((part, index) => (
+                index % 2
+                  ? jsx('span', { key: index, style: { fontFamily: MONO, color: C.accent } }, part)
+                  : jsx('span', { key: index }, part)
+              )))
             : null,
           jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginTop: '5px' } }, [
             jsx('button', {
@@ -1571,7 +1586,7 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline }) {
               type: 'button',
               onClick: () => setOpen((current) => !current),
               style: {
-                fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 7px', cursor: 'pointer',
+                fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px', cursor: 'pointer',
                 color: open ? C.accent : C.faint, background: 'transparent',
                 border: '1px solid ' + C.border, borderRadius: '3px'
               }
@@ -1586,7 +1601,7 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline }) {
                   title: 'accepts the sockets listening right now as the known set — use it after you '
                          + 'deploy something, not to silence a port you do not recognise',
                   style: {
-                    fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 7px',
+                    fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px',
                     cursor: busy ? 'default' : 'pointer', color: C.dim, background: 'transparent',
                     border: '1px solid ' + C.border, borderRadius: '3px'
                   }
@@ -1595,14 +1610,14 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline }) {
           ]),
           open
             ? jsx('div', {
-                style: { fontSize: '0.625rem', color: C.faint, marginTop: '4px', lineHeight: 1.5 }
+                style: { fontSize: '0.75rem', color: C.faint, marginTop: '4px', lineHeight: 1.5 }
               }, 'A rootkit that hides from dpkg and ss, a fileless attack, an intrusion that restored the '
                + 'checksums afterwards, and anything living only in memory are all invisible here. A '
                + 'clean reading means no evidence of tampering in the three surfaces above — not that '
                + 'this host is uncompromised. For that you need an EDR (Wazuh, auditd rules, Falco) and '
                + 'a place to send its alerts.')
             : null
-        ])
+        ]) : null
   ])
 }
 
@@ -1628,7 +1643,7 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where, libra
         title: planning ? 'measuring the host and turning it into commands'
                         : 'turns this host\'s pending updates into ordered commands, each with a way back',
         style: {
-          fontFamily: MONO, fontSize: '0.625rem', padding: '3px 9px',
+          fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px',
           cursor: planning || !hostLabel ? 'default' : 'pointer',
           color: planning ? C.accent : C.dim, background: 'transparent',
           border: '1px solid ' + C.border, borderRadius: '3px'
@@ -1639,7 +1654,7 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where, libra
         : null
     ]),
     steps.length > 1
-      ? jsxs('div', { style: { fontSize: '0.625rem', color: C.faint, marginBottom: '6px', lineHeight: 1.45 } }, [
+      ? jsxs('div', { style: { fontSize: '0.75rem', color: C.faint, marginBottom: '6px', lineHeight: 1.45 } }, [
           jsx('div', {}, 'These run in this order, top to bottom: the first refreshes the metadata and '
             + 'downloads (it changes nothing), the second installs.'),
           whereLine
@@ -1657,20 +1672,20 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where, libra
           }
         }, [
           jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline' } }, [
-            jsx('span', { style: { fontFamily: MONO, fontSize: '0.625rem', color: C.accent } }, String(index + 1).padStart(2, '0')),
+            jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.accent } }, String(index + 1).padStart(2, '0')),
             jsx('span', { style: { flex: 1, fontSize: '0.8125rem', fontWeight: 600 } }, step.action),
             jsx(Copy, { text: step.command, what: 'the command' })
           ]),
           jsx('div', {
             style: {
-              fontFamily: MONO, fontSize: '0.6875rem', color: C.text, marginTop: '4px',
+              fontFamily: MONO, fontSize: '0.8125rem', color: C.text, marginTop: '4px',
               whiteSpace: 'pre-wrap', wordBreak: 'break-all'
             }
           }, step.command),
-          jsx('div', { style: { fontSize: '0.6875rem', color: C.dim, marginTop: '4px' } },
+          jsx('div', { style: { fontSize: '0.8125rem', color: C.dim, marginTop: '4px' } },
             'risk ' + step.risk + ' · downtime ' + step.downtime),
-          jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '3px' } }, step.why),
-          jsxs('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '3px' } }, [
+          jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, marginTop: '3px' } }, step.why),
+          jsxs('div', { style: { fontSize: '0.8125rem', color: C.faint, marginTop: '3px' } }, [
             'verify: ', jsx('span', { style: { fontFamily: MONO } }, step.verify || '—'),
             '  ·  reverse: ', jsx('span', { style: { fontFamily: MONO } }, step.reversal || '—')
           ])
@@ -1692,10 +1707,10 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where, libra
             background: C.panel, borderRadius: '3px'
           }
         }, [
-          jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, fontWeight: 600 } },
+          jsx('div', { style: { fontSize: '0.8125rem', color: C.warn, fontWeight: 600 } },
             'no steps — ' + refusals.map((r) => r.reason).join(' · ')),
           refusals.some((r) => r.detail)
-            ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '3px' } },
+            ? jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, marginTop: '3px' } },
                 refusals.map((r) => r.detail).filter(Boolean).join(' · '))
             : null
         ])
@@ -1724,16 +1739,16 @@ function gapRow(gap, index, expanded) {
     jsxs('div', {}, [
       jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline', flexWrap: 'wrap' } }, [
         jsx('span', { style: { fontSize: '0.75rem', color: blocked ? C.text : C.dim } }, gap.gap),
-        jsx('span', { style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint } },
+        jsx('span', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint } },
           gap.state)
       ]),
       blocked || expanded
-        ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
+        ? jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
             gap.why || '')
         : null,
       (blocked || expanded) && gap.next
         ? jsx('div', {
-            style: { fontSize: '0.6875rem', marginTop: '3px', lineHeight: 1.45,
+            style: { fontSize: '0.8125rem', marginTop: '3px', lineHeight: 1.45,
                      color: blocked ? C.warn : C.dim }
           }, (blocked ? 'to clear it: ' : 'what would close it: ') + gap.next)
         : null
@@ -1759,14 +1774,14 @@ function GapsPanel({ coverage, selected }) {
     jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
       label(SECTION.gaps.title),
       jsx('span', { style: { flex: 1 } }),
-      jsx('span', { style: { fontSize: '0.625rem', color: C.faint } },
+      jsx('span', { style: { fontSize: '0.75rem', color: C.faint } },
         selected ? 'what a scan of ' + selected + ' cannot see' : 'what this scan cannot see')
     ]),
-    jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, lineHeight: 1.45, marginBottom: '4px' } },
+    jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, lineHeight: 1.45, marginBottom: '4px' } },
       'What this scan did not look at — a fact about the scan, not a fault on the host.'),
     blocked.length
       ? jsxs('div', { style: { marginBottom: '6px' } }, [
-          jsx('div', { style: { fontSize: '0.625rem', color: C.danger, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '2px' } },
+          jsx('div', { style: { fontSize: '0.75rem', color: C.danger, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '2px' } },
             blocked.length + ' fixable — why a row is not green'),
           blocked.map((gap, index) => gapRow(gap, index, true))
         ])
@@ -1774,14 +1789,14 @@ function GapsPanel({ coverage, selected }) {
     limits.length
       ? jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '2px' } }, [
           jsx('span', {
-            style: { fontSize: '0.625rem', color: C.faint, letterSpacing: '0.08em', textTransform: 'uppercase' }
+            style: { fontSize: '0.75rem', color: C.faint, letterSpacing: '0.08em', textTransform: 'uppercase' }
           }, limits.length + ' inherent limit' + (limits.length === 1 ? '' : 's')),
           jsx('span', { style: { flex: 1 } }),
           jsx('button', {
             type: 'button',
             onClick: () => setOpen((value) => !value),
             style: {
-              fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 7px', cursor: 'pointer',
+              fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px', cursor: 'pointer',
               color: open ? C.accent : C.faint, background: 'transparent',
               border: '1px solid ' + C.border, borderRadius: '2px'
             }
@@ -1790,10 +1805,10 @@ function GapsPanel({ coverage, selected }) {
       : null,
     limits.map((gap, index) => gapRow(gap, index, open)),
     elsewhere
-      ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '6px' } },
+      ? jsx('div', { style: { fontSize: '0.75rem', color: C.faint, marginTop: '6px' } },
           elsewhere + ' more gap(s) concern other hosts — switch host at the top to read them')
       : null,
-    all.length ? null : jsx('div', { style: { fontSize: '0.6875rem', color: C.warn } },
+    all.length ? null : jsx('div', { style: { fontSize: '0.8125rem', color: C.warn } },
       'coverage has not been read yet — an empty gap list is not a claim that nothing is missed')
   ])
 }
@@ -1870,7 +1885,7 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
             + 'plan\'s commands are the way, and nothing is lost by that.'),
     // the precondition, stated before the click instead of after it
     probe === null && measured && !nothingToDo
-      ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginBottom: '6px' } },
+      ? jsx('div', { style: { fontSize: '0.75rem', color: C.faint, marginBottom: '6px' } },
           'checking whether this host allows it…')
       : probe && probe.known
         ? (blocked
@@ -1880,9 +1895,9 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
                   borderRadius: '3px', marginBottom: '6px'
                 }
               }, [
-                jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, fontWeight: 600 } },
+                jsx('div', { style: { fontSize: '0.8125rem', color: C.warn, fontWeight: 600 } },
                   'not available on ' + hostLabel + ' — and that is expected'),
-                jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
+                jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
                   'sudo there asks ' + ((probe.where && probe.where.runs_as) || 'this account')
                   + ' for a password, and this plugin never asks for, holds or forwards one. Use the '
                   + 'plan above: copy the commands, run them '
@@ -1890,14 +1905,14 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
                       ? 'on ' + probe.where.machine + (probe.where.ssh ? ' (`' + probe.where.ssh + '`)' : '')
                       : 'in a terminal on this machine')
                   + '.'),
-                jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px' } },
+                jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginTop: '2px' } },
                   'The commands and their copy control are in the plan above — nothing is missing here.')
               ])
-            : jsx('div', { style: { fontSize: '0.625rem', color: C.ok, marginBottom: '6px' } },
+            : jsx('div', { style: { fontSize: '0.75rem', color: C.ok, marginBottom: '6px' } },
                 'this host allows it: ' + ((probe.where && probe.where.runs_as) || 'this account')
                 + ' can patch without a password'))
         : null,
-    nothingToDo || blocked ? null : jsxs('div', { style: { fontSize: '0.6875rem', color: C.faint, marginBottom: '6px' } }, [
+    nothingToDo || blocked ? null : jsxs('div', { style: { fontSize: '0.8125rem', color: C.faint, marginBottom: '6px' } }, [
       'Type ',
       jsx('code', {
         style: {
@@ -1907,7 +1922,7 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
       }, hostLabel || 'the host name'),
       ' exactly — that is the label selected at the top, not the machine\'s hostname. The lock exists so a stray click cannot patch a machine.'
     ]),
-    armed ? jsx('div', { style: { fontSize: '0.6875rem', color: C.accent, marginBottom: '6px' } },
+    armed ? jsx('div', { style: { fontSize: '0.8125rem', color: C.accent, marginBottom: '6px' } },
       'unlocked — stage first, then apply') : null,
     blocked ? null : jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
       jsx('input', {
@@ -1927,7 +1942,7 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
              : nothingToDo ? 'nothing to stage: the scan found 0 updates'
              : !armed ? 'type the host label above to unlock' : 'stages the download, prints the command, changes nothing',
         style: {
-          fontFamily: MONO, fontSize: '0.6875rem', padding: '4px 10px',
+          fontFamily: MONO, fontSize: '0.8125rem', padding: '4px 10px',
           cursor: ready && !busy ? 'pointer' : 'not-allowed',
           color: armed ? C.accent : C.faint, background: 'transparent',
           border: '1px solid ' + (armed ? C.accent : C.border), borderRadius: '3px'
@@ -1941,7 +1956,7 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
              : nothingToDo ? 'nothing to apply: the scan found 0 updates'
              : !armed ? 'type the host label above to unlock' : 'applies for real, writes a receipt with the versions before and after',
         style: {
-          fontFamily: MONO, fontSize: '0.6875rem', padding: '4px 12px',
+          fontFamily: MONO, fontSize: '0.8125rem', padding: '4px 12px',
           cursor: ready && !busy ? 'pointer' : 'not-allowed',
           color: armed ? C.danger : C.faint, background: 'transparent',
           border: '1px solid ' + (armed ? C.danger : C.border), borderRadius: '3px'
@@ -1952,23 +1967,23 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
       ? jsxs('div', { style: { marginTop: '8px', borderTop: '1px dashed ' + C.border, paddingTop: '6px' } }, [
           jsx('div', {
             style: {
-              fontFamily: MONO, fontSize: '0.6875rem',
+              fontFamily: MONO, fontSize: '0.8125rem',
               color: result.applied ? C.ok : (result.dry_run ? C.accent : C.warn)
             }
           }, (result.applied ? 'applied — ' : (result.dry_run ? 'staged, nothing changed — ' : 'refused — ')) + (result.reason || '')),
           result.expected
-            ? jsx('div', { style: { fontSize: '0.625rem', color: C.dim, marginTop: '2px' } },
+            ? jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginTop: '2px' } },
                 'the name this gate expects: ' + result.expected)
             : null,
           steps.length
             ? jsx('div', { style: { marginTop: '4px' } }, steps.map((step, index) =>
                 jsx('div', {
                   key: index,
-                  style: { fontFamily: MONO, fontSize: '0.625rem', color: step.ok ? C.dim : C.danger }
+                  style: { fontFamily: MONO, fontSize: '0.75rem', color: step.ok ? C.dim : C.danger }
                 }, step.action + ' · rc ' + step.rc + ' · ' + step.duration_s + 's' + (step.ok ? '' : ' · ' + (step.output || '').slice(0, 160)))))
             : null,
           result.receipt
-            ? jsx('div', { style: { marginTop: '4px', fontSize: '0.625rem', color: C.faint } },
+            ? jsx('div', { style: { marginTop: '4px', fontSize: '0.75rem', color: C.faint } },
                 'receipt written · ' + (result.receipt.outcome || '') + ' · reboot owed: ' + String(Boolean(result.reboot_required)))
             : null,
           // a refusal that hands you the work is worth more than one that ends the conversation
@@ -1980,7 +1995,7 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
                 }
               }, [
                 jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } }, [
-                  jsx('span', { style: { fontSize: '0.625rem', color: C.dim } },
+                  jsx('span', { style: { fontSize: '0.75rem', color: C.dim } },
                     'run it yourself — ' + ((result.handoff.where && result.handoff.where.how) || 'by hand')),
                   jsx('span', { style: { flex: 1 } }),
                   jsx(Copy, { text: result.handoff.commands.join('\n'), label: 'copy both' })
@@ -1988,7 +2003,7 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
                 result.handoff.where && result.handoff.where.ssh
                   ? jsx('div', {
                       style: {
-                        fontFamily: MONO, fontSize: '0.5625rem', color: C.text, marginTop: '3px',
+                        fontFamily: MONO, fontSize: '0.6875rem', color: C.text, marginTop: '3px',
                         wordBreak: 'break-all'
                       }
                     }, 'connect: ' + result.handoff.where.ssh)
@@ -1996,24 +2011,24 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
                 result.handoff.commands.map((command, index) => jsxs('div', {
                   key: index,
                   style: {
-                    fontFamily: MONO, fontSize: '0.5625rem', color: C.accent, marginTop: '3px',
+                    fontFamily: MONO, fontSize: '0.6875rem', color: C.accent, marginTop: '3px',
                     wordBreak: 'break-all'
                   }
                 }, [String(index + 1) + '. ', command])),
                 result.handoff.verify
-                  ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.dim, marginTop: '3px', wordBreak: 'break-all' } },
+                  ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim, marginTop: '3px', wordBreak: 'break-all' } },
                       'then check: ' + result.handoff.verify)
                   : null,
                 result.handoff.reversal
-                  ? jsx('div', { style: { fontSize: '0.5625rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
+                  ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
                       'to undo: ' + result.handoff.reversal)
                   : null,
                 result.handoff.note
-                  ? jsx('div', { style: { fontSize: '0.5625rem', color: C.faint, marginTop: '3px', lineHeight: 1.45 } },
+                  ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '3px', lineHeight: 1.45 } },
                       result.handoff.note)
                   : null,
                 result.handoff.where && result.handoff.where.note
-                  ? jsx('div', { style: { fontSize: '0.5625rem', color: C.warn, marginTop: '2px', lineHeight: 1.45 } },
+                  ? jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, marginTop: '2px', lineHeight: 1.45 } },
                       result.handoff.where.note)
                   : null
               ])
@@ -2244,7 +2259,7 @@ export function PatchSentinel({ compact }) {
             value: selected || '',
             onChange: (event) => setSelected(event.target.value),
             style: {
-              fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 4px',
+              fontFamily: MONO, fontSize: '0.8125rem', padding: '2px 4px',
               background: 'Canvas', color: 'CanvasText', border: '1px solid ' + C.border,
               borderRadius: '3px', colorScheme: 'light dark'
             }
@@ -2279,17 +2294,17 @@ export function PatchSentinel({ compact }) {
         })
       : null,
     scanError
-      ? jsx('div', { style: { fontSize: '0.6875rem', color: C.danger, marginBottom: '8px' } }, scanError)
+      ? jsx('div', { style: { fontSize: '0.8125rem', color: C.danger, marginBottom: '8px' } }, scanError)
       : null,
     health && Array.isArray(health.inventory) && health.inventory.length <= 1
-      ? jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, marginBottom: '10px' } },
+      ? jsx('div', { style: { fontSize: '0.8125rem', color: C.warn, marginBottom: '10px' } },
           'the backend loaded an inventory of ' + health.inventory.length + ' host(s)'
           + (health.data_dir ? ' (data dir: ' + health.data_dir + ')' : '')
           + ' — if you declared more, it is running without its settings: restart the app.')
       : null,
     jsxs('div', {
       style: {
-        fontSize: '0.6875rem', color: C.faint, lineHeight: 1.5, marginBottom: '14px',
+        fontSize: '0.8125rem', color: C.faint, lineHeight: 1.5, marginBottom: '14px',
         borderLeft: '2px solid ' + C.border, paddingLeft: '9px'
       }
     }, SECTIONS.map((section) => jsx('div', { key: section.key },
@@ -2317,7 +2332,7 @@ export function PatchSentinel({ compact }) {
           disabled: !selected,
           title: 'runs the same commands the plan gives you, from here',
           style: {
-            fontFamily: MONO, fontSize: '0.625rem', padding: '2px 8px',
+            fontFamily: MONO, fontSize: '0.75rem', padding: '2px 8px',
             cursor: selected ? 'pointer' : 'default', color: applyOpen ? C.accent : C.faint,
             background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
           }
@@ -2325,7 +2340,7 @@ export function PatchSentinel({ compact }) {
         jsx('span', { style: { flex: 1 } }),
         jsx('span', {
           style: {
-            fontFamily: MONO, fontSize: '0.5625rem',
+            fontFamily: MONO, fontSize: '0.6875rem',
             color: applyProbe && applyProbe.known && !applyProbe.ok ? C.warn : C.faint
           }
         }, applyProbe === null ? 'checking this host…'
@@ -2342,7 +2357,7 @@ export function PatchSentinel({ compact }) {
     jsx('div', {
       style: {
         marginTop: '12px', paddingTop: '8px', borderTop: '1px solid ' + C.border,
-        fontFamily: MONO, fontSize: '0.5625rem',
+        fontFamily: MONO, fontSize: '0.6875rem',
         color: health && health.ui && health.ui.in_sync === false ? C.warn : C.faint
       }
     }, health && health.ui && health.ui.served

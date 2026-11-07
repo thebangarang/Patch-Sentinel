@@ -55,6 +55,11 @@ PROBE = (
 
 PRIVATE_DIRS = ("/etc/", "/root/", "/usr/sbin/", "/usr/bin/", "/boot/")
 
+#: The whole set needs the account that can read every packaged file. The pane is one process and does
+#: not elevate, so it hands the command over rather than claiming a reading it could not take.
+FULL_COMMAND = {"dpkg -V": "sudo dpkg -V", "rpm -Va": "sudo rpm -Va",
+                "apk audit": "sudo apk audit --system"}
+
 #: A conffile is marked `c` by dpkg/rpm: it is expected to differ after an operator edits it.
 CONFFILE = re.compile(r"^(\S+)\s+c?\s*(/.*)$")
 
@@ -230,11 +235,17 @@ def parse(text: str, host: str, data_dir: str) -> dict:
     else:
         tamper_state, tamper_reason = "ok", ""
 
+    who = account.group(1) if account else "this account"
+    command = FULL_COMMAND.get(tamper.get("tool") or "", "")
     note = ""
     if unreadable:
-        note = ((account.group(1) if account else "this account")
-                + f": {len(unreadable)} packaged file(s) could not be read, so this check cannot see "
-                + "them — run it as root for the whole set")
+        # the pane cannot elevate, so "run it as root" is not something it can do — it hands over the
+        # exact command instead, the same way APPLY hands over its commands when sudo has no NOPASSWD
+        # complete and standalone: the model relays this sentence, and the pane renders the part
+        # between backticks as the command to run
+        note = (f"{who}: {len(unreadable)} packaged file(s) could not be read, so this check cannot "
+                f"see them. The pane runs as {who} and does not elevate — run `{command}` on that host "
+                f"to cover them, or scan a host you reach as root over SSH.")
 
     baseline = _read_baseline(data_dir, host)
     if not listeners:
@@ -270,6 +281,7 @@ def parse(text: str, host: str, data_dir: str) -> dict:
         "account": account.group(1) if account else None,
         "root": uid_zero,
         "tamper": {"state": tamper_state, "reason": tamper_reason, "tool": tamper["tool"],
+                   "command": command,
                    "changed_count": len(changed), "conffile_count": len(tamper.get("conffiles") or []),
                    "missing_count": len(missing), "unreadable_count": len(unreadable),
                    "changed": (changed + missing)[:12], "conffiles": (tamper.get("conffiles") or [])[:6],
@@ -353,8 +365,8 @@ def summarise(state: dict) -> str:
     # the state of the baseline is a fact about the reading, not a replacement for its verdict
     if listen.get("state") == "baseline" and listen.get("reason"):
         main += " · " + str(listen["reason"])
-    if state.get("note"):
-        main += " · " + str(state["note"])
+    # the note is not repeated here: the pane prints it once, next to the command that lifts it, and
+    # the answer line is the sentence the model relays
     return main
 
 
