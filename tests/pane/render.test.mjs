@@ -78,6 +78,37 @@ for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXT
   console.log('  ' + name.padEnd(36) + html.length + ' bytes')
 }
 
+// The apply gate's refusal must hand over the commands, and gaps must read as a short list first.
+const refused = renderToStaticMarkup(createElement(ApplyGate, {
+  hostLabel: 'beelink',
+  entry: { pending_count: 3, adapter: 'apt' },
+  initialResult: { applied: false, dry_run: false, steps: [],
+                   reason: 'this user cannot run sudo without a password on that host',
+                   handoff: { commands: ['sudo apt-get update && sudo apt-get -y --download-only full-upgrade',
+                                         'sudo apt-get -y full-upgrade'],
+                              note: 'run these in this order' } }
+}))
+if (!refused.includes('run it yourself')) throw new Error('the handoff block is missing')
+if (!refused.includes('apt-get -y full-upgrade')) throw new Error('the handoff commands are missing')
+if (!refused.includes('copy both')) throw new Error('the handoff copy control is missing')
+
+const gaps = renderToStaticMarkup(createElement(GapsPanel, {
+  selected: 'beelink',
+  coverage: { gaps: [
+    { gap: 'docker socket refused', kind: 'blocked', state: 'unreadable',
+      why: 'the daemon refused the request', next: 'add the user to the docker group' },
+    { gap: 'in-image CVEs', kind: 'limit', state: 'not measured', why: 'STRUCTURAL-DETAIL',
+      next: 'needs an image scanner' },
+    { gap: 'project lockfiles', kind: 'limit', state: 'not measured', why: 'SECOND-DETAIL' }
+  ] }
+}))
+if (!gaps.includes('1 fixable')) throw new Error('the fixable count is missing')
+if (!gaps.includes('2 inherent limits')) throw new Error('the inherent-limit count is missing')
+if (!gaps.includes('explain them')) throw new Error('the detail toggle is missing')
+if (gaps.includes('STRUCTURAL-DETAIL')) throw new Error('inherent limits must start collapsed')
+if (!gaps.includes('add the user to the docker group')) throw new Error('a fixable gap must show its fix')
+console.log('  apply handoff and collapsed gaps render as designed')
+
 // The one-glance verdict: an exploited CVE must outrank everything else on that line.
 const verdict = renderToStaticMarkup(createElement(VerdictBar, {
   status: {

@@ -980,8 +980,16 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning }) {
           color: planning ? C.accent : C.dim, background: 'transparent',
           border: '1px solid ' + C.border, borderRadius: '3px'
         }
-      }, planning ? 'planning…' : steps.length ? 're-plan' : 'plan for ' + (hostLabel || 'this machine'))
+      }, planning ? 'planning…' : steps.length ? 're-plan' : 'plan for ' + (hostLabel || 'this machine')),
+      steps.length
+        ? jsx(Copy, { text: steps.map((step) => step.command).join('\n'), what: 'all the steps' })
+        : null
     ]),
+    steps.length > 1
+      ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginBottom: '6px', lineHeight: 1.45 } },
+          'These run in this order, top to bottom: the first refreshes the metadata and downloads, the '
+          + 'second installs. APPLY runs both; by hand, run them in sequence.')
+      : null,
     steps.length
       ? steps.map((step, index) => jsxs('div', {
           key: index,
@@ -1034,36 +1042,37 @@ function PendingPanel({ hostLabel, plan, onPlan, limited, planning }) {
 
 // --------------------------------------------------------------------------- GAPS
 
-function gapRow(gap, index) {
+/**
+ * One gap. Fixable ones are always open — they are the reason a row is not green and they are the
+ * only ones with an action. Inherent limits are one line each until you ask for the detail: seven
+ * paragraphs of "what this scan structurally cannot see" is a wall that reads as a broken product,
+ * and the operator said so.
+ */
+function gapRow(gap, index, expanded) {
   const blocked = gap.kind === 'blocked'
   return jsxs('div', {
     key: index,
     style: {
-      display: 'grid', gridTemplateColumns: '8px 1fr', gap: '8px', padding: '5px 0',
+      display: 'grid', gridTemplateColumns: '8px 1fr', gap: '8px', padding: '4px 0',
       borderTop: '1px solid ' + C.border
     }
   }, [
-    dot(blocked ? 'red' : 'amber'),
+    dot(blocked ? 'red' : 'faint'),
     jsxs('div', {}, [
-      jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline' } }, [
-        jsx('span', { style: { fontSize: '0.75rem', color: C.text } }, gap.gap),
-        jsx('span', {
-          style: {
-            fontSize: '0.5625rem', fontFamily: MONO, padding: '1px 5px', borderRadius: '2px',
-            color: blocked ? C.danger : C.faint,
-            border: '1px solid ' + (blocked ? C.danger : C.border)
-          }
-        }, blocked ? 'fixable — do this' : 'cannot be cleared here')
+      jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline', flexWrap: 'wrap' } }, [
+        jsx('span', { style: { fontSize: '0.75rem', color: blocked ? C.text : C.dim } }, gap.gap),
+        jsx('span', { style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint } },
+          gap.state)
       ]),
-      jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px' } },
-        gap.state + ' — ' + (gap.why || '')),
-      gap.next
+      blocked || expanded
+        ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
+            gap.why || '')
+        : null,
+      (blocked || expanded) && gap.next
         ? jsx('div', {
-            style: {
-              fontSize: '0.6875rem', marginTop: '3px',
-              color: blocked ? C.warn : C.dim, fontStyle: blocked ? 'normal' : 'italic'
-            }
-          }, (blocked ? 'to clear it: ' : 'what you can do: ') + gap.next)
+            style: { fontSize: '0.6875rem', marginTop: '3px', lineHeight: 1.45,
+                     color: blocked ? C.warn : C.dim }
+          }, (blocked ? 'to clear it: ' : 'what would close it: ') + gap.next)
         : null
     ])
   ])
@@ -1074,6 +1083,7 @@ function gapRow(gap, index) {
  * shows what applies to *that* host — the operator's complaint was a wall of other machines' gaps.
  */
 function GapsPanel({ coverage, selected }) {
+  const [open, setOpen] = useState(false)
   const all = (coverage && coverage.gaps) || []
   const appliesTo = (gap) => gap.hosts === 'every' || !Array.isArray(gap.hosts)
     ? true : gap.hosts.includes(selected)
@@ -1090,16 +1100,32 @@ function GapsPanel({ coverage, selected }) {
         selected ? 'what a scan of ' + selected + ' cannot see' : 'what this scan cannot see')
     ]),
     jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, lineHeight: 1.45, marginBottom: '4px' } },
-      'A gap is something this scan did not look at — not a fault on the host. None of these can be '
-      + 'switched on from this pane; each says what would actually fix it.'),
+      'What this scan did not look at — a fact about the scan, not a fault on the host.'),
     blocked.length
-      ? jsxs('div', { style: { marginBottom: '4px' } }, [
+      ? jsxs('div', { style: { marginBottom: '6px' } }, [
           jsx('div', { style: { fontSize: '0.625rem', color: C.danger, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '2px' } },
-            'fixable — these are why a row is not green'),
-          blocked.map(gapRow)
+            blocked.length + ' fixable — why a row is not green'),
+          blocked.map((gap, index) => gapRow(gap, index, true))
         ])
       : null,
-    limits.map(gapRow),
+    limits.length
+      ? jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '2px' } }, [
+          jsx('span', {
+            style: { fontSize: '0.625rem', color: C.faint, letterSpacing: '0.08em', textTransform: 'uppercase' }
+          }, limits.length + ' inherent limit' + (limits.length === 1 ? '' : 's')),
+          jsx('span', { style: { flex: 1 } }),
+          jsx('button', {
+            type: 'button',
+            onClick: () => setOpen((value) => !value),
+            style: {
+              fontFamily: MONO, fontSize: '0.5625rem', padding: '1px 7px', cursor: 'pointer',
+              color: open ? C.accent : C.faint, background: 'transparent',
+              border: '1px solid ' + C.border, borderRadius: '2px'
+            }
+          }, open ? 'hide detail' : 'explain them')
+        ])
+      : null,
+    limits.map((gap, index) => gapRow(gap, index, open)),
     elsewhere
       ? jsx('div', { style: { fontSize: '0.625rem', color: C.faint, marginTop: '6px' } },
           elsewhere + ' more gap(s) concern other hosts — switch host at the top to read them')
@@ -1111,9 +1137,9 @@ function GapsPanel({ coverage, selected }) {
 
 // --------------------------------------------------------------------------- APPLY GATE
 
-function ApplyGate({ hostLabel, entry }) {
+function ApplyGate({ hostLabel, entry, initialResult }) {
   const [typed, setTyped] = useState('')
-  const [result, setResult] = useState(null)
+  const [result, setResult] = useState(initialResult || null)
   const [busy, setBusy] = useState(false)
   const armed = Boolean(hostLabel) && typed.trim() === hostLabel
 
@@ -1253,6 +1279,33 @@ function ApplyGate({ hostLabel, entry }) {
           result.receipt
             ? jsx('div', { style: { marginTop: '4px', fontSize: '0.625rem', color: C.faint } },
                 'receipt written · ' + (result.receipt.outcome || '') + ' · reboot owed: ' + String(Boolean(result.reboot_required)))
+            : null,
+          // a refusal that hands you the work is worth more than one that ends the conversation
+          result.handoff && (result.handoff.commands || []).length
+            ? jsxs('div', {
+                style: {
+                  marginTop: '6px', padding: '6px 8px', background: C.panel,
+                  border: '1px solid ' + C.border, borderRadius: '3px'
+                }
+              }, [
+                jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } }, [
+                  jsx('span', { style: { fontSize: '0.625rem', color: C.dim } },
+                    'run it yourself — these, in this order:'),
+                  jsx('span', { style: { flex: 1 } }),
+                  jsx(Copy, { text: result.handoff.commands.join('\n'), label: 'copy both' })
+                ]),
+                result.handoff.commands.map((command, index) => jsx('div', {
+                  key: index,
+                  style: {
+                    fontFamily: MONO, fontSize: '0.5625rem', color: C.accent, marginTop: '3px',
+                    wordBreak: 'break-all'
+                  }
+                }, command)),
+                result.handoff.note
+                  ? jsx('div', { style: { fontSize: '0.5625rem', color: C.faint, marginTop: '3px', lineHeight: 1.45 } },
+                      result.handoff.note)
+                  : null
+              ])
             : null
         ])
       : null

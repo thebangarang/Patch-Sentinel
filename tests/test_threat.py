@@ -7,6 +7,7 @@ the difference between "8 advisories" and "one of these is being used in ransomw
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -46,12 +47,16 @@ EPSS_FIXTURE = {"status": "OK", "data": [
 class KevParsing(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        # a data dir of its own: the KEV cache is a file on disk, and a leftover from another test
+        # would answer for the network and make the "unmeasured" case pass for the wrong reason
+        os.environ["PATCH_SENTINEL_DATA"] = self.tmp.name
         store.configure({"data_dir": self.tmp.name})
         self._get = threat._get
 
     def tearDown(self):
         threat._get = self._get
         threat._EPSS_CACHE.clear()
+        os.environ.pop("PATCH_SENTINEL_DATA", None)
         self.tmp.cleanup()
 
     def test_entries_are_keyed_by_cve_with_the_fields_that_matter(self):

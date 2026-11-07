@@ -32,6 +32,34 @@ def host_entry(**overrides) -> dict:
     return entry
 
 
+class SudoRefusal(unittest.TestCase):
+    """A host without passwordless sudo is a refusal — with the commands to run by hand."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["PATCH_SENTINEL_DATA"] = self.tmp.name
+
+    def tearDown(self):
+        os.environ.pop("PATCH_SENTINEL_DATA", None)   # do not leak the data dir into other tests
+        self.tmp.cleanup()
+
+    def test_the_refusal_hands_over_both_commands_in_order(self):
+        def fake_run(command, target=None, timeout=0, path_prefix=None):
+            if command.startswith("sudo -n true"):
+                return 1, "sudo: a password is required"
+            return 0, ""
+
+        with mock.patch.object(apply_mod.shell, "run", side_effect=fake_run):
+            result = apply_mod.apply(host_entry(adapter="apt"), None, "fedora-lab", dry_run=True)
+
+        self.assertFalse(result["applied"])
+        self.assertIn("cannot run sudo without a password", result["reason"])
+        self.assertEqual(len(result["handoff"]["commands"]), 2)
+        self.assertIn("apt-get update", result["handoff"]["commands"][0])
+        self.assertIn("full-upgrade", result["handoff"]["commands"][1])
+        self.assertIn("never sees it", result["handoff"]["note"])
+
+
 class Gate(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

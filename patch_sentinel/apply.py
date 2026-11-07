@@ -129,8 +129,15 @@ def apply(host_entry: dict, target: str | None, confirm: str, dry_run: bool = Tr
     check = preflight(target)
     steps = []
     if not check["ok"]:
+        # The refusal is the honest answer, but not the end of the job: hand over the exact commands
+        # so the operator can run them in their own terminal, where sudo is allowed to ask them.
+        wanted = COMMANDS.get(family) or {}
+        handoff = [cmd for cmd in (wanted.get("stage"), wanted.get("apply")) if cmd]
         receipt = _receipt(base, steps, check["why"], dry_run)
-        return {**base, "reason": check["why"], "preflight": check, "receipt": receipt}
+        return {**base, "reason": check["why"], "preflight": check, "receipt": receipt,
+                "handoff": {"commands": handoff,
+                            "note": "run these in this order on that machine (or over ssh): sudo will "
+                                    "ask you for your password there, and this plugin never sees it"}}
 
     # 2. the stage, always
     steps.append(_step("stage", commands["stage"], target, min(timeout, STAGE_TIMEOUT),
