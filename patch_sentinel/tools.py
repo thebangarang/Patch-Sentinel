@@ -1008,9 +1008,14 @@ def cve_libraries(args: dict, **kwargs) -> str:
         # jars on disk: the Java deployments that never pass through the local Maven repository
         jars_state = jars.collect(host.get("target") or None,
                                   timeout=int(_settings.get("timeout") or 180))
-        known = {(c["ecosystem"], c["package"], c["version"]) for c in collected["components"]}
+        # dedupe including the owner: the same name@version in Hermes's own environment and in a
+        # project venv is two facts, not a duplicate. Dropping the project copy is how "235 packages"
+        # became 171 in the pane while the environment reader had found every one of them.
+        known = {(c["ecosystem"], c["package"], c["version"], c.get("owner") or "machine")
+                 for c in collected["components"]}
         extra = [c for c in environments_state["components"] + jars_state["components"]
-                 if (c["ecosystem"], c["package"], c["version"]) not in known]
+                 if (c["ecosystem"], c["package"], c["version"], c.get("owner") or "machine")
+                 not in known]
         collected = {**collected,
                      "components": collected["components"] + extra,
                      "outcomes": {**collected.get("outcomes", {}),

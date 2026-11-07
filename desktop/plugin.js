@@ -128,17 +128,10 @@ const SECTIONS = [
 ]
 const SECTION = SECTIONS.reduce((acc, section) => { acc[section.key] = section; return acc }, {})
 
-/** Every section gets the legend's slim bar, so the pane reads as blocks instead of a wall. */
-const SECTION_BAR = {
-  servers: '#7a8b99', overview: '#4de3d0', packages: '#e3b341', libs: '#8ab4f8',
-  plan: '#4de3d0', gaps: '#e06c75'
-}
-
-function sectionStyle(key) {
-  return {
-    marginBottom: '20px', paddingLeft: '11px',
-    borderLeft: '2px solid ' + (SECTION_BAR[key] || '#3a4550')
-  }
+/** Every section gets the legend's slim bar — one colour for all of them, so the page reads as
+ *  blocks without six competing accents. The bar separates; the section title distinguishes. */
+function sectionStyle() {
+  return { marginBottom: '20px', paddingLeft: '11px', borderLeft: '2px solid ' + C.accent }
 }
 
 /**
@@ -1012,6 +1005,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
     .filter(([, count]) => count > 0).map(([eco]) => eco)
   const missingEcosystems = Object.entries((libraries && libraries.outcomes) || {})
     .filter(([, outcome]) => outcome === 'missing').map(([eco]) => eco)
+  const environmentCount = new Set(packages.filter((p) => envName(p.source)).map((p) => p.source)).size
 
   // one entry per package@version@store, carrying the version that closes it — the copy control is
   // read by a shell, so it must not repeat the same package once per advisory or per environment
@@ -1127,6 +1121,18 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
             + (readEcosystems.length ? ' · read: ' + readEcosystems.join(', ') : '')
             + (missingEcosystems.length
                 ? ' · not installed here: ' + missingEcosystems.join(', ') : '')),
+          // where that number comes from: the count mixes environments, stores and the agent's own
+          // env, and two readers of the same payload quoted two different totals when it did not say
+          packages.length
+            ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.5625rem', color: C.faint, marginBottom: '5px' } },
+                [
+                  environmentCount
+                    ? environmentCount + ' project environment(s): ' + packages.filter((p) => envName(p.source)).length
+                    : 'no project environment found',
+                  packages.filter((p) => !envName(p.source) && p.owner !== 'hermes').length + ' from language stores',
+                  packages.filter((p) => p.owner === 'hermes').length + ' in Hermes\'s env (not counted)'
+                ].join(' · '))
+            : null,
           vulnerable.length
             ? jsx('div', { style: { fontSize: '0.6875rem', color: C.dim, marginBottom: '4px', lineHeight: 1.45 } },
                 'A finding is a published advisory that names this exact version — one package can carry many, '

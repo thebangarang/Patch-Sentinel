@@ -112,8 +112,14 @@ for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXT
     // React escapes the apostrophe in text nodes, so assert on the fragment before it
     // Hermes's own packages are measured and then dropped: no count, no paragraph, nothing at all
     // unless one of them is being exploited (the fixture's agent package is not)
-    if (html.includes('in Hermes&#x27;s env') || html.includes("in Hermes's env")) throw new Error(
-      "the agent packages are counted in the libs header again")
+    // the *header* must not count the agent's packages. The breakdown line below it may name them —
+    // that is the point of the breakdown — so the assertion is scoped to the header.
+    const headerAt = html.indexOf('libs &amp; runtimes')
+    const header = html.slice(headerAt, headerAt + 220)
+    if (header.includes('Hermes')) throw new Error(
+      "the agent packages are counted in the libs header again: " + header)
+    if (!html.includes('in Hermes&#x27;s env (not counted)')) throw new Error(
+      'the breakdown line does not say the agent packages are excluded')
     if (html.includes('ship with Hermes')) throw new Error(
       'the agent packages are mentioned although nothing there is exploited')
     if (html.includes('0 not yet')) throw new Error('the agent-package advisory paragraph is back')
