@@ -163,7 +163,11 @@ def rescan_start(body: dict | None = None) -> dict:
     args = {}
     if body and body.get("host"):
         args["host"] = str(body["host"])
-    return _start("rescan", tools.cve_rescan, args)
+    started = _start("rescan", tools.cve_rescan, args)
+    # echo the device back: the pane compares it with the one it asked for, so a backend running an
+    # older route (which measured this machine for every press) is caught instead of believed
+    started["host"] = args.get("host") or tools._local_label()
+    return started
 
 
 @router.post("/plan")

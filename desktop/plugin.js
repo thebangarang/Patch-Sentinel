@@ -2586,6 +2586,30 @@ export function PatchSentinel({ compact }) {
         setScanError('the run could not start: ' + started.error)
         return
       }
+      // A run already in flight is not "my" run: following it showed another device's progress under
+      // this button, which is exactly how "I pressed webasix and watched beelink" happens.
+      if (started && started.started === false) {
+        setScanError('a scan is already running (' + (started.host || 'unknown device')
+          + ') — let it finish, then press scan again. Nothing was started for ' + (selected || 'this device') + '.')
+        setBusy(false)
+        setStage(null)
+        setCurrentHost(null)
+        return
+      }
+      // The device the backend says it is measuring must be the one this pane asked for. It was not,
+      // once: the route dropped the host and measured this machine for every press, silently.
+      if (started && started.host && selected && started.host !== selected) {
+        setScanError('the backend started a run for ' + started.host + ' while this pane asked for '
+          + selected + ' — it is running an older route, so nothing was measured for ' + selected
+          + '. Restart the Hermes gateway, then press scan again.')
+        setBusy(false)
+        setStage(null)
+        setCurrentHost(null)
+        return
+      }
+      // the animation names the device that was asked for, taken from the press rather than from a
+      // bundle written by an earlier run
+      setCurrentHost(selected || null)
       for (let tick = 0; tick < 240; tick += 1) {
         await new Promise((resolve) => { setTimeout(resolve, 1500) })
         let answer = null
@@ -2597,7 +2621,7 @@ export function PatchSentinel({ compact }) {
         if (answer && answer.bundle) {
           setBundle(answer.bundle)
           setStage(answer.bundle.stage || null)
-          setCurrentHost(answer.bundle.current_host || null)
+          setCurrentHost(answer.bundle.current_host || selected || null)
         }
         if (answer && answer.seconds) setSeconds(answer.seconds)
         if (answer && !answer.busy) {

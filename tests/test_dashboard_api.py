@@ -109,12 +109,15 @@ class DashboardRoutes(unittest.TestCase):
 
         module.tools.cve_rescan = fake
         try:
-            self.client.post(self.base + "/rescan", json={"host": "webasix"})
+            started = self.client.post(self.base + "/rescan", json={"host": "webasix"}).json()
             self.follow("rescan")
         finally:
             module.tools.cve_rescan = original
         self.assertEqual(seen.get("host"), "webasix",
                          "the route dropped the device and would have scanned this machine")
+        # the pane compares this with the device it asked for; a stale route shows up as a mismatch
+        self.assertEqual(started.get("host"), "webasix",
+                         "the route did not echo the device it started a run for")
 
     def test_the_gate_refuses_a_wrongly_typed_host(self):
         # the label comes from the test's own inventory, never from this machine's
