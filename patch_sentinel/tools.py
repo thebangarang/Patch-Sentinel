@@ -1246,6 +1246,21 @@ def cve_integrity(args: dict, **kwargs) -> str:
     data_dir = str(_settings.get("data_dir") or store.data_dir())
     action = str(args.get("action") or "").strip().lower()
 
+    # "I ran it as root and it printed nothing" — the clean result has no output to paste, and asking
+    # again after every scan is a loop the operator cannot get out of
+    if action in ("attest", "clean", "nothing"):
+        saved = integrity.read_result(data_dir, host["label"])
+        if not saved:
+            return _json({"tool": "cve_integrity", "exit_code": 2,
+                          "reason": "there is no reading to extend — take an integrity reading first"})
+        state = saved["state"]
+        result = integrity.attest(data_dir, host["label"], state)
+        integrity.save_result(data_dir, host["label"], state)
+        return _json({"tool": "cve_integrity", "host": {"label": host["label"],
+                                                        "target": host.get("target") or "local"},
+                      "integrity": state, "answers": integrity.answers(state),
+                      "answer": result["answer"], "read_at": time.time(), "exit_code": 0})
+
     # A reading the operator ran as root, pasted back. The plugin cannot elevate, so this is the only
     # way the files it could not read get covered — and the paste is labelled as theirs, not ours.
     if action in ("import", "paste"):

@@ -340,7 +340,25 @@ def parse(text: str, host: str, data_dir: str) -> dict:
     who = account.group(1) if account else "this account"
     command = FULL_COMMAND.get(tamper.get("tool") or "", "")
     note = ""
-    if unreadable:
+    coverage = read_root_coverage(data_dir, host) if data_dir else None
+    covered = False
+    if unreadable and coverage:
+        # A root run already saw these files. Asking again on every scan is the loop the operator
+        # reported: the same 16 "unreadable" files came back every time he had already answered them.
+        # The run covers the set until the package database changes under it.
+        covered = coverage_covers(coverage, tamper.get("tool") or "")
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(float(coverage.get("at") or 0)))
+        if covered:
+            note = (f"{who}: {len(unreadable)} packaged file(s) cannot be read as this account, and a "
+                    f"root run on {when} already covered them — "
+                    f"{coverage.get('changed_count', 0)} changed, "
+                    f"{coverage.get('conffile_count', 0)} conffile(s) edited by you. Nothing to do "
+                    f"until the package database changes.")
+        else:
+            note = (f"{who}: {len(unreadable)} packaged file(s) could not be verified. The root run "
+                    f"from {when} is older than the last change to the package database, so it "
+                    f"describes a different set — run `{command}` again.")
+    elif unreadable:
         # the pane cannot elevate, so "run it as root" is not something it can do — it hands over the
         # exact command instead, the same way APPLY hands over its commands when sudo has no NOPASSWD
         # complete and standalone: the model relays this sentence, and the pane renders the part
@@ -411,7 +429,15 @@ def parse(text: str, host: str, data_dir: str) -> dict:
                    # and the pane counted the duplicate as a second finding
                    "changed": sorted(set(changed) | set(missing))[:12],
                    "conffiles": sorted(set(tamper.get("conffiles") or []))[:6],
-                   "unreadable": sorted(set(unreadable))[:6]},
+                   "unreadable": sorted(set(unreadable))[:6],
+                   # a root run the operator already did covers the files this account cannot read,
+                   # until the package database changes; the pane stops offering the command
+                   "covered": covered,
+                   "root_coverage": ({"at": coverage.get("at"),
+                                      "changed_count": coverage.get("changed_count", 0),
+                                      "conffile_count": coverage.get("conffile_count", 0),
+                                      "how": coverage.get("source", "")}
+                                     if covered and coverage else None)},
         "preload": {"state": preload_state, "path": "/etc/ld.so.preload",
                     "entries": preload_entries[:6],
                     "reason": ("a preloaded library is the first thing an injected library needs — "
@@ -529,6 +555,7 @@ def merge_pasted(state: dict, output: str, now: float | None = None,
                           "press paste only after a run that produced no lines at all"}
     parsed = parser([line for line in text.splitlines() if line.strip()])
     reading = {"at": now or time.time(), "tool": tool, "source": "pasted by the operator",
+               "db_mtime": db_stamp(tool or ""),
                "changed_count": len(parsed["changed"]), "conffile_count": len(parsed["conffiles"]),
                "unreadable_count": len(parsed.get("unreadable") or []),
                "changed": parsed["changed"][:20], "conffiles": parsed["conffiles"][:10]}
@@ -551,10 +578,62 @@ def merge_pasted(state: dict, output: str, now: float | None = None,
             f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(reading['at']))}: "
             f"0 file(s) changed, {len(parsed['conffiles'])} conffile(s) edited by the operator. "
             f"That part of the reading was run by you, not by this plugin.")
+    changed_n, conffile_n = len(parsed["changed"]) + len(parsed.get("missing") or []), len(parsed["conffiles"])
+    if changed_n:
+        answer = (f"the root run names {changed_n} file(s) that no longer match their package — that "
+                  f"is a finding, and it is now the reading. First: "
+                  + ", ".join((parsed["changed"] + (parsed.get("missing") or []))[:3]))
+    else:
+        answer = (f"coverage complete — the root run found nothing changed. "
+                  f"{conffile_n} line(s) were config files you edited yourself"
+                  + (" (" + ", ".join(parsed["conffiles"][:3]) + ")" if conffile_n else "")
+                  + ", which are not tampering and need no action. Nothing to do here until the "
+                    "package database changes.")
+    return {"ok": True, "root_reading": reading, "answer": answer}
+
+
+#: A root run describes a package set; a month is the point where saying so again is cheaper than
+#: trusting a file nobody has looked at since.
+COVERAGE_MAX_AGE = 30 * 86400
+
+
+def coverage_covers(coverage: dict | None, tool: str, now: float | None = None) -> bool:
+    """Does this root run still describe the files on disk?
+
+    Two things invalidate it: the package database moved since (an install or an upgrade changed what
+    is installed, so the run described a different set), or it is old enough that asking again is
+    cheaper than trusting it.
+    """
+    if not isinstance(coverage, dict) or not coverage:
+        return False
+    stamp = db_stamp(tool)
+    covered_at = coverage.get("db_mtime")
+    if stamp and covered_at and stamp > float(covered_at) + 1:
+        return False
+    age = (now or time.time()) - float(coverage.get("at") or 0)
+    return age < COVERAGE_MAX_AGE
+
+
+def attest(data_dir: str, host: str, state: dict) -> dict:
+    """The operator ran the command as root and it printed nothing.
+
+    A clean `dpkg -V` prints nothing, and an empty *paste* is indistinguishable from "I did not run
+    it" — which is why the paste control refuses it. That left an operator with a clean machine no way
+    to say so, and the pane asked again after every scan. This records their word for it: labelled as
+    the operator's, not as something this plugin measured, and tied to the package database it covered.
+    """
+    tamper = state.setdefault("tamper", {})
+    tool = tamper.get("tool") or ""
+    reading = {"at": time.time(), "tool": tool, "db_mtime": db_stamp(tool),
+               "source": "the operator ran it as root and it printed nothing",
+               "changed_count": 0, "conffile_count": 0, "changed": [], "conffiles": []}
+    tamper["root_reading"] = reading
+    tamper["covered"] = True
+    if data_dir and host:
+        save_root_coverage(data_dir, host, reading)
     return {"ok": True, "root_reading": reading,
-            "answer": (f"pasted root reading: {len(parsed['changed'])} file(s) changed, "
-                       f"{len(parsed['conffiles'])} conffile(s) edited — "
-                       + ("a finding" if parsed["changed"] else "coverage is complete"))}
+            "answer": ("recorded: you ran it as root and it printed nothing, which is the clean "
+                       "result. Coverage is complete until the package database changes.")}
 
 
 def _describe(socket: dict, processes: dict) -> dict:
@@ -571,6 +650,20 @@ def _sockets(rows: list[dict]) -> str:
         names.append(row["id"] + (f" ({row['owner']})" if row.get("owner") else ""))
     more = len(rows) - len(names)
     return ", ".join(names) + (f" and {more} more" if more > 0 else "")
+
+
+#: The file a package manager rewrites when it installs something. A root coverage taken before the
+#: last write to this file described a different package set, so it no longer covers anything.
+DB_STAMP = {"dpkg -V": "/var/lib/dpkg/status", "rpm -Va": "/var/lib/rpm/rpmdb.sqlite",
+            "apk audit": "/lib/apk/db/installed", "pacman -Qkk": "/var/lib/pacman/local"}
+
+
+def db_stamp(tool: str) -> float | None:
+    """When this package database last changed, or None when it cannot be read from here."""
+    try:
+        return os.stat(DB_STAMP.get(tool or "", "")).st_mtime
+    except OSError:
+        return None
 
 
 class CannotStore(RuntimeError):

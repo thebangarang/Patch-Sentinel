@@ -1588,7 +1588,7 @@ function Line({ name, children }) {
   ])
 }
 
-function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport }) {
+function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport, onAttest }) {
   const [limits, setLimits] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [pasteText, setPasteText] = useState('')
@@ -1709,10 +1709,17 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
                           key: 'covered',
                           style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.ok, whiteSpace: 'nowrap' }
                         }, 'root run ' + (agoAt(coverage.at) || 'on file'))
-                      : smallButton('paste the root output',
-                          () => { setPasteOpen(true); setError(null) },
-                          'the pane cannot run sudo; paste what the command above printed and it will '
-                          + 'read it'))
+                      : jsxs('span', { key: 'paste-or-clean', style: { display: 'flex', gap: '6px' } }, [
+                          smallButton('paste the root output',
+                            () => { setPasteOpen(true); setError(null) },
+                            'the pane cannot run sudo; paste what the command above printed and it '
+                            + 'will read it'),
+                          onAttest
+                            ? smallButton('it printed nothing', () => onAttest(),
+                                'a clean run prints nothing — this records that you ran it as root '
+                                + 'and there was nothing to paste')
+                            : null
+                        ]))
                   : null,
                 isSockets && row.state === 'finding'
                   ? smallButton('these are mine — accept them',
@@ -1923,7 +1930,19 @@ function todoRows({ bundle, label, entry }) {
       rows.push({ level: 'red', what: (listeners.new || []).length + ' listening socket(s) not in the baseline',
                   why: 'opened since the baseline was taken — decide whether you opened them' })
     }
-    if (unreadableCount) {
+    if (unreadableCount && tamper.covered) {
+      // the operator already ran the command as root; asking again after every scan is the loop he
+      // reported. The row stays — the files are still unreadable to this account — but it is closed.
+      const when = tamper.root_coverage && tamper.root_coverage.at
+        ? (agoAt(tamper.root_coverage.at) || 'just now') : 'earlier'
+      const conffiles = (tamper.root_coverage && tamper.root_coverage.conffile_count) || 0
+      rows.push({ level: 'green',
+                  what: unreadableCount + ' packaged file(s) this account cannot read — covered by a '
+                        + 'root run ' + when,
+                  why: 'the root run found nothing changed'
+                       + (conffiles ? '; ' + conffiles + ' conffile(s) it reported are edits of yours' : '')
+                       + '. Nothing to do until the package database changes' })
+    } else if (unreadableCount) {
       rows.push({ level: 'grey', what: unreadableCount + ' packaged file(s) this account cannot read',
                   why: 'not a finding: unreadable is not changed. The command below covers them' })
     }
@@ -2041,7 +2060,8 @@ function commandsForHost(bundle, name) {
   const integrity = deviceIntegrity(bundle, name)
   if (integrity && integrity.integrity) {
     const tamper = integrity.integrity.tamper || {}
-    if ((tamper.unreadable_count || (tamper.unreadable || []).length) && tamper.command) {
+    const unreadableOpen = (tamper.unreadable_count || (tamper.unreadable || []).length) && !tamper.covered
+    if (unreadableOpen && tamper.command) {
       out.push({ command: tamper.command, kind: 'verify',
                  why: (tamper.unreadable_count || (tamper.unreadable || []).length)
                       + ' packaged file(s) this account cannot read',
@@ -2577,7 +2597,15 @@ export function PatchSentinel({ compact }) {
   const refreshIntegrity = useCallback(async (label) => {
     if (!label) return null
     const reading = await call('/integrity?host=' + encodeURIComponent(label)).catch(() => null)
-    if (reading) setBundle((current) => ({ ...current, integrity: reading }))
+    if (reading) {
+      // the per-device block is what the sections read; writing only the legacy top-level copy left
+      // a paste or an attestation invisible until the next scan
+      setBundle((current) => {
+        const devices = { ...(current.devices || {}) }
+        devices[label] = { ...(devices[label] || {}), integrity: reading }
+        return { ...current, devices, integrity: reading }
+      })
+    }
     return reading
   }, [])
 
@@ -2785,7 +2813,8 @@ export function PatchSentinel({ compact }) {
       seconds: busy && stage === 'integrity' ? seconds : 0,
       onRead: () => readIntegrity('check'),
       onRebaseline: () => readIntegrity('baseline'),
-      onImport: importIntegrity
+      onImport: importIntegrity,
+      onAttest: () => readIntegrity('attest')
     }),
     jsx(LanguagesPanel, { libraries: deviceLibraries(bundle, selected) || libraries,
                           onCheck: checkLibraries, busy: libBusy }),

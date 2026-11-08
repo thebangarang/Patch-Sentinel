@@ -9,6 +9,7 @@ parser is pinned to exactly what dpkg writes.
 import os
 import sys
 import tempfile
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -311,6 +312,45 @@ class TheBaselineIsAFact(unittest.TestCase):
             rows = integrity.answers(state)
             self.assertEqual([r["check"] for r in rows],
                              ["package checksums", "preload hook", "listening sockets"])
+
+
+class RootCoverage(unittest.TestCase):
+    """A root run the operator did must close the row — and reopen when the package set moves.
+
+    The reported loop: the same "16 files this account cannot read" came back after every scan, even
+    though the operator had already run `sudo dpkg -V` and pasted the result.
+    """
+
+    def test_a_fresh_root_run_covers_the_set(self):
+        now = time.time()
+        coverage = {"at": now - 60, "changed_count": 0, "conffile_count": 2, "db_mtime": now - 7200}
+        self.assertTrue(integrity.coverage_covers(coverage, "dpkg -V", now=now))
+
+    def test_an_install_since_the_root_run_reopens_it(self):
+        # the database is newer than the run: it described a different package set
+        now = time.time()
+        coverage = {"at": now - 60, "db_mtime": 1_000_000}       # ancient stamp
+        self.assertFalse(integrity.coverage_covers(coverage, "dpkg -V", now=now))
+
+    def test_a_month_old_run_is_asked_again(self):
+        now = time.time()
+        coverage = {"at": now - (31 * 86400), "db_mtime": None}
+        self.assertFalse(integrity.coverage_covers(coverage, "dpkg -V", now=now))
+
+    def test_no_coverage_at_all_does_not_cover(self):
+        self.assertFalse(integrity.coverage_covers(None, "dpkg -V"))
+        self.assertFalse(integrity.coverage_covers({}, "dpkg -V"))
+
+    def test_attesting_a_clean_run_marks_the_state_covered(self):
+        data = tempfile.mkdtemp()
+        state = {"tamper": {"tool": "dpkg -V", "unreadable_count": 16}}
+        result = integrity.attest(data, "box", state)
+        self.assertTrue(result["ok"])
+        self.assertTrue(state["tamper"]["covered"])
+        self.assertEqual(state["tamper"]["root_reading"]["changed_count"], 0)
+        saved = integrity.read_root_coverage(data, "box")
+        self.assertIsNotNone(saved, "the attestation was not stored")
+        self.assertIn("printed nothing", saved["source"])
 
 
 if __name__ == "__main__":
