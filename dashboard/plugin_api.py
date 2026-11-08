@@ -139,6 +139,42 @@ def scan(body: dict | None = None) -> dict:
     return _start("scan", tools.cve_scan, args)
 
 
+def _packages_into_bundle(args: dict) -> str:
+    """One surface, refreshed on demand, written back into the bundle the pane renders.
+
+    `cve_scan` alone answers into the loose `last_scan.json`, which the pane does not read for its
+    sections — so a "read again" on system packages would have measured and then shown the old numbers.
+    The result is merged into the per-device block, and nothing else in the bundle is touched.
+    """
+    label = str(args.get("host") or tools._local_label())
+    raw = tools.cve_scan({"host": label})
+    payload = json.loads(raw) or {}
+    data_dir = str(tools._settings.get("data_dir") or store.data_dir())
+    bundle = rescan_bundle.read(data_dir) or {}
+    devices = bundle.get("devices") if isinstance(bundle.get("devices"), dict) else {}
+    device = devices.get(label) if isinstance(devices.get(label), dict) else {}
+    device["scan"] = payload
+    devices[label] = device
+    bundle["devices"] = devices
+    hosts = (payload or {}).get("hosts") or {}
+    if label in hosts:
+        bundle["scan"] = {"tool": "cve_scan", "hosts": {label: hosts[label]},
+                          "blind": [entry for entry in (payload.get("blind") or [])
+                                    if entry.get("host") in (label, None)],
+                          "exit_code": payload.get("exit_code", 0), "measured_at": time.time()}
+    rescan_bundle.write(data_dir, bundle)
+    return raw
+
+
+@router.post("/packages")
+def packages_start(body: dict | None = None) -> dict:
+    """Read the package list for one device now — the "read again" of the system-packages section."""
+    args = {}
+    if body and body.get("host"):
+        args["host"] = str(body["host"])
+    return _start("packages", _packages_into_bundle, args)
+
+
 @router.get("/rescan")
 def rescan_cached() -> dict:
     """The last "rescan all" bundle — every surface, with how long each stage took.

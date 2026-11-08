@@ -179,3 +179,25 @@ SDK container.
 
 Where the advisory carries its own **Workarounds** section, that text is shown with the finding: the
 vendor's temporary mitigation, quoted rather than invented.
+
+## Adding a family, or an ecosystem
+
+Every row above that says *not verified* is a queue, not a decision: the case is missing because nobody
+has sent the output yet. The work is the same shape every time, and small.
+
+1. **Capture the output** on a real machine, verbatim, into `tests/fixtures/` — `zypper -q lu`,
+   `pacman -Qkk`, `apk audit`, `dotnet list package`, whatever reader you are adding. A capture is worth
+   more than a specification: the parser is written against bytes the tool actually printed.
+2. **Write the reader** in `patch_sentinel/sources/` (or `sources/adapters/` for a package manager).
+   It returns rows, never exceptions, and every failure is an outcome: `missing`, `unreadable`,
+   `unmeasured` — an empty list from a tool that did not run is the false clean this project exists to
+   avoid.
+3. **Prove both halves.** A known-good capture reads as expected; a malformed or refused one produces
+   its own state rather than a clean or a crash. `tests/test_adapters.py` and `tests/test_sources.py`
+   are where the existing ones live.
+4. **Register it** in `sources/dispatch.py` so the host's `/etc/os-release` reaches it, and say in the
+   coverage answer what the new reader covers and what it still cannot see.
+
+Nothing in this project is closed by policy: a family is unverified because no capture exists yet. If
+you need one, open an issue with the output you have — real demand decides the order, and a pull
+request is reviewed on the same terms as the rest of the tree.

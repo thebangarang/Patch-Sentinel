@@ -112,6 +112,23 @@ complete scan.
 The four rows above Debian's caveat were read by copying the plugin onto the VM and running it with the
 distro's own `python3` — the arrangement a fresh machine has, without Hermes.
 
+### Where this stops, and how it grows
+
+The rows marked **not verified** are not a disclaimer, they are a queue. Coverage grows by demand: each
+distro family or ecosystem is a parser, a captured fixture and a failure-mode test, and the gap list in
+the pane is the roadmap.
+
+- **If one of these is in your way**, open an issue with the output you have — a `zypper -q lu`, a
+  `pacman -Qkk`, an Alpine `apk version` — and the case gets built against it. Real demand decides the
+  order.
+- **If you would rather build it**, the repository is open and the work is well-bounded:
+  `docs/coverage.md` describes how every surface was proven and what a capture looks like, and
+  `tests/fixtures/` holds the ones already read. A new family is a reader, a fixture, and the test that
+  proves it fails loudly when the source changes shape.
+
+Nothing is missing because it was decided against; it is missing because nobody has sent the output
+yet.
+
 ## No credential path
 
 Registry and advisory reads are anonymous; remote hosts use **your own SSH agent**, so `ssh` sees the key

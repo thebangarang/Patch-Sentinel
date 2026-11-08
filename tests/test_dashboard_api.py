@@ -170,6 +170,39 @@ class DashboardRoutes(unittest.TestCase):
         self.assertIn("boom", job["error"])
         self.assertIsNone(job["result"])
 
+    def test_reading_one_surface_writes_it_back_into_the_bundle(self):
+        """`POST /packages` must land where the pane reads, not in a file the sections never open.
+
+        `cve_scan` alone answers into `last_scan.json`; the sections render from the rescan bundle. A
+        route that forgot to merge measured the machine and then showed the previous numbers.
+        """
+        module = self.module
+        original = module.tools.cve_scan
+        payload = {"tool": "cve_scan", "exit_code": 1,
+                   "hosts": {"testbox": {"label": "testbox", "adapter": "apt", "pending_count": 3,
+                                         "measured_at": "2026-11-08T12:00:00Z",
+                                         "where": {"kind": "local"}}},
+                   "blind": []}
+
+        def fake(args=None, **kwargs):
+            import json
+            return json.dumps(payload)
+
+        module.tools.cve_scan = fake
+        try:
+            started = self.client.post(self.base + "/packages", json={"host": "testbox"}).json()
+            self.assertTrue(started["started"])
+            job = self.follow("packages", 60)
+        finally:
+            module.tools.cve_scan = original
+        self.assertIsNone(job.get("error"))
+        bundle = self.client.get(self.base + "/rescan").json().get("bundle") or {}
+        device = (bundle.get("devices") or {}).get("testbox") or {}
+        self.assertEqual((device.get("scan") or {}).get("hosts", {}).get("testbox", {})
+                         .get("pending_count"), 3,
+                         "the reading never reached the bundle the section renders")
+        self.assertEqual((bundle.get("scan") or {}).get("exit_code"), 1)
+
     @unittest.skipUnless(os.environ.get("PATCH_SENTINEL_TEST_SCAN") == "1",
                          "set PATCH_SENTINEL_TEST_SCAN=1 to run a real scan")
     def test_a_real_scan_then_a_stored_status(self):

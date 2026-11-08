@@ -427,6 +427,30 @@ function ScanLine({ label }) {
   ])
 }
 
+/**
+ * "Read this surface now" — the same control, the same words, the same animation in every section.
+ *
+ * The three sections had drifted: system packages had no control at all, integrity animated while it
+ * read, and the language stack said "reading" with a breathing dot but nothing that looked like the
+ * other two. A control that behaves differently in each section reads as three different operations.
+ */
+function ReadButton({ busy, hasReading, onRead, title, seconds }) {
+  return jsx('button', {
+    type: 'button',
+    onClick: onRead,
+    disabled: busy,
+    title: title || 'read this surface again',
+    style: {
+      fontFamily: MONO, fontSize: '0.75rem', padding: '3px 10px',
+      cursor: busy ? 'default' : 'pointer',
+      color: busy ? C.faint : C.accent, background: 'transparent',
+      border: '1px solid ' + C.border, borderRadius: '3px'
+    }
+  }, busy
+    ? [jsx('span', { key: 'ring', className: 'ps-ring' }), 'reading' + (seconds ? ' ' + seconds + 's' : '')]
+    : (hasReading ? 'read again' : 'read it'))
+}
+
 /** A small status pill. Colour carries the meaning; the text never relies on colour alone. */
 function chip(text, colour, title) {
   return jsx('span', {
@@ -837,7 +861,7 @@ function HostsPanel({ onChanged, startOpen, initialTest, initialHosts, onSelect,
 // --------------------------------------------------------------------------- UPDATES
 
 /** The raw update list for the selected host — every package, searchable, copyable. */
-function UpdatesPanel({ entry, hostLabel, scanning }) {
+function UpdatesPanel({ entry, hostLabel, scanning, busy, seconds, onRead }) {
   const [query, setQuery] = useState('')
   const rows = (entry && entry.pending) || []
   const total = (entry && entry.pending_count) || 0
@@ -860,6 +884,10 @@ function UpdatesPanel({ entry, hostLabel, scanning }) {
         hostLabel ? total + ' available' : '—'),
       jsx('span', { style: { fontSize: '0.75rem', color: C.faint } },
         entry && entry.measured_at ? 'measured ' + entry.measured_at.replace('T', ' ').slice(11, 16) + ' UTC' : ''),
+      jsx(ReadButton, { busy: busy, hasReading: !!(entry && entry.measured_at), seconds: seconds,
+                        onRead: onRead, title: 'Reads the package list again: what the archive would '
+                          + 'install, the kernel against the newest installable, and the advisory that '
+                          + 'names each exact version' }),
       rows.length && commandBlock
         ? jsx(Copy, { text: commandBlock, label: 'copy the commands',
                       what: 'the upgrade commands for ' + (hostLabel || 'this machine') })
@@ -867,7 +895,7 @@ function UpdatesPanel({ entry, hostLabel, scanning }) {
       rows.length ? jsx(Copy, { text, label: 'copy list', what: 'the package list' }) : null
     ]),
     // this section's own sweep: the top line says a run is going, this one says which part is
-    scanning
+    busy || scanning
       ? jsx(ScanLine, { label: 'reading the package list — what the archive would install, and which '
                              + 'advisory names that exact version' })
       : null,
@@ -1196,18 +1224,9 @@ function LanguagesPanel({ libraries, onCheck, busy, scanning }) {
         // no second sentence: the header already says "nothing to run" and why. Saying it twice in
         // the same row is how a screen with nothing to do reads like a to-do list.
         : null,
-      jsx('button', {
-        type: 'button',
-        onClick: () => onCheck(),
-        disabled: busy,
-        title: 'Reads the global npm tree and the pip environment on PATH, then asks osv.dev',
-        style: {
-          fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px', cursor: busy ? 'default' : 'pointer',
-          color: busy ? C.faint : C.accent, background: 'transparent',
-          border: '1px solid ' + C.border, borderRadius: '3px'
-        }
-      }, busy ? [jsx('span', { key: 'dot', className: 'ps-dot' }), 'reading']
-         : libraries ? 'read again' : 'read it')
+      jsx(ReadButton, { busy: busy, hasReading: !!libraries, onRead: () => onCheck(),
+                        title: 'Reads the machine\'s language stores and every virtualenv, then asks '
+                          + 'osv.dev for advisories naming those exact versions' })
     ]),
     busy || scanning
       ? jsx(ScanLine, {
@@ -1683,20 +1702,9 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
           border: '1px solid ' + C.border, borderRadius: '3px'
         }
       }, limits ? 'hide the limits' : 'what this cannot see'),
-      jsx('button', {
-        type: 'button',
-        onClick: () => onRead(),
-        disabled: busy,
-        title: 'verifies package checksums, the preload hook and the listening sockets — about a '
-               + 'minute on a full package database',
-        style: {
-          fontFamily: MONO, fontSize: '0.75rem', padding: '3px 10px', cursor: busy ? 'default' : 'pointer',
-          color: busy ? C.faint : C.accent, background: 'transparent',
-          border: '1px solid ' + C.border, borderRadius: '3px'
-        }
-      }, busy
-        ? [jsx('span', { key: 'ring', className: 'ps-ring' }), 'reading' + (seconds ? ' ' + seconds + 's' : '')]
-        : (state ? 'read again' : 'read it'))
+      jsx(ReadButton, { busy: busy, hasReading: !!state, onRead: () => onRead(), seconds: seconds,
+                        title: 'verifies package checksums, the preload hook and the listening '
+                          + 'sockets — about a minute on a full package database' })
     ]),
     limits
       ? jsx('div', {
@@ -2364,6 +2372,13 @@ function GapsPanel({ coverage, selected }) {
     ]),
     jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, lineHeight: 1.45, marginBottom: '4px' } },
       'What this scan did not look at — a fact about the scan, not a fault on the host.'),
+    // The gaps are a roadmap, not a dead end: say where the work happens, so a reader who needs one of
+    // these knows the next step is an issue rather than a workaround.
+    jsx('div', { style: { fontSize: '0.75rem', color: C.faint, lineHeight: 1.55, marginBottom: '6px' } },
+      'Every gap here is one this project expects to close: adapter coverage grows by demand, and each '
+      + 'case is a parser, a captured fixture and a failure-mode test away. If one of these is in your '
+      + 'way, open an issue with the output you have — and if you want to build it, the repository is '
+      + 'open and the walkthrough for a new distro or ecosystem is in docs/coverage.md.'),
     blocked.length
       ? jsxs('div', { style: { marginBottom: '6px' } }, [
           jsx('div', { style: { fontSize: '0.75rem', color: C.danger, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '2px' } },
@@ -2402,7 +2417,7 @@ function GapsPanel({ coverage, selected }) {
 
 // --------------------------------------------------------------------------- root
 
-export { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, HowItWorks, ScanLine,
+export { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, HowItWorks, ScanLine, ReadButton,
          orderedHosts,
          todoRows, commandsForHost,
          fixableRows, UpdatesPanel, LanguagesPanel, IntegrityPanel, GapsPanel,
@@ -2516,6 +2531,9 @@ export function PatchSentinel({ compact }) {
     })
   }, [])
   const [libBusy, setLibBusy] = useState(false)
+  // system packages, read on its own — same control, same animation as the other two sections
+  const [pkgBusy, setPkgBusy] = useState(false)
+  const [pkgSeconds, setPkgSeconds] = useState(0)
   // a project scan is a different question ("my app's dependencies"), so it is a separate answer kept
   // apart from the machine-wide one instead of overwriting it
   const [libProject, setLibProject] = useState(null)
@@ -2746,6 +2764,30 @@ export function PatchSentinel({ compact }) {
     }
   }, [])
 
+  const readPackages = useCallback(async () => {
+    if (!selected) return
+    setPkgBusy(true)
+    setPkgSeconds(0)
+    const started = Date.now()
+    try {
+      await call('/packages', { method: 'POST', body: { host: selected } })
+      for (let tick = 0; tick < 180; tick += 1) {
+        await new Promise((resolve) => { setTimeout(resolve, 1000) })
+        setPkgSeconds(Math.round((Date.now() - started) / 1000))
+        let job = null
+        try { job = ((await call('/jobs')) || {}).packages || null } catch (err) { continue }
+        if (job && !job.running) break
+      }
+      // the route merges the reading into the bundle, so reload it rather than guessing where it went
+      await loadBundle()
+    } catch (err) {
+      // the last reading stays on screen, labelled with its age
+    } finally {
+      setPkgBusy(false)
+      setPkgSeconds(0)
+    }
+  }, [selected, loadBundle])
+
   const where = selected && hosts[selected] ? hosts[selected].where : null
 
   return jsxs('div', {
@@ -2880,7 +2922,8 @@ export function PatchSentinel({ compact }) {
           + ' · the button above reads this device only; each device keeps its own last reading'
         : 'click a device name above to choose whose readings these are'),
     jsx(UpdatesPanel, { entry: hosts[selected] || null, hostLabel: selected,
-                        scanning: busy && stage === 'scan' }),
+                        scanning: busy && stage === 'scan',
+                        busy: pkgBusy, seconds: pkgSeconds, onRead: readPackages }),
     jsx(IntegrityPanel, {
       reading: deviceIntegrity(bundle, selected), busy: busy && stage === 'integrity',
       seconds: busy && stage === 'integrity' ? seconds : 0,

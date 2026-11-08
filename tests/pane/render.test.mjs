@@ -265,6 +265,36 @@ for (const [name, element] of [
 }
 console.log('  every section animates while its own stage runs, and only then')
 
+// One control, one behaviour, in all three reading sections: it says "read it" before a reading,
+// "read again" after one, and animates (the ring) while it reads. They had drifted — the packages
+// section had no control at all and the language stack had no animation.
+const readStates = [
+  ['system packages', (extra) => createElement(UpdatesPanel, { entry: extra.entry, hostLabel: 'beelink',
+                                                              onRead: noop, ...extra.props })],
+  ['integrity', (extra) => createElement(IntegrityPanel, {
+    reading: extra.reading ? { integrity: { state: 'ok', tamper: {} }, answers: [],
+                               read_at: Math.floor(Date.now() / 1000), answer: 'no evidence of tampering' }
+      : null,
+    busy: !!extra.props.busy, seconds: 4, onRead: noop, onRebaseline: noop })],
+  ['libs & runtimes', (extra) => createElement(LanguagesPanel, { libraries: extra.libraries,
+                                                                onCheck: noop, ...extra.props })],
+]
+for (const [name, render] of readStates) {
+  const before = renderToStaticMarkup(render({
+    entry: null, reading: false, libraries: null, props: {} }))
+  if (!before.includes('read it')) throw new Error(name + ' has no "read it" control before a reading')
+  const after = renderToStaticMarkup(render({
+    entry: { measured_at: '2026-11-08T10:00:00Z' }, reading: true,
+    libraries: { packages: [], vulnerable: [] }, props: {} }))
+  if (!after.includes('read again')) throw new Error(name + ' does not say "read again" after a reading')
+  const while_ = renderToStaticMarkup(render({
+    entry: { measured_at: '2026-11-08T10:00:00Z' }, reading: true,
+    libraries: { packages: [], vulnerable: [] }, props: { busy: true } }))
+  if (!while_.includes('ps-ring')) throw new Error(name + ' does not animate while it reads')
+  if (!while_.includes('reading')) throw new Error(name + ' does not say it is reading')
+}
+console.log('  read / read again / reading, with the same ring, in all three sections')
+
 // A stage of the run that could not look must appear in the to-do rows: exit 2 with counts on screen
 // and no sentence saying what was not measured reads as a complete scan.
 const blindRows = todoRows({
