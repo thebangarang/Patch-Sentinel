@@ -5,6 +5,9 @@ for any host it can reach over SSH — and hands you the exact commands to close
 
 ![The pane, after a real scan of two devices](docs/screenshot.png)
 
+**[▶ The 78-second demo](video/patch-sentinel-demo.mp4)** — one real scan of this machine: no narration,
+captions, and a synth bed written for it. *(`video/patch-sentinel-demo.mp4`, 3.3 MB, 1080p.)*
+
 The rule the whole thing is built on: **a check that could not look says so.** Every surface reports
 *clean*, *finding* or *could not look*. An unreachable host, a rate-limited registry, a distro with no
 reader: none of them is ever drawn as green.

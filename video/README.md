@@ -22,6 +22,21 @@ screen capture is large and disposable. The finished file is what ships.
 - nothing over the pane while something is being read: no callouts, no zooms, no cursor effects. The
   claim of the plugin is "look at what it actually says", and an overlay is the opposite of that.
 
+## The finished file
+
+`patch-sentinel-demo.mp4` — 78 s, 1920×1080, H.264 + AAC, 3.3 MB. Built from a single
+screen recording of the pane running `scan all · beelink` on this machine, with:
+
+- the recording trimmed to the app (0.80 s → 72.10 s; the source opened and closed on OBS);
+- an intro card (2.5 s) and an end card (4 s) drawn with the pane's palette in Orbitron (OFL);
+- six captions, each true of the section on screen at that moment: one control · packages, kernel,
+  images · integrity · the language stack · nine ecosystems · never green unless it was read;
+- a synth bed generated from oscillators at 84 BPM in A minor — no sample, no licence to clear,
+  mixed at −27 dB so it sits under the footage.
+
+Nothing is claimed in a caption the pane does not say itself, and no overlay covers a reading while it
+is being taken.
+
 ## Encoding
 
 `ffmpeg` on this machine, H.264 in MP4, `-crf 20`, 1920×1080, audio AAC 128 kb/s. Target under 40 MB —
