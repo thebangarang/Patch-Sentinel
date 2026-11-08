@@ -36,10 +36,11 @@ same lines.
 
 ## Caption (X), ≤ 280 characters
 
-> Patch Sentinel — a Hermes plugin that answers "are we patched?" with evidence, for whatever the
-> host runs: apt, dnf, pacman, zypper, container digests, your npm/pip stack. It refuses to say
-> "clean" when it couldn't look. 90 s, real machines, the exact commands. @NousResearch
-> github.com/thebangarang/Patch-Sentinel
+Patch Sentinel — a Hermes plugin that answers "are we patched?" with evidence: packages, kernel,
+images, integrity, the language stack. It never calls a machine clean when it couldn't look. 78 s,
+one real run. @NousResearch github.com/thebangarang/Patch-Sentinel
+
+*(262 characters — paste as one paragraph; the video carries the rest.)*
 
 ## Credits line (end card)
 
