@@ -2024,6 +2024,16 @@ function todoRows({ bundle, label, entry }) {
                 why: (blind.reason || blind.why || 'it could not be read')
                      + (blind.detail ? ' — ' + blind.detail : '') })
   }
+  // A stage of the run itself that could not look — the language stack on a host with no reader, an
+  // integrity read the file system refused. Without this row a run can end in "2" with counts on
+  // screen and no sentence saying what was not measured.
+  for (const blind of (((bundle.devices || {})[label] || {}).blind || [])) {
+    const stage = blind.name === 'libraries' ? 'the language stack'
+      : blind.name === 'integrity' ? 'the integrity reading'
+        : blind.name === 'plans' ? 'the commands' : 'the package list'
+    rows.push({ level: 'grey', what: 'cannot see: ' + stage,
+                why: blind.why || 'it could not be read' })
+  }
   return rows
 }
 

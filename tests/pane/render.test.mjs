@@ -10,7 +10,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, HowItWorks, UpdatesPanel,
-         LanguagesPanel, IntegrityPanel,
+         LanguagesPanel, IntegrityPanel, todoRows,
          GapsPanel, PatchSentinel, SECTIONS } from './pane.mjs'
 
 const dataPath = process.env.PANE_DATA || '../pane-data.json'
@@ -264,6 +264,28 @@ for (const [name, element] of [
   }
 }
 console.log('  every section animates while its own stage runs, and only then')
+
+// A stage of the run that could not look must appear in the to-do rows: exit 2 with counts on screen
+// and no sentence saying what was not measured reads as a complete scan.
+const blindRows = todoRows({
+  bundle: { devices: { beelink: { blind: [{ name: 'libraries',
+                                            why: 'no reader for this distro' }] } } },
+  label: 'beelink',
+  entry: {}
+})
+if (!blindRows.some((row) => row.what === 'cannot see: the language stack')) {
+  throw new Error('a stage that could not look never reaches the to-do list')
+}
+if (!blindRows.some((row) => row.why === 'no reader for this distro')) {
+  throw new Error('the reason the stage could not look is dropped')
+}
+let caught = false
+try {
+  todoRows({ bundle: { devices: { beelink: { blind: [{ name: 'integrity', why: 'denied' }] } } },
+             label: 'beelink', entry: {} })
+} catch (err) { caught = true }
+if (caught) throw new Error('a blind stage crashed the to-do list')
+console.log('  a stage that could not look reaches the to-do list, with its reason')
 
 for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXTURE],
                                  ['libs (nothing read)', null]]) {

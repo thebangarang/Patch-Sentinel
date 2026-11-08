@@ -908,7 +908,9 @@ def cve_coverage(args: dict, **kwargs) -> str:
     scan = stored.get("scan") or {}
     covered = []
     for label, host in hosts.items():
-        covered.append({"source": "apt simulation (installed vs installable)",
+        # the manager's own name: "apt simulation" on a Fedora box is a sentence about the wrong tool
+        manager = host.get("adapter") or "package manager"
+        covered.append({"source": f"{manager}: installed vs installable",
                         "host": label, "measured_at": host.get("measured_at"),
                         "outcome": (host.get("outcomes") or {}).get("apt")})
         covered.append({"source": "running kernel vs newest installed",
@@ -918,10 +920,21 @@ def cve_coverage(args: dict, **kwargs) -> str:
         covered.append({"source": "container image digests",
                         "host": label, "measured_at": host.get("measured_at"),
                         "outcome": (host.get("outcomes") or {}).get("images")})
-    covered.append({"source": "Ubuntu security notices (advisories that name a version)",
-                    "host": "-", "measured_at": scan.get("usn_fetched_at"),
-                    "outcome": "ok" if scan.get("usn_ok") else "refused",
-                    "url": scan.get("usn_url")})
+        # The advisory source is a per-host fact. It used to be one row naming Ubuntu's notice feed for
+        # every host — so on a Debian box the report said "Ubuntu security notices: ok" while the
+        # request was `notices.json?release=bookworm`, which answers 200 with an empty list. That reads
+        # as "advisories measured, nothing found" on a machine whose advisories were never consulted.
+        feed = host.get("vendor_feed")
+        url = feed.get("source_url") if isinstance(feed, dict) else None
+        os_id = (host.get("os") or {}).get("id") or "this distro"
+        source = host.get("advisory_source") or (
+            f"vendor advisories naming a fixed version ({os_id}, via OSV or its own tracker)")
+        if "USN" in source.upper() and scan.get("usn_url"):
+            url = url or scan.get("usn_url")
+        covered.append({"source": source, "host": label,
+                        "measured_at": host.get("measured_at"),
+                        "outcome": host.get("vendor_state") or "unmeasured",
+                        "url": url, "counts": host.get("vendor_counts")})
 
     implemented = sorted(dispatch.FAMILY_BY_OS)
     # Every gap carries a scope (`hosts`: "every" or the labels it concerns) and a `kind`:
@@ -1452,8 +1465,21 @@ def cve_rescan(args: dict, **kwargs) -> str:
     except Exception as exc:                          # noqa: BLE001
         plan_payload = {"tool": "cve_plan", "exit_code": 2,
                         "answer": f"the plan could not be built: {exc}"}
+    # exit 2 means something could not be looked at, and both the sentence and the bundle have to say
+    # which stage and why: a summary that carries counts next to a 2 with no reason is the exact shape
+    # this plugin refuses to ship
+    blind = []
+    for stage in bundle["stages"]:
+        if stage["exit_code"] != 2:
+            continue
+        name = stage["name"]
+        payload = plan_payload if name == "plans" else (results.get(name) or {})
+        why = " ".join(str(payload.get("answer") or "").split())
+        blind.append({"name": name, "why": why or "no reason recorded"})
+
     with lock:
         bundle["devices"][label]["plan"] = plan_payload
+        bundle["devices"][label]["blind"] = blind
         bundle["stages"].append({"name": "plans", "exit_code": int(plan_payload.get("exit_code") or 0),
                                  "seconds": round(time.time() - started, 1), "at": time.time()})
         bundle["devices"][label]["measured_at"] = time.time()
@@ -1488,11 +1514,18 @@ def cve_rescan(args: dict, **kwargs) -> str:
     if (not tamper.get("covered")) and (tamper.get("unreadable_count") or 0) and tamper.get("command"):
         commands += 1
     timings = " · ".join(f"{stage['name']} {round(stage['seconds'])}s" for stage in bundle["stages"])
+    def _short(text):
+        text = " ".join(str(text or "").split())
+        return text[:177].rstrip() + "..." if len(text) > 180 else text
+
+    blind_line = (" — could not look: " + " · ".join(
+        f"{item['name']}: {_short(item['why'])}" for item in blind)) if blind else ""
     return _json({"tool": "cve_rescan", "host": label, "exit_code": worst, "bundle": bundle,
                   "pending": pending, "library_findings": findings, "commands": commands,
                   "hosts": 1, "devices": [label],
+                  "blind": blind,
                   "answer": (f"{label}: {pending} package update(s) pending · {findings} library "
-                             f"finding(s) · {commands} command(s) to run — {timings}"),
+                             f"finding(s) · {commands} command(s) to run{blind_line} — {timings}"),
                   "seconds": round(time.time() - bundle["started_at"], 1)})
 
 
