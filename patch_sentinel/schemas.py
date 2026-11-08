@@ -281,6 +281,20 @@ CVE_INTEGRITY = {
     },
 }
 
+CVE_RESCAN = {
+    "name": "cve_rescan",
+    "description": (
+        "The whole posture in one call: packages and kernel (cve_scan), the language and framework "
+        "stack (cve_libraries), the integrity reading (cve_integrity) and the commands each of those "
+        "implies (cve_plan per host), in that order, stored as one bundle. Use it when the question is "
+        "'what is the state of everything' — the individual tools stay for a question about one "
+        "surface. Each stage reports its own exit_code; the call's exit_code is the worst of them, so "
+        "a stage that could not look is never washed out by three that could. Takes a minute or more "
+        "on a full package database; the bundle is written after each stage, so a partial run is "
+        "readable while it is still running."),
+    "parameters": {"type": "object", "properties": {}, "required": []},
+}
+
 SCHEMAS = {schema["name"]: schema
            for schema in (CVE_SCAN, CVE_PLAN, CVE_EXPLAIN, CVE_COVERAGE, CVE_LIBRARIES,
-                          CVE_IMAGE, CVE_SBOM, CVE_APPLY, CVE_ACK, CVE_INTEGRITY)}
+                          CVE_IMAGE, CVE_SBOM, CVE_APPLY, CVE_ACK, CVE_INTEGRITY, CVE_RESCAN)}

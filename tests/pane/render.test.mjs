@@ -9,7 +9,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { VerdictBar, HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, IntegrityPanel, PendingPanel,
+import { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, UpdatesPanel, LanguagesPanel, IntegrityPanel,
          GapsPanel, ApplyGate, PatchSentinel, SECTIONS } from './pane.mjs'
 
 const dataPath = process.env.PANE_DATA || '../pane-data.json'
@@ -71,12 +71,14 @@ if (!integrityEmpty.includes('read it')) throw new Error('the not-read-yet state
 const panes = [
   ['servers (closed)', createElement(HostsPanel, { onChanged: noop })],
   ['servers (open)', createElement(HostsPanel, { onChanged: noop, startOpen: true })],
-  ['now', createElement(NowPanel, { status: data.status, onRefresh: noop, busy: false })],
+  ['what must be done', createElement(TodoPanel, { bundle: { scan: data.status },
+                                                    selected: data.hostLabel, onSelect: noop })],
   ['updates', createElement(UpdatesPanel, { entry: data.status.hosts[data.hostLabel],
                                             hostLabel: data.hostLabel, onRescan: noop, busy: false })],
   ['libs', createElement(LanguagesPanel, { libraries: data.libraries, onCheck: noop, busy: false })],
-  ['plan', createElement(PendingPanel, { hostLabel: data.hostLabel, plan: data.plan, onPlan: noop,
-                                         limited: false, planning: false })],
+  ['the fix, as commands', createElement(CommandsPanel, {
+    bundle: { scan: data.status, plans: { plans: { [data.hostLabel]: data.plan } } },
+    selected: data.hostLabel, where: null })],
   ['gaps', createElement(GapsPanel, { coverage: data.coverage, selected: data.hostLabel })],
   ['apply', createElement(ApplyGate, { hostLabel: data.hostLabel,
                                        entry: data.status.hosts[data.hostLabel] })]
@@ -139,19 +141,23 @@ if (!agentExploited.includes('sit in packages Hermes itself ships')) throw new E
 if (!agentExploited.includes('hermes update')) throw new Error('the agent lever is not stated')
 
 // Every server row carries a device shape: the machine Hermes runs on, a LAN server, a remote host.
-const now = renderToStaticMarkup(createElement(NowPanel, {
-  status: { hosts: {
+const now = renderToStaticMarkup(createElement(TodoPanel, {
+  bundle: { scan: { hosts: {
     beelink: { label: 'beelink', target: 'local', adapter: 'apt', pending_count: 0,
+               measured_at: '2026-11-08T10:00:00Z',
                os: { id: 'ubuntu', codename: 'resolute' }, status: { exit_code: 0 } },
     nas: { label: 'nas', target: 'root@192.168.1.20:22', adapter: 'apt', pending_count: 2,
            os: { id: 'debian', codename: 'bookworm' }, status: { exit_code: 1 } },
     vps: { label: 'vps', target: 'root@203.0.113.9', adapter: 'apt', pending_count: 0,
            os: { id: 'ubuntu', codename: 'noble' }, status: { exit_code: 0 } }
-  }, blind: [], note: '' }, onRefresh: noop, busy: false }))
+  }, blind: [], note: '' } }, selected: 'beelink', onSelect: noop }))
 if ((now.match(/<svg/g) || []).length < 3) throw new Error('a server row has no device icon')
 if (!now.includes('the machine Hermes runs on')) throw new Error('the hermes machine icon is missing')
 if (!now.includes('a server on the local network')) throw new Error('the LAN server icon is missing')
 if (!now.includes('a remote server')) throw new Error('the remote server icon is missing')
+// a measured_at arrives as an ISO string here and as an epoch second from the integrity reading;
+// the first shape once rendered as "NaN d ago"
+if (now.includes('NaN')) throw new Error('an ISO timestamp rendered as NaN')
 
 for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXTURE],
                                  ['libs (nothing read)', null]]) {
@@ -251,20 +257,20 @@ for (const expected of ['2 servers', '4 updates pending', '2 vendor-lag', '1 exp
 }
 console.log('  verdict bar names every fact, including the exploited one')
 
-// The legend and the panels read from one array, in one order. This asserts it on the rendered page.
+// The legend and the sections read from one array, in one order. The full page renders without data
+// (it fetches in an effect, which a server render never runs), so the order is asserted on the legend
+// line — and each section is rendered with its own fixture further up, which proves it carries its title.
 const root = renderToStaticMarkup(createElement(PatchSentinel, {}))
-let cursor = -1
-for (const section of SECTIONS) {
-  // React escapes & as &amp; in text nodes
-  const needle = '>' + section.title.replace(/&/g, '&amp;') + '<'
-  // the LAST occurrence is the section heading (the first is the legend line), so this proves the
-  // panels themselves follow the legend's order, not just that the legend is sorted
-  const at = root.lastIndexOf(needle)
-  if (at === -1) throw new Error('section "' + section.title + '" never appears on the page')
-  if (at < cursor) throw new Error('section "' + section.title + '" is out of order')
-  cursor = at
+const legendLine = SECTIONS.map((section) => section.title).join('  →  ')
+if (!root.includes(legendLine.replace(/&/g, '&amp;'))) {
+  throw new Error('the legend does not list the sections in order: ' + legendLine)
 }
-console.log('  legend and panels agree on ' + SECTIONS.length + ' sections, in order')
+for (const section of SECTIONS) {
+  if (!root.includes(section.title.replace(/&/g, '&amp;'))) {
+    throw new Error('section "' + section.title + '" is not named anywhere')
+  }
+}
+console.log('  legend names all ' + SECTIONS.length + ' sections, in order')
 
 // One refresh control, at the top. Three panels used to carry their own "rescan" button doing the
 // same work; the operator could not tell whether they differed.

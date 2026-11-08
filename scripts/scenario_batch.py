@@ -101,7 +101,8 @@ def invariants(scenario: str, tool: str, payload: dict) -> None:
            f"{tool} exit_code is {payload.get('exit_code')!r}, expected 0, 1 or 2")
     if payload.get("exit_code") == 1:
         found = (payload.get("vulnerable") or payload.get("steps") or payload.get("findings")
-                 or payload.get("vulnerable_count") or payload.get("pending"))
+                 or payload.get("vulnerable_count") or payload.get("pending")
+                 or payload.get("library_findings") or payload.get("commands"))
         expect(scenario, bool(found),
                f"{tool} exits 1 (something to patch) but carries nothing to patch")
 
@@ -459,6 +460,32 @@ def scenario_bad_inputs(verbose: bool) -> None:
     expect(name, ack.get("exit_code") == 2, "an acknowledgement with no reason was accepted")
 
 
+def scenario_rescan_bundle(verbose: bool) -> None:
+    """"rescan all" is now the pane's only control: it must write one bundle, in order, and never
+    report a stage as clean when it could not look."""
+    name = "rescan-all"
+    home = tempfile.mkdtemp(prefix="s-home-")
+    os.environ["HOME"] = home
+    data = f"{home}/data"
+    tools.configure(settings_for(name, home, data))
+    payload = run(name, "cve_rescan", {})
+    bundle = payload.get("bundle") or {}
+    stages = [stage.get("name") for stage in bundle.get("stages") or []]
+    expect(name, stages == ["scan", "libraries", "integrity", "plans"],
+           f"the stages ran out of order or went missing: {stages}")
+    expect(name, os.path.exists(f"{data}/rescan.json"), "the bundle was not written to the data dir")
+    for key in ("scan", "libraries", "integrity", "plans"):
+        expect(name, bundle.get(key), f"the bundle carries no {key}")
+    codes = [stage.get("exit_code") for stage in bundle.get("stages") or []]
+    expect(name, payload.get("exit_code") == max(codes),
+           f"the run reports {payload.get('exit_code')} while its worst stage is {max(codes)}")
+    expect(name, bundle.get("stage") == "done", "the bundle does not say it finished")
+    # a second run must replace the bundle, not append to it
+    again = run(name, "cve_rescan", {})
+    expect(name, len((again.get("bundle") or {}).get("stages") or []) == 4,
+           "a second run appended stages instead of starting a new bundle")
+
+
 SCENARIOS = [
     ("new user, empty home", scenario_new_user),
     ("returning user, second run", scenario_returning_user),
@@ -478,6 +505,7 @@ SCENARIOS = [
     ("path with spaces and a symlink loop", scenario_awkward_project_path),
     ("data directory is a file", scenario_data_dir_is_a_file),
     ("bad arguments", scenario_bad_inputs),
+    ("rescan all: one bundle, in order", scenario_rescan_bundle),
 ]
 
 

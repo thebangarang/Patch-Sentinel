@@ -31,11 +31,20 @@ class DashboardRoutes(unittest.TestCase):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
+        # Point the plugin at a throwaway data directory BEFORE importing the router: the module
+        # configures itself from the stored settings at import, and a route that saves the inventory
+        # (POST /hosts, /hosts/remove) would otherwise rewrite the live inventory of the machine the
+        # tests run on. That is exactly what happened once: a test removed a real server.
+        import tempfile
+        cls._data_dir = tempfile.mkdtemp(prefix="ps-test-data-")
+
         spec = importlib.util.spec_from_file_location(
             "patch_sentinel_dashboard", ROOT / "dashboard" / "plugin_api.py")
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
+        module.tools.configure({"hosts": "testbox=local", "release": "resolute",
+                                "data_dir": cls._data_dir, "timeout": 30})
         app = FastAPI()
         app.include_router(module.router, prefix="/api/plugins/patch-sentinel")
         cls.client = TestClient(app)
@@ -49,7 +58,8 @@ class DashboardRoutes(unittest.TestCase):
         # silently loses a surface. cve_apply is the gate — it must be here.
         self.assertEqual(sorted(body["tools"]),
                          ["cve_ack", "cve_apply", "cve_coverage", "cve_explain", "cve_image",
-                          "cve_integrity", "cve_libraries", "cve_plan", "cve_sbom", "cve_scan"])
+                          "cve_integrity", "cve_libraries", "cve_plan", "cve_rescan", "cve_sbom",
+                          "cve_scan"])
 
     def test_health_reports_which_build_of_the_pane_is_served(self):
         body = self.client.get(self.base + "/health").json()
@@ -87,8 +97,10 @@ class DashboardRoutes(unittest.TestCase):
         self.fail(f"the {name} job did not finish within {seconds}s")
 
     def test_the_gate_refuses_a_wrongly_typed_host(self):
+        # the label comes from the test's own inventory, never from this machine's
+        label = self.client.get(self.base + "/hosts").json()["hosts"][0]["label"]
         started = self.client.post(self.base + "/apply",
-                                   json={"host": "beelink", "confirm": "beelinkk"}).json()
+                                   json={"host": label, "confirm": label + "k"}).json()
         self.assertTrue(started["started"])
         body = self.follow("apply")["result"]
         self.assertFalse(body["applied"])

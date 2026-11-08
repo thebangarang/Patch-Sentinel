@@ -249,15 +249,30 @@ feed that cannot be read is reported as **unmeasured**, never as clean.
 Not wired, and named as gaps in the pane: Fedora's Bodhi updates, SUSE's CSAF/VEX documents, and any
 form of image scanning (Trivy-class) — the plugin does not pretend to see inside a container.
 
-## What the pane asks you to do, in order
+## One button, one to-do list, one command block
 
-1. **rescan** — measure every server;
-2. **the fix, as commands** — the plan for the selected server: the ordered commands, where to run
-   them (`ssh …` for a remote one), how to verify, how to undo, and one *copy the commands* control;
-3. **run it from here instead — optional** — a collapsed row under the plan, not a section and not a
-   step: it runs the same commands from the pane, for hosts where the account Hermes runs as can
-   patch unattended. The row itself already says whether this host allows it (`not available on
-   beelink — sudo needs a password there`), so nothing looks like a final step that would refuse.
+The pane answers two questions and nothing else: **what has to be done**, and **with what**.
+
+1. **rescan all** — the only control. One backend run walks every surface in a fixed order (packages
+   and kernel → language stack → integrity reading → the commands each implies), writes the bundle
+   after each stage and the pane renders it as it lands. Packages appear after ~20 s, the whole run
+   takes a minute or two; there is no second button to press and nothing to press in a particular
+   order.
+2. **what must be done** — one block per device: the pending packages, a kernel that is not running,
+   library findings that name a fix, sockets that appeared, files this account cannot read, and a
+   `cannot see: …` line for any surface that refused. It says `nothing to do` only when the device was
+   measured and nothing is pending — "never measured" is a different sentence.
+3. **the fix, as commands** — every command the rows above imply, grouped by device and numbered:
+   the package steps (with risk, downtime, verify and reverse), the language-store upgrades that have
+   a published fix, and the root verification for files the pane cannot read. *COPY ALL* gives the
+   whole set; each row copies on its own. A finding with no published fix never becomes a command.
+4. **what was read, and what could not be** — collapsed. The pending list with its advisory ids, the
+   integrity reading and the language inventory: the proof for the rows above, not another control.
+
+**run it from here instead — optional** stays a collapsed row under the commands: it runs the same
+commands from the pane, for hosts where the account Hermes runs as can patch unattended. The row
+already says whether this host allows it (`not available on beelink — sudo needs a password there`),
+so nothing looks like a final step that would refuse.
 
 The system-package list copies commands, not a list of versions — a package list is a reference, and
 the copy control exists to paste something a shell can run.
@@ -285,9 +300,11 @@ bridge cuts a renderer call at 30 seconds, so a synchronous route reported *"tim
 Hermes backend"* while the work was still finishing — and a synchronous **apply** would have reported
 a failure while the machine was being patched, which is the one message that invites a second one.
 
-Both run as jobs: `POST /scan` and `POST /apply` answer immediately, `GET /jobs` reports progress and
-the result, and the pane follows them. There is **one** refresh control, at the top — the three
-per-panel "rescan" buttons did the same work and made the pane look like three different actions.
+Both run as jobs: `POST /rescan` and `POST /apply` answer immediately, `GET /rescan` returns the
+bundle the pane renders (and the stage it is on), and the pane follows it. There is **one** refresh
+control, at the top — the three per-panel "rescan" buttons did the same work and made the pane look
+like three different actions. The individual tools (`cve_scan`, `cve_libraries`, `cve_integrity`)
+remain for an agent asking about one surface; `cve_rescan` is the one that answers for all of them.
 
 ## Adding the machines this pane answers for
 

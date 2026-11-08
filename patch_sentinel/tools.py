@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 from . import apply as apply_mod
-from . import plan, schemas, store, verdict
+from . import plan, rescan, schemas, store, verdict
 from .sources import (acks, cve_tracker, dispatch, distro_lag, environments, image_db, integrity,
                       jars, languages, osv, projects, repos, sbom, services, shell, support, threat,
                       usn)
@@ -1323,6 +1323,78 @@ def cve_ack(args: dict, **kwargs) -> str:
     return _json({"tool": "cve_ack", **result, "exit_code": 0 if result.get("ok") else 2})
 
 
+def _plans_for_every_host() -> tuple[dict, int]:
+    """One plan per host in the inventory — the commands half of "rescan all"."""
+    plans, worst = {}, 0
+    for host in _inventory():
+        try:
+            payload = json.loads(cve_plan({"host": host["label"]}))
+        except Exception as exc:                      # noqa: BLE001 - a stage that dies is reported
+            payload = {"tool": "cve_plan", "exit_code": 2,
+                       "answer": f"the plan for {host['label']} could not be built: {exc}"}
+        plans[host["label"]] = payload
+        worst = max(worst, int(payload.get("exit_code") or 0))
+    return plans, worst
+
+
+def cve_rescan(args: dict, **kwargs) -> str:
+    """One control instead of four: walk every surface in the order the pane shows them.
+
+    The bundle is written after each stage, so the pane renders what has landed while the integrity
+    reading (the slow one) is still running. Nothing is decided here: each stage calls the same handler
+    the single-purpose tool calls, and its payload is stored verbatim.
+    """
+    data_dir = str(_settings.get("data_dir") or store.data_dir())
+    bundle = rescan.start(data_dir)
+    handlers = {"scan": cve_scan, "libraries": cve_libraries, "integrity": cve_integrity}
+    worst = 0
+    for stage in rescan.STAGES:
+        started = time.time()
+        if stage == "plans":
+            payload = {"tool": "cve_plan", "plans": None}
+            payload["plans"], code = _plans_for_every_host()
+            payload["exit_code"] = code
+        else:
+            try:
+                payload = json.loads(handlers[stage]({}))
+            except Exception as exc:                  # noqa: BLE001 - one stage cannot end the run
+                payload = {"tool": f"cve_{stage}", "exit_code": 2,
+                           "answer": f"this stage could not finish: {exc}"}
+        code = int(payload.get("exit_code") or 0)
+        worst = max(worst, code)
+        bundle[stage] = payload
+        bundle["stage"] = stage
+        bundle["stages"].append({"name": stage, "exit_code": code,
+                                 "seconds": round(time.time() - started, 1),
+                                 "at": time.time()})
+        rescan.write(data_dir, bundle)
+    bundle["stage"] = "done"
+    bundle["finished_at"] = time.time()
+    rescan.write(data_dir, bundle)
+
+    # The answer is the verdict, not a stopwatch. It carries the three counts the sections above are
+    # built from, so a caller that only reads `answer` still gets the state of the fleet.
+    scan = bundle.get("scan") or {}
+    hosts = scan.get("hosts") or {}
+    pending = sum(int((entry or {}).get("pending_count") or 0) for entry in hosts.values())
+    libraries = bundle.get("libraries") or {}
+    findings = len([row for row in (libraries.get("vulnerable") or []) if row.get("owner") != "hermes"])
+    plans = ((bundle.get("plans") or {}).get("plans") or {})
+    commands = sum(len((plan or {}).get("steps") or []) for plan in plans.values())
+    timings = " · ".join(
+        f"{ {'scan': 'packages', 'libraries': 'language stack', 'integrity': 'integrity',
+             'plans': 'commands'}[stage['name']] } {round(stage['seconds'])}s"
+        + (" (could not look)" if stage["exit_code"] == 2 else "")
+        for stage in bundle["stages"])
+    return _json({"tool": "cve_rescan", "exit_code": worst, "bundle": bundle,
+                  "pending": pending, "library_findings": findings, "commands": commands,
+                  "hosts": len(hosts),
+                  "answer": (f"{len(hosts)} device(s) · {pending} package update(s) pending · "
+                             f"{findings} library finding(s) · {commands} command(s) to run — "
+                             "measured once, in order: " + timings),
+                  "seconds": round(time.time() - bundle["started_at"], 1)})
+
+
 HANDLERS = {
     "cve_scan": cve_scan,
     "cve_plan": cve_plan,
@@ -1334,6 +1406,7 @@ HANDLERS = {
     "cve_sbom": cve_sbom,
     "cve_ack": cve_ack,
     "cve_integrity": cve_integrity,
+    "cve_rescan": cve_rescan,
 }
 
 __all__ = ["HANDLERS", "SCHEMAS", "configure", "cve_scan", "cve_plan", "cve_explain",

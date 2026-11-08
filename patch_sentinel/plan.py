@@ -38,8 +38,12 @@ COMMANDS = {
         "apply": "sudo apt-get -y full-upgrade",
         "verify": "apt-get -s dist-upgrade | grep '^Inst ' || echo 'nothing pending'",
         "stage_why": "Staging first means the apply window is not waiting on a mirror.",
-        "reversal": "the pre-change state is in the scan this plan came from; re-install the "
-                    "recorded versions with apt-get install <pkg>=<version>",
+        # No placeholder angles here: a reversal an operator cannot run is decoration. apt keeps the
+        # record itself, so the reversal names the log that holds it and what restoring costs.
+        "reversal": "nothing automates this on apt: /var/log/apt/history.log lists every package "
+                    "this run upgraded and the version it came from, and apt-get install with that "
+                    "old version restores one package at a time — only while the archive still "
+                    "carries it",
     },
     "dnf": {
         "refresh": "sudo dnf -q makecache",
@@ -135,8 +139,9 @@ def steps_for(host: dict) -> list[dict]:
                    "image, so it was rebuilt upstream — usually accumulated fixes, never a "
                    "claim about which ones (D5)",
             "verify": "docker inspect --format '{{index .RepoDigests 0}}' $(docker compose ps -q)",
-            "reversal": f"docker compose up -d with the previous image id "
-                        f"(recorded from {image.get('local') or 'the running container'})",
+            # the previous id is recorded in the scan, so it is named here rather than described
+            "reversal": "docker compose down && docker run --detach " + str(image.get("local") or "")
+                        + "   # the previous image id, recorded in the scan this plan came from",
         })
 
     return steps

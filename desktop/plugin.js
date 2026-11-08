@@ -81,8 +81,12 @@ function withCode(text) {
 }
 
 /** `read_at` is an epoch second, `ago` takes an age. Mixing them printed "20765 d ago". */
-function agoAt(epoch) {
-  if (!epoch) return null
+function agoAt(stamp) {
+  if (!stamp) return null
+  // two shapes arrive here: an epoch second (the integrity reading) and an ISO string (a scan's
+  // measured_at). Feeding the string to the subtraction printed "NaN d ago".
+  const epoch = typeof stamp === 'number' ? stamp : Date.parse(String(stamp)) / 1000
+  if (!Number.isFinite(epoch)) return null
   const drift = Math.floor(Date.now() / 1000 - epoch)
   // a reading stamped in the future means the clock moved, and an age is then meaningless — say that
   // rather than print "just now" over a timestamp that cannot be trusted
@@ -134,27 +138,38 @@ const SECTIONS = [
   { key: 'servers', title: 'servers', blurb: 'the machines this pane answers for',
     long: 'This machine plus any host you add. A host is added only after a probe of it succeeds, and '
         + 'only the address is stored — never a key.' },
-  { key: 'overview', title: 'overview', blurb: 'one row per server, and how old the reading is',
-    long: 'What the last scan measured per host: pending packages, kernel, images, advisories, and '
-        + 'whether each patch is in effect.' },
-  { key: 'packages', title: 'system packages', blurb: "the distro's update list",
-    long: 'Every package apt, dnf, pacman or zypper would upgrade, with which USN or advisory names '
-        + 'that exact version.' },
-  { key: 'integrity', title: 'integrity', blurb: 'is this still what we installed?',
-    long: 'Package checksums, the /etc/ld.so.preload hook and the listening sockets against the '
-        + 'baseline recorded earlier. A patch scanner reads versions; an intrusion does not change a '
-        + 'version. It never says "not compromised".' },
-  { key: 'libs', title: 'libs & runtimes', blurb: 'language packages, against OSV',
-    long: 'What each toolchain has installed machine-wide and in every project virtualenv — npm, pip, '
-        + 'PHP, Ruby, Rust, .NET, Maven, Go, Dart — plus jars on disk and lockfile pins.' },
-  { key: 'plan', title: 'the fix, as commands', blurb: 'the commands to paste',
-    long: 'The pending packages turned into ordered commands, with risk, downtime, how to verify and '
-        + 'how to undo. This is the normal way to patch; APPLY is an optional shortcut on top of it.' },
+  { key: 'todo', title: 'what must be done', blurb: 'the actions, per device',
+    long: 'Everything the measurement turned into something to do, one device at a time: pending '
+        + 'packages, a kernel that is not running, library findings that name a fix, sockets that '
+        + 'appeared, files that could not be read. Nothing here is a command — the commands are the '
+        + 'next section, so a row can be read before anything is pasted.' },
+  { key: 'plan', title: 'the fix, as commands', blurb: 'the commands to paste, in order',
+    long: 'Every command the rows above imply, grouped by device and numbered: the package upgrade '
+        + 'steps (with risk, downtime, how to verify and how to undo), the language-store upgrades '
+        + 'that have a published fix, and the root verification for files this account cannot read. '
+        + 'COPY ALL gives the whole set for every device; APPLY is an optional shortcut on top of it.' },
+  { key: 'evidence', title: 'what was read', blurb: 'the readings the rows are built from',
+    long: 'The pending package list with its advisory ids, the integrity reading (checksums, preload '
+        + 'hook, listening sockets) and the language inventory. Closed by default: it is the proof, '
+        + 'not the to-do list.' },
   { key: 'gaps', title: 'gaps', blurb: 'what this scan could not see',
     long: 'Red here is a fact about the scan, not about the server: a host that did not answer, a feed '
         + 'that refused, a surface with no reader yet.' },
 ]
 const SECTION = SECTIONS.reduce((acc, section) => { acc[section.key] = section; return acc }, {})
+// The two panels that survive as *evidence* still title themselves from this map. They are not part of
+// the reading order any more — the legend lists what the page is for, not where each reading came from.
+Object.assign(SECTION, {
+  packages: { key: 'packages', title: 'system packages',
+              long: 'Every package apt, dnf, pacman or zypper would upgrade, with which USN or '
+                  + 'advisory names that exact version.' },
+  integrity: { key: 'integrity', title: 'integrity',
+               long: 'Package checksums, the /etc/ld.so.preload hook and the listening sockets against '
+                   + 'the baseline recorded earlier. It never says "not compromised".' },
+  libs: { key: 'libs', title: 'libs & runtimes',
+          long: 'What each toolchain has installed machine-wide and in every virtualenv — npm, pip, '
+              + 'PHP, Ruby, Rust, .NET, Maven, Go, Dart — plus jars on disk and lockfile pins.' }
+})
 
 /** Every section gets the legend's slim bar — one colour for all of them, so the page reads as
  *  blocks without six competing accents. The bar separates; the section title distinguishes. */
@@ -762,66 +777,6 @@ function HostsPanel({ onChanged, startOpen, initialTest, initialHosts }) {
 }
 
 // --------------------------------------------------------------------------- NOW
-
-function NowPanel({ status }) {
-  const hosts = status && status.hosts ? Object.values(status.hosts) : []
-  const blind = (status && status.blind) || []
-  const rows = hosts.map((entry) => {
-    const level = stateOf(entry)
-    const kernel = entry.kernel || {}
-    return jsxs('div', {
-      key: entry.label,
-      style: {
-        display: 'grid', gridTemplateColumns: '10px 1fr auto', gap: '8px',
-        alignItems: 'baseline', padding: '7px 0', borderTop: '1px solid ' + C.border
-      }
-    }, [
-      dot(level.level),
-      jsxs('div', {}, [
-        jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
-          deviceIcon(deviceKind(entry)),
-          jsx('span', { style: { fontWeight: 600, fontSize: '0.8125rem' } }, entry.label),
-          jsx('span', { fontFamily: MONO, fontSize: '0.6875rem', color: C.accent },
-            (entry.adapter || '?') + ' · ' + ((entry.os && entry.os.id) || '?') + '/' + ((entry.os && entry.os.codename) || '?')),
-          // where the answer came from: this machine, or a host the operator declared
-          jsx('span', { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint },
-            entry.target && entry.target !== 'local' ? 'ssh ' + entry.target : 'this machine')
-        ]),
-        jsx('div', { style: { fontFamily: MONO, fontSize: '0.8125rem', color: C.dim, marginTop: '2px' } },
-          'kernel ' + (kernel.running || '?') + ' → ' + (kernel.verdict || '?')),
-        jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, marginTop: '2px' } },
-          (entry.pending_count || 0) + ' pending · ' + ((entry.vendor_lag || []).length)
-          + ' fix(es) waiting on the vendor · ' + (entry.images || []).length + ' image(s) · ' + level.level),
-        (entry.pending || []).length
-          ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.dim, marginTop: '3px' } },
-              (entry.pending || []).slice(0, 3).map((row) => row.package + ' ' + (row.from || '?') + '→' + row.to).join(' · ') +
-              (entry.pending_count > 3 ? ' · +' + (entry.pending_count - 3) + ' more' : ''))
-          : null
-      ]),
-      jsxs('div', { style: { textAlign: 'right' } }, [
-        jsx('div', { style: { fontFamily: MONO, fontSize: '0.8125rem', color: C.dim } },
-          entry.measured_at ? entry.measured_at.replace('T', ' ').slice(0, 19) : '—'),
-        jsx('div', { style: { fontSize: '0.75rem', color: C.faint } }, 'measured')
-      ])
-    ])
-  })
-
-  return jsxs('section', { style: sectionStyle('overview') }, [
-    jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label(SECTION.overview.title, null, SECTION.overview.long),
-      jsx('span', { style: { flex: 1 } }),
-      jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.faint } },
-        ago(status ? status.age_seconds : null) + ' · exit ' + (status && status.exit_code !== null && status.exit_code !== undefined ? status.exit_code : '—'))
-    ]),
-    hosts.length ? rows : jsx('div', { style: { fontSize: '0.75rem', color: C.faint, padding: '6px 0' } },
-      (status && status.note) || 'no measurement yet'),
-    blind.length
-      ? jsx('div', { style: { marginTop: '6px', fontSize: '0.8125rem', color: C.danger } },
-          blind.length + ' check(s) could not look — '
-          + blind.map((b) => b.host || 'this machine').join(', ') + ' · see GAPS')
-      : null
-  ])
-}
 
 // --------------------------------------------------------------------------- UPDATES
 
@@ -1815,96 +1770,270 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
   ])
 }
 
-function PendingPanel({ hostLabel, plan, onPlan, limited, planning, where, libraryFindings }) {
-  const steps = (plan && plan.steps) || []
-  const refusals = (plan && plan.refusals) || []
-  // the commands are the product; APPLY is a shortcut that most hosts cannot allow
-  const whereLine = where
-    ? (where.kind === 'remote'
-        ? 'run them on ' + where.machine + (where.ssh ? ' — `' + where.ssh + '` — or prefix each one with it'
-                                                  : ' — in a terminal there')
-        : 'run them in a terminal on this machine, as yourself (the plugin\'s own sudo is not yours)')
-    : ''
+// ------------------------------------------------------------------ WHAT MUST BE DONE
+// One list, one place, every device. The pane used to make the operator assemble this themselves out
+// of five sections with their own buttons; the list below is the answer to "what do I have to do",
+// and the section after it is the answer to "with what". Rows carry no command — a command belongs in
+// "the fix", where it can be copied — they carry the reason it exists.
 
-  return jsxs('section', { style: sectionStyle('plan') }, [
-    jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
-      label(SECTION.plan.title, null, SECTION.plan.long),
-      jsx('span', { style: { flex: 1 } }),
-      jsx('button', {
-        type: 'button',
-        onClick: () => onPlan(hostLabel),
-        disabled: planning || !hostLabel,
-        title: planning ? 'measuring the host and turning it into commands'
-                        : 'turns this host\'s pending updates into ordered commands, each with a way back',
-        style: {
-          fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px',
-          cursor: planning || !hostLabel ? 'default' : 'pointer',
-          color: planning ? C.accent : C.dim, background: 'transparent',
-          border: '1px solid ' + C.border, borderRadius: '3px'
-        }
-      }, planning ? 'planning…' : steps.length ? 're-plan' : 'commands for ' + (hostLabel || 'this machine')),
-      steps.length
-        ? jsx(Copy, { text: steps.map((step) => step.command).join('\n'), what: 'all the steps',
-                      label: 'copy all ' + steps.length + ' commands', primary: true })
-        : null
+/** Devices in the order a person reads them: the machine in front of them first, then the rest. */
+function orderedHosts(scan) {
+  const hosts = (scan && scan.hosts) || {}
+  return Object.keys(hosts).sort((a, b) => {
+    const localA = (hosts[a] && (hosts[a].target === 'local' || hosts[a].target === null)) ? 0 : 1
+    const localB = (hosts[b] && (hosts[b].target === 'local' || hosts[b].target === null)) ? 0 : 1
+    return localA - localB || a.localeCompare(b)
+  }).map((label) => ({ label, entry: hosts[label] }))
+}
+
+/** Findings that name a fix ahead of the installed version — the only ones with a command. */
+function fixableRows(libraries) {
+  return ((libraries && libraries.vulnerable) || [])
+    .filter((row) => row.owner !== 'hermes' && (row.fixed || []).length)
+    .map((row) => ({ ...row, fix: newestVersion(row.fixed) }))
+    .filter((row) => row.fix && compareVersions(row.fix, row.version) > 0)
+}
+
+function todoRows({ bundle, label, entry }) {
+  const rows = []
+  const pending = (entry && entry.pending_count) || 0
+  const kernel = (entry && entry.kernel) || {}
+  if (pending) {
+    rows.push({ level: 'amber', what: pending + ' package update' + (pending === 1 ? '' : 's') + ' to install',
+                why: (entry && entry.pending_reason) || 'the package manager lists them as available now' })
+  }
+  if (kernel.verdict && kernel.verdict !== 'kernel-current') {
+    rows.push({ level: kernel.verdict === 'kernel-reboot-needed' ? 'amber' : 'grey',
+                what: kernel.verdict.replace('kernel-', '').replace(/-/g, ' ') + ' — running '
+                      + (kernel.running || '?') + ', installed ' + (kernel.installed || '?'),
+                why: kernel.reason || 'the running kernel is not the one on disk' })
+  }
+  const libraries = bundle.libraries
+  const libHost = (libraries && libraries.host && libraries.host.label) || null
+  if (libraries && libHost === label) {
+    const fixable = fixableRows(libraries)
+    const known = (libraries.vulnerable || []).filter((row) => row.owner !== 'hermes')
+    const noFix = known.length - fixable.length
+    if (fixable.length) {
+      const names = Array.from(new Set(fixable.map((row) => row.package + ' ' + row.version)))
+      rows.push({ level: 'amber', what: fixable.length + ' library finding(s) with a published fix',
+                  why: names.slice(0, 4).join(', ') + (names.length > 4 ? ' and ' + (names.length - 4) + ' more' : '') })
+    }
+    if (noFix) {
+      rows.push({ level: 'grey', what: noFix + ' library finding(s) with no published fix',
+                  why: 'an acknowledgement can record them with a reason; no version installs a fix that does not exist' })
+    }
+    if (!fixable.length && !noFix && libraries.components) {
+      rows.push({ level: 'green', what: libraries.components + ' package(s) read, none named by an advisory',
+                  why: 'the advisory database named no version of these packages' })
+    }
+  }
+  const integrity = bundle.integrity
+  const intHost = integrity && integrity.host && integrity.host.label
+  if (integrity && intHost === label && integrity.integrity) {
+    const state = integrity.integrity
+    const tamper = state.tamper || {}
+    const listeners = state.listeners || {}
+    if ((tamper.changed || []).length) {
+      rows.push({ level: 'red', what: (tamper.changed || []).length + ' packaged file(s) no longer match their package',
+                  why: 'this is the one row that means a file was edited outside the package manager' })
+    }
+    if ((listeners.new || []).length) {
+      rows.push({ level: 'red', what: (listeners.new || []).length + ' listening socket(s) not in the baseline',
+                  why: 'opened since the baseline was taken — decide whether you opened them' })
+    }
+    if ((tamper.unreadable || []).length) {
+      rows.push({ level: 'grey', what: (tamper.unreadable || []).length + ' packaged file(s) this account cannot read',
+                  why: 'not a finding: unreadable is not changed. The command below covers them' })
+    }
+    if (state.state === 'ok' && !(tamper.changed || []).length && !(listeners.new || []).length) {
+      rows.push({ level: 'green', what: 'checksums, preload hook and ' + (listeners.count || 0) + ' listening socket(s) read',
+                  why: 'no evidence of tampering in the surfaces read — a rootkit that hides is invisible to this' })
+    }
+  }
+  // a blind entry says what class of surface it is (images, advisories, host) and why — the earlier
+  // version looked for two keys that are not in the shape and printed "cannot see: a surface"
+  for (const blind of ((bundle.scan && bundle.scan.blind) || [])) {
+    const where = blind.host || blind.label || ''
+    if (where && where !== label) continue
+    rows.push({ level: 'grey', what: 'cannot see: ' + (blind.class || blind.source || 'a surface'),
+                why: (blind.reason || blind.why || 'it could not be read')
+                     + (blind.detail ? ' — ' + blind.detail : '') })
+  }
+  return rows
+}
+
+function TodoPanel({ bundle, selected, onSelect }) {
+  const rows = orderedHosts(bundle && bundle.scan)
+  if (!rows.length) return null
+  return jsxs('section', { style: sectionStyle('now') }, [
+    jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '6px' } }, [
+      label('what must be done', null, 'everything the measurement turned into an action, per device'),
+      jsx('span', { style: { flex: 1 } })
     ]),
-    steps.length > 1
-      ? jsxs('div', { style: { fontSize: '0.75rem', color: C.faint, marginBottom: '6px', lineHeight: 1.45 } }, [
-          jsx('div', {}, 'These run in this order, top to bottom: the first refreshes the metadata and '
-            + 'downloads (it changes nothing), the second installs.'),
-          whereLine
-            ? jsx('div', { style: { fontFamily: MONO, marginTop: '2px', color: C.dim } },
-                whereLine)
-            : null
-        ])
-      : null,
-    steps.length
-      ? steps.map((step, index) => jsxs('div', {
-          key: index,
-          style: {
-            border: '1px solid ' + C.border, borderLeft: '2px solid ' + C.accent,
-            borderRadius: '3px', padding: '8px 10px', marginBottom: '6px', background: C.panel
-          }
-        }, [
-          jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline' } }, [
-            jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.accent } }, String(index + 1).padStart(2, '0')),
-            jsx('span', { style: { flex: 1, fontSize: '0.8125rem', fontWeight: 600 } }, step.action)
-          ]),
-          jsx(Command, { text: step.command, label: 'step ' + (index + 1) + ' — run in a terminal',
-                         where: whereLine || null }),
-          jsx('div', { style: { fontSize: '0.8125rem', color: C.dim, marginTop: '4px' } },
-            'risk ' + step.risk + ' · downtime ' + step.downtime),
-          jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, marginTop: '3px' } }, step.why),
-          jsxs('div', { style: { fontSize: '0.8125rem', color: C.faint, marginTop: '3px' } }, [
-            'verify: ', jsx('span', { style: { fontFamily: MONO } }, step.verify || '—'),
-            '  ·  reverse: ', jsx('span', { style: { fontFamily: MONO } }, step.reversal || '—')
-          ])
-        ]))
-      : jsx('div', { style: { fontSize: '0.75rem', color: libraryFindings ? C.dim : C.faint, padding: '6px 0' } },
-          planning ? 'measuring the host — this can take a few seconds over ssh'
-          : limited ? 'planning needs a host — pick one in NOW first'
-          : libraryFindings
-            ? 'nothing to install on the system: the scan found 0 pending package updates. The '
-              + libraryFindings + ' library finding(s) above are fixed in their own stores — the copy '
-              + 'control in libs & runtimes carries those commands, and this panel is only about the '
-              + 'distro\'s package manager.'
-          : plan ? 'the plan came back empty'
-          : 'no plan yet — press “plan for …” to turn this host into commands'),
-    refusals.length
-      ? jsxs('div', {
-          style: {
-            marginTop: '6px', padding: '7px 9px', borderLeft: '2px solid ' + C.warn,
-            background: C.panel, borderRadius: '3px'
-          }
-        }, [
-          jsx('div', { style: { fontSize: '0.8125rem', color: C.warn, fontWeight: 600 } },
-            'no steps — ' + refusals.map((r) => r.reason).join(' · ')),
-          refusals.some((r) => r.detail)
-            ? jsx('div', { style: { fontSize: '0.8125rem', color: C.faint, marginTop: '3px' } },
-                refusals.map((r) => r.detail).filter(Boolean).join(' · '))
-            : null
-        ])
-      : null
+    rows.map(({ label: name, entry }) => {
+      const todo = todoRows({ bundle, label: name, entry })
+      const actions = todo.filter((row) => row.level === 'amber' || row.level === 'red').length
+      return jsxs('div', {
+        key: name,
+        style: { marginBottom: '10px', cursor: 'pointer' },
+        onClick: () => onSelect && onSelect(name)
+      }, [
+        jsxs('div', { style: { display: 'flex', gap: '7px', alignItems: 'baseline', marginBottom: '3px' } }, [
+          jsx('span', { style: { display: 'inline-flex' } }, deviceIcon(deviceKind(entry || {}))),
+          jsx('span', {
+            style: { fontFamily: MONO, fontSize: '0.875rem', fontWeight: 600,
+                     color: selected === name ? C.accent : C.text }
+          }, name),
+          jsx('span', {
+            style: { fontFamily: MONO, fontSize: '0.6875rem', color: actions ? C.warn : C.ok }
+          }, actions ? actions + ' to do' : 'nothing to do'),
+          jsx('span', { style: { flex: 1 } }),
+          jsx('span', {
+            style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint }
+          }, entry && entry.measured_at ? agoAt(entry.measured_at) || '' : '')
+        ]),
+        todo.length
+          ? todo.map((row, index) => jsxs('div', {
+              key: index,
+              style: {
+                display: 'grid', gridTemplateColumns: '6px 1fr', gap: '7px',
+                paddingLeft: '19px', marginBottom: '2px'
+              }
+            }, [
+              // a bullet, not the shared <span> the older panels compose: spreading a React element
+              // into a style object copies its internal symbols and React refuses to render it
+              jsx('span', {
+                style: { color: LEVEL_COLOUR[row.level] || C.faint, fontSize: '0.6875rem', lineHeight: 1.6 }
+              }, '●'),
+              jsxs('div', {}, [
+                jsx('div', { style: { fontSize: '0.8125rem', color: row.level === 'grey' ? C.dim : C.text } }, row.what),
+                row.why
+                  ? jsx('div', { style: { fontSize: '0.75rem', color: C.faint } }, row.why)
+                  : null
+              ])
+            ]))
+          : jsx('div', { style: { paddingLeft: '19px', fontSize: '0.8125rem', color: C.faint } },
+              // "measured and nothing to do" and "never measured" are different sentences; printing
+              // the second over the first is the kind of quiet lie this plugin exists to avoid
+              entry && (entry.pending_count !== undefined || (entry.os && entry.os.id))
+                ? 'measured ' + (agoAt(entry.measured_at) || 'just now') + ' — '
+                  + ((entry.pending_count || 0) === 0
+                      ? 'no package update pending'
+                      : entry.pending_count + ' update(s) pending')
+                  + ((entry.kernel && entry.kernel.verdict && entry.kernel.verdict !== 'kernel-current')
+                      ? ', kernel ' + String(entry.kernel.verdict).replace('kernel-', '').replace(/-/g, ' ')
+                      : ', kernel ' + ((entry.kernel && entry.kernel.running) || 'current'))
+                  + ' · nothing else to act on here'
+                : 'not measured on this device yet — press rescan all')
+      ])
+    })
+  ])
+}
+
+// ------------------------------------------------------------------ THE FIX, AS COMMANDS
+// Every command the measurement implies, grouped by device, numbered, each copyable on its own and all
+// of them copyable at once. A command that cannot be run is not here: an upgrade with no published fix
+// is a row in "what must be done", not a line to paste.
+
+function commandsForHost(bundle, name) {
+  const out = []
+  const plan = ((bundle && bundle.plans && bundle.plans.plans) || {})[name] || {}
+  for (const step of plan.steps || []) {
+    out.push({ command: step.command, why: step.action, kind: 'packages',
+               detail: (step.risk ? 'risk ' + step.risk + ' · downtime ' + step.downtime + ' · ' : '')
+                       + 'verify: ' + (step.verify || '—') + ' · reverse: ' + (step.reversal || '—') })
+  }
+  const libraries = bundle && bundle.libraries
+  const libHost = libraries && libraries.host && libraries.host.label
+  if (libraries && libHost === name) {
+    for (const row of fixableRows(libraries)) {
+      const command = fixCommandFor(row, row.fix)
+      if (command && !command.startsWith('#')) {
+        out.push({ command, why: row.package + ' ' + row.version + ' → ' + row.fix,
+                   detail: row.ecosystem + ' · ' + String(row.source || ''), kind: 'libraries' })
+      }
+    }
+  }
+  const integrity = bundle && bundle.integrity
+  if (integrity && integrity.host && integrity.host.label === name && integrity.integrity) {
+    const tamper = integrity.integrity.tamper || {}
+    if ((tamper.unreadable || []).length && tamper.command) {
+      out.push({ command: tamper.command, kind: 'verify',
+                 why: (tamper.unreadable || []).length + ' packaged file(s) this account cannot read',
+                 detail: 'run it as the account that can read them, then paste the output back into integrity' })
+    }
+  }
+  const seen = new Set()
+  return out.filter((row) => {
+    if (seen.has(row.command)) return false
+    seen.add(row.command)
+    return true
+  })
+}
+
+/** `where` arrives as a structured object; the copy control wants one line of prose. */
+function whereLine(where) {
+  if (!where) return ''
+  if (typeof where === 'string') return where
+  if (where.kind === 'remote') {
+    return 'run it on ' + (where.machine || 'that host')
+      + (where.ssh ? ' — `' + where.ssh + '` — or prefix the command with it' : ' — in a terminal there')
+  }
+  return where.how || where.note
+    || (where.runs_as ? 'run it as ' + where.runs_as + ' in a terminal on this machine'
+                      : 'run it in a terminal on this machine')
+}
+
+function CommandsPanel({ bundle, selected, where }) {
+  const hosts = orderedHosts(bundle && bundle.scan)
+  if (!hosts.length) return null
+  const blocks = hosts.map(({ label: name }) => ({ name, commands: commandsForHost(bundle, name) }))
+  const whereText = whereLine(where)
+  const total = blocks.reduce((sum, block) => sum + block.commands.length, 0)
+  return jsxs('section', { style: sectionStyle('plan') }, [
+    jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '6px' } }, [
+      label('the fix, as commands', null, 'everything above, as the exact lines to paste — in order'),
+      jsx('span', { style: { flex: 1 } }),
+      total
+        ? jsx(Copy, { text: blocks.flatMap((block) => block.commands.map((row) => row.command)).join('\n'),
+                      what: 'all ' + total + ' commands', label: 'copy all ' + total, primary: true })
+        : jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.ok } }, 'nothing to run')
+    ]),
+    blocks.map((block) => jsxs('div', { key: block.name, style: { marginBottom: '10px' } }, [
+      jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline', marginBottom: '3px' } }, [
+        jsx('span', { style: { display: 'inline-flex' } },
+            deviceIcon(deviceKind((bundle.scan.hosts || {})[block.name] || {}))),
+        jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.dim } }, block.name),
+        jsx('span', {
+          style: { fontFamily: MONO, fontSize: '0.8125rem',
+                   color: selected === block.name ? C.accent : C.text }
+        }, block.commands.length ? block.commands.length + ' command' + (block.commands.length === 1 ? '' : 's')
+                                 : 'nothing to run')
+      ]),
+      block.commands.length
+        ? block.commands.map((row, index) => jsxs('div', {
+            key: index,
+            style: {
+              border: '1px solid ' + C.border, borderLeft: '2px solid ' + C.accent,
+              borderRadius: '3px', padding: '7px 9px', marginBottom: '5px', background: C.panel
+            }
+          }, [
+            jsxs('div', { style: { display: 'flex', gap: '7px', alignItems: 'baseline' } }, [
+              jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.accent } },
+                  String(index + 1).padStart(2, '0')),
+              jsx('span', { style: { flex: 1, fontSize: '0.8125rem' } }, row.why)
+            ]),
+            jsx(Command, { text: row.command, label: (block.commands.length > 1 ? 'command ' + (index + 1) : 'the command')
+                           + ' — run it in a terminal',
+                           where: index === 0 && block.name === selected ? (whereText || null) : null }),
+            row.detail
+              ? jsx('div', { style: { fontSize: '0.75rem', color: C.faint, marginTop: '3px' } }, row.detail)
+              : null
+          ]))
+        : jsx('div', { style: { paddingLeft: '19px', fontSize: '0.75rem', color: C.faint } },
+            'nothing to install here — no pending package update and no published library fix')
+    ]))
   ])
 }
 
@@ -2226,32 +2355,67 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
 
 // --------------------------------------------------------------------------- root
 
-export { VerdictBar, HostsPanel, NowPanel, UpdatesPanel, LanguagesPanel, IntegrityPanel, PendingPanel,
-         GapsPanel, ApplyGate,
+export { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, orderedHosts, todoRows, commandsForHost,
+         fixableRows, UpdatesPanel, LanguagesPanel, IntegrityPanel, GapsPanel, ApplyGate,
          buildFixCommand, fixBlock, actionableFixes, SECTIONS }
 
 export function PatchSentinel({ compact }) {
-  const [status, setStatus] = useState(null)
-  const [coverage, setCoverage] = useState(null)
+  // ONE measurement document, ONE button. Every section renders out of the bundle "rescan all" writes
+  // (GET /rescan), so no two of them can disagree about which run they are showing.
+  const [bundle, setBundle] = useState({})
   const [busy, setBusy] = useState(false)
-  const [selected, setSelected] = useState(null)
-  const [plan, setPlan] = useState(null)
-  const [planning, setPlanning] = useState(false)
-  const [health, setHealth] = useState(null)
-  const [libraries, setLibraries] = useState(null)
-  // integrity is a slow reading with its own button, so it has its own state and its own "read at"
-  const [integrity, setIntegrity] = useState(null)
-  const [legend, setLegend] = useState(false)
-  const [integrityBusy, setIntegrityBusy] = useState(false)
-  const [integritySeconds, setIntegritySeconds] = useState(0)
-  const [libBusy, setLibBusy] = useState(false)
-  const [scanSeconds, setScanSeconds] = useState(0)
+  const [stage, setStage] = useState(null)
+  const [seconds, setSeconds] = useState(0)
   const [scanError, setScanError] = useState(null)
-  // APPLY is the plan's shortcut, folded under it and closed by default. The preflight is asked here,
-  // not inside the control, so the closed row can already say whether this host allows it — the
-  // operator's complaint was that APPLY looked like the flow's last step and then refused.
+  const [selected, setSelected] = useState(null)
+  const [coverage, setCoverage] = useState(null)
+  const [health, setHealth] = useState(null)
+  const [evidence, setEvidence] = useState(false)
+  // the reading order, spelled out on demand — the same array the sections are titled from
+  const [legend, setLegend] = useState(false)
+  const [libBusy, setLibBusy] = useState(false)
+  // a project scan is a different question ("my app's dependencies"), so it is a separate answer kept
+  // apart from the machine-wide one instead of overwriting it
+  const [libProject, setLibProject] = useState(null)
+  // APPLY stays the optional shortcut: folded, closed, and preflighted so the closed row can say
+  // whether this host allows it before the operator opens anything.
   const [applyOpen, setApplyOpen] = useState(false)
   const [applyProbe, setApplyProbe] = useState(null)
+
+  const loadBundle = useCallback(async () => {
+    try {
+      const answer = await call('/rescan')
+      const next = (answer && answer.bundle) || {}
+      if (next.scan) {
+        setBundle(next)
+      } else {
+        // an install that never ran "rescan all" may still hold a stored scan: show it rather than an
+        // empty pane, and keep the "not measured yet" state honest
+        const legacy = await call('/status').catch(() => null)
+        setBundle(legacy ? { scan: legacy } : {})
+      }
+      if (answer && answer.error) setScanError('the last run failed: ' + answer.error)
+    } catch (err) {
+      setBundle({})
+    }
+  }, [])
+
+  const loadRest = useCallback(async () => {
+    const [nextCoverage, nextHealth] = await Promise.all([
+      call('/coverage').catch(() => null), call('/health').catch(() => null)])
+    setCoverage(nextCoverage)
+    setHealth(nextHealth)
+  }, [])
+
+  useEffect(() => { loadBundle(); loadRest() }, [loadBundle, loadRest])
+
+  const hosts = (bundle && bundle.scan && bundle.scan.hosts) || {}
+  // devices in reading order: this machine first, then the declared hosts
+  const labels = useMemo(() => orderedHosts(bundle.scan).map((row) => row.label), [bundle])
+
+  useEffect(() => {
+    if (!selected && labels.length) setSelected(labels[0])
+  }, [labels, selected])
 
   useEffect(() => {
     let live = true
@@ -2263,157 +2427,105 @@ export function PatchSentinel({ compact }) {
     return () => { live = false }
   }, [selected])
 
-  // the stored reading for the selected host: cheap, so it loads with the page and never probes
-  const loadIntegrity = useCallback(async (label) => {
-    if (!label) { setIntegrity(null); return }
+  /**
+   * The one control. It starts the backend run and then follows the bundle: each stage is written as
+   * it lands, so packages appear after twenty seconds and the integrity reading fills in behind it,
+   * instead of the pane sitting still for a minute and a half.
+   */
+  const rescanAll = useCallback(async () => {
+    if (busy) return
+    setBusy(true)
+    setScanError(null)
+    setSeconds(0)
+    setStage('starting')
     try {
-      setIntegrity(await call('/integrity?host=' + encodeURIComponent(label)))
+      const started = await call('/rescan', { method: 'POST', body: {} })
+      if (started && started.error) {
+        setScanError('the run could not start: ' + started.error)
+        return
+      }
+      for (let tick = 0; tick < 240; tick += 1) {
+        await new Promise((resolve) => { setTimeout(resolve, 1500) })
+        let answer = null
+        try {
+          answer = await call('/rescan')
+        } catch (err) {
+          continue                       // a poll that fails once is not a failed run
+        }
+        if (answer && answer.bundle) {
+          setBundle(answer.bundle)
+          setStage(answer.bundle.stage || null)
+        }
+        if (answer && answer.seconds) setSeconds(answer.seconds)
+        if (answer && !answer.busy) {
+          if (answer.error) setScanError('the run failed: ' + answer.error)
+          break
+        }
+      }
+      await loadRest()
     } catch (err) {
-      setIntegrity(null)
+      setScanError(String(err && err.message ? err.message : err))
+    } finally {
+      setBusy(false)
+      setStage(null)
     }
+  }, [busy, loadRest])
+
+  /** Re-read the stored integrity reading without paying for a whole run (after a baseline/paste). */
+  const refreshIntegrity = useCallback(async (label) => {
+    if (!label) return null
+    const reading = await call('/integrity?host=' + encodeURIComponent(label)).catch(() => null)
+    if (reading) setBundle((current) => ({ ...current, integrity: reading }))
+    return reading
   }, [])
 
-  useEffect(() => { loadIntegrity(selected) }, [selected, loadIntegrity])
-
-  /**
-   * Take a fresh reading. It is a job, not a request: verifying a package database takes tens of
-   * seconds and a renderer call is cut at 30. `action: baseline` re-records the socket set.
-   */
   const readIntegrity = useCallback(async (action) => {
-    if (integrityBusy || !selected) return
-    setIntegrityBusy(true)
-    setIntegritySeconds(0)
+    if (!selected) return
     try {
-      const started = await call('/integrity', {
-        method: 'POST', body: { host: selected, action: action || 'check' }
-      })
-      if (started && started.error) return
-      for (let tick = 0; tick < 160; tick += 1) {
+      await call('/integrity', { method: 'POST', body: { host: selected, action: action || 'check' } })
+      for (let tick = 0; tick < 120; tick += 1) {
         await new Promise((resolve) => { setTimeout(resolve, 1500) })
         let job = null
         try { job = ((await call('/jobs')) || {}).integrity || null } catch (err) { continue }
-        if (job && job.seconds) setIntegritySeconds(job.seconds)
         if (job && !job.running) break
       }
-      await loadIntegrity(selected)
+      await refreshIntegrity(selected)
     } catch (err) {
-      setIntegrity({ host: selected, read_at: null, integrity: null, answers: [],
-                     answer: 'the reading could not be taken: ' + String(err && err.message ? err.message : err) })
-    } finally {
-      setIntegrityBusy(false)
+      // the last reading stays on screen, labelled with its age
     }
-  }, [integrityBusy, selected, loadIntegrity])
+  }, [selected, refreshIntegrity])
 
-  // a paste is parsed by the backend and merged into the stored reading; false means "not read"
   const importIntegrity = useCallback(async (output) => {
+    if (!selected) return false
     try {
       const answer = await call('/integrity', {
         method: 'POST', body: { host: selected, action: 'import', output }
       })
       if (answer && answer.exit_code === 2) return false
-      await loadIntegrity(selected)
+      await refreshIntegrity(selected)
       return answer
     } catch (err) {
       return false
     }
-  }, [selected, loadIntegrity])
+  }, [selected, refreshIntegrity])
 
-  const load = useCallback(async () => {
-    try {
-      const [nextStatus, nextCoverage, nextHealth] = await Promise.all([
-        call('/status'), call('/coverage'), call('/health').catch(() => null)
-      ])
-      setStatus(nextStatus)
-      setCoverage(nextCoverage)
-      setHealth(nextHealth)
-      const labels = Object.keys((nextStatus && nextStatus.hosts) || {})
-      setSelected((current) => current || labels[0] || null)
-    } catch (err) {
-      setStatus({ hosts: {}, blind: [], note: 'the plugin route did not answer: ' + String(err) })
-    }
-  }, [])
-
-  /**
-   * The one refresh control. The scan runs as a job on the backend because a renderer call is cut off
-   * at 30 s and a two-server scan takes 40-60: answering inside the request told the operator it timed
-   * out while the work was still finishing. So: start it, follow it, then read the stored answer.
-   */
-  const rescan = useCallback(async () => {
-    if (busy) return
-    setBusy(true)
-    setScanError(null)
-    setScanSeconds(0)
-    try {
-      const started = await call('/scan', { method: 'POST', body: {} })
-      if (started && started.error) {
-        setScanError('the scan could not start: ' + started.error)
-        return
-      }
-      // follow the job; 1.5 s apart, up to ~5 minutes
-      for (let tick = 0; tick < 200; tick += 1) {
-        await new Promise((resolve) => { setTimeout(resolve, 1500) })
-        let job = null
-        try {
-          const jobs = await call('/jobs')
-          job = (jobs && jobs.scan) || null
-        } catch (err) {
-          continue                       // a poll that fails once is not a failed scan
-        }
-        if (job && job.seconds) setScanSeconds(job.seconds)
-        if (job && !job.running) {
-          if (job.error) setScanError('the scan failed: ' + job.error)
-          break
-        }
-      }
-      await load()
-      setPlan(null)                      // the plan belonged to the old measurement
-    } catch (err) {
-      setScanError(String(err && err.message ? err.message : err))
-    } finally {
-      setBusy(false)
-    }
-  }, [busy, load])
-
-  const doPlan = useCallback(async (label) => {
-    if (!label) return
-    setPlanning(true)
-    setPlan(null)
-    try {
-      setPlan(await call('/plan', { method: 'POST', body: { host: label } }))
-    } catch (err) {
-      setPlan({ steps: [], refusals: [{ reason: String(err && err.message ? err.message : err) }] })
-    } finally {
-      setPlanning(false)
-    }
-  }, [])
-
-  // the language check hits the network and takes seconds: it runs when asked, never on open
+  const libraries = libProject || bundle.libraries
   const checkLibraries = useCallback(async (projectPath) => {
     setLibBusy(true)
     try {
       const query = projectPath ? '?project=' + encodeURIComponent(projectPath) : ''
-      setLibraries(await call('/libraries' + query))
+      const answer = await call('/libraries' + query)
+      if (projectPath) setLibProject(answer)
+      else setBundle((current) => ({ ...current, libraries: answer }))
     } catch (err) {
-      setLibraries({ answer: 'could not look: ' + (err && err.message ? err.message : err),
-                     packages: [], vulnerable: [] })
+      setLibProject({ answer: 'could not look: ' + (err && err.message ? err.message : err),
+                      packages: [], vulnerable: [] })
     } finally {
       setLibBusy(false)
     }
   }, [])
 
-  useEffect(() => {
-    load()
-  }, [load])
-
-  // this machine first, then the declared hosts alphabetically: the local row is the one you act on
-  const labels = useMemo(() => {
-    const hosts = (status && status.hosts) || {}
-    return Object.keys(hosts).sort((a, b) => {
-      const localA = hosts[a] && hosts[a].target === 'local' ? 0 : 1
-      const localB = hosts[b] && hosts[b].target === 'local' ? 0 : 1
-      return localA - localB || a.localeCompare(b)
-    })
-  }, [status])
+  const where = selected && hosts[selected] ? hosts[selected].where : null
 
   return jsxs('div', {
     style: {
@@ -2468,10 +2580,11 @@ export function PatchSentinel({ compact }) {
         : null,
       jsx('button', {
         type: 'button',
-        onClick: rescan,
+        onClick: rescanAll,
         disabled: busy,
-        title: 're-measure every server in the inventory — the scan runs on the backend and this button '
-               + 'follows it, so a long scan no longer looks like a failure',
+        title: 'one control: packages, kernel, container images, advisories, the language stack, the '
+               + 'integrity reading and the commands they imply — in that order, rendered as each one '
+               + 'lands',
         style: {
           fontFamily: MONO, fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.06em',
           textTransform: 'uppercase', padding: '7px 16px',
@@ -2481,7 +2594,8 @@ export function PatchSentinel({ compact }) {
         }
       }, busy
         ? [jsx('span', { key: 'ring', className: 'ps-ring' }),
-           'scanning ' + (scanSeconds ? Math.round(scanSeconds) + ' s' : '…')]
+           (stage && stage !== 'starting' && stage !== 'done' ? stage + ' ' : 'measuring ')
+             + (seconds ? Math.round(seconds) + ' s' : '…')]
         : 'rescan all')
     ]),
     // the stylesheet is always mounted; the line appears only while something is being measured
@@ -2490,8 +2604,11 @@ export function PatchSentinel({ compact }) {
     // control that started it — an animation at the top of the page for a local check reads as a scan.
     busy
       ? jsx(ScanLine, {
-          label: 'measuring every server — packages, kernel, images, advisories, and whether each '
-                 + 'patch is in effect'
+          label: (stage && stage !== 'starting' && stage !== 'done'
+            ? stage + ' — '
+            : '')
+            + 'packages, kernel, images, advisories, the language stack, checksums and sockets, '
+            + 'then the commands they imply'
         })
       : null,
     scanError
@@ -2532,8 +2649,8 @@ export function PatchSentinel({ compact }) {
         }, SECTIONS.map((section) => jsx('div', { key: section.key, style: { marginBottom: '3px' } },
             jsx('b', { style: { color: C.dim } }, section.title), ' — ' + section.long)))
       : null,
-    (status && Object.keys(status.hosts || {}).length
-      && !Object.values(status.hosts || {}).some((host) => host && (host.pending_count !== undefined
+    (Object.keys(hosts).length
+      && !Object.values(hosts).some((host) => host && (host.pending_count !== undefined
         || (host.os && host.os.id))))
       && !busy
       ? jsx('div', {
@@ -2541,24 +2658,40 @@ export function PatchSentinel({ compact }) {
             fontSize: '0.8125rem', color: C.warn, marginBottom: '12px', padding: '7px 10px',
             border: '1px solid ' + C.border, borderLeft: '2px solid ' + C.warn, borderRadius: '4px'
           }
-        }, 'Nothing measured yet on these servers — press rescan all. It reads each host once and '
-           + 'takes about twenty seconds; nothing is installed or changed by it.')
+        }, 'Nothing measured yet on these servers — press rescan all once. It reads every surface '
+           + 'in order (packages first, about twenty seconds; the whole run takes a minute or two) '
+           + 'and changes nothing.')
       : null,
-    jsx(VerdictBar, { status }),
-    jsx(HostsPanel, { onChanged: load }),
-    jsx(NowPanel, { status }),
-    jsx(UpdatesPanel, { entry: status && status.hosts ? status.hosts[selected] : null,
-                        hostLabel: selected }),
-    jsx(IntegrityPanel, { reading: integrity, busy: integrityBusy, seconds: integritySeconds,
-                          onRead: () => readIntegrity('check'),
-                          onRebaseline: () => readIntegrity('baseline'),
-                          onImport: importIntegrity }),
-    jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }),
-    jsx(PendingPanel, { hostLabel: selected, plan, onPlan: doPlan, limited: !selected, planning,
-                        libraryFindings: (libraries && libraries.vulnerable || [])
-                          .filter((row) => row.owner !== 'hermes' && (row.fixed || []).length).length,
-                        where: status && status.hosts && status.hosts[selected]
-                          ? status.hosts[selected].where : null }),
+    jsx(VerdictBar, { status: bundle.scan }),
+    jsx(HostsPanel, { onChanged: loadBundle }),
+    jsx(TodoPanel, { bundle, selected, onSelect: setSelected }),
+    jsx(CommandsPanel, { bundle, selected, where }),
+    // The evidence is behind one toggle. It is the proof for the rows above — a checksum list, a
+    // package inventory — not another set of controls to operate before anything makes sense.
+    jsxs('div', { style: { marginBottom: evidence ? '8px' : '14px' } }, [
+      jsx('button', {
+        type: 'button',
+        onClick: () => setEvidence((current) => !current),
+        title: 'the readings the rows above are built from',
+        style: {
+          fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px', cursor: 'pointer',
+          color: evidence ? C.accent : C.faint, background: 'transparent',
+          border: '1px solid ' + C.border, borderRadius: '3px'
+        }
+      }, (evidence ? '▾ ' : '▸ ') + 'what was read, and what could not be'),
+      health === null ? null : jsx('span', { style: { marginLeft: '8px', fontSize: '0.75rem', color: C.faint } },
+        'checksums, preload hook, sockets · ' + ((bundle.libraries && bundle.libraries.components) || 0)
+        + ' language package(s)')
+    ]),
+    evidence ? jsx(UpdatesPanel, { entry: hosts[selected] || null, hostLabel: selected }) : null,
+    evidence ? jsx(IntegrityPanel, {
+      reading: bundle.integrity, busy: busy && stage === 'integrity',
+      seconds: busy && stage === 'integrity' ? seconds : 0,
+      onRead: () => readIntegrity('check'),
+      onRebaseline: () => readIntegrity('baseline'),
+      onImport: importIntegrity
+    }) : null,
+    evidence ? jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }) : null,
     // the optional shortcut, folded under the plan it belongs to — not a step of its own
     jsxs('div', { style: { marginBottom: '14px' } }, [
       jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } }, [
@@ -2585,8 +2718,7 @@ export function PatchSentinel({ compact }) {
            : 'not available on ' + selected + ' — sudo needs a password there')
       ]),
       applyOpen
-        ? jsx(ApplyGate, { hostLabel: selected, probe: applyProbe,
-                           entry: status && status.hosts ? status.hosts[selected] : null })
+        ? jsx(ApplyGate, { hostLabel: selected, probe: applyProbe, entry: hosts[selected] || null })
         : null
     ]),
     jsx(GapsPanel, { coverage, selected }),

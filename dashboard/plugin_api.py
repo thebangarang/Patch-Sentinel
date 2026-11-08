@@ -39,7 +39,7 @@ if "patch_sentinel" not in sys.modules:
     sys.modules["patch_sentinel"] = _module
     _spec.loader.exec_module(_module)
 
-from patch_sentinel import store, tools                # noqa: E402  (after the loader above)
+from patch_sentinel import rescan as rescan_bundle, store, tools   # noqa: E402
 from patch_sentinel.sources import hosts as inventory_module       # noqa: E402
 from patch_sentinel.sources import integrity as integrity_module   # noqa: E402
 
@@ -137,6 +137,25 @@ def scan(body: dict | None = None) -> dict:
     if body and body.get("host"):
         args["host"] = str(body["host"])
     return _start("scan", tools.cve_scan, args)
+
+
+@router.get("/rescan")
+def rescan_cached() -> dict:
+    """The last "rescan all" bundle — every surface, with how long each stage took.
+
+    The pane renders from this one document: packages, language stack, integrity and the plans, so the
+    sections cannot disagree about which measurement they are showing.
+    """
+    data_dir = str(tools._settings.get("data_dir") or store.data_dir())
+    job = _job_state("rescan")
+    return {"bundle": rescan_bundle.read(data_dir), "busy": job["running"],
+            "seconds": job["seconds"], "error": job["error"]}
+
+
+@router.post("/rescan")
+def rescan_start(body: dict | None = None) -> dict:
+    """One control for every check. Starts a job and answers immediately."""
+    return _start("rescan", tools.cve_rescan, {})
 
 
 @router.post("/plan")
