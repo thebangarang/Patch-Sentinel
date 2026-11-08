@@ -8,6 +8,7 @@ Python sees a line.
 """
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -35,6 +36,15 @@ class Parsing(unittest.TestCase):
         names = {row["package"] for row in rows}
         self.assertIn("python-dateutil", names)
         self.assertIn("zope.interface", names)
+
+    def test_a_user_installed_package_is_found(self):
+        """`pip install --user` puts packages in ~/.local/lib/pythonX.Y/site-packages, which is the
+        only install route PEP 668 leaves on Debian and Ubuntu — it must not be invisible."""
+        rows = environments.parse([os.path.expanduser(
+            "~/.local/lib/python3.11/site-packages/urllib3-1.24.1.dist-info")])
+        self.assertEqual(len(rows), 1, "a user-site package was not read")
+        self.assertEqual(rows[0]["package"], "urllib3")
+        self.assertIn("site-packages", rows[0]["source"])
 
     def test_the_environment_is_named_as_the_source(self):
         rows = environments.parse(["/home/x/projects/api/.venv/lib/python3.12/site-packages/flask-3.0.0.dist-info"])

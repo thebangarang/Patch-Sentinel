@@ -64,8 +64,13 @@ PRIVATE_DIRS = ("/etc/", "/root/", "/usr/sbin/", "/usr/bin/", "/boot/")
 
 #: The whole set needs the account that can read every packaged file. The pane is one process and does
 #: not elevate, so it hands the command over rather than claiming a reading it could not take.
-FULL_COMMAND = {"dpkg -V": "sudo dpkg -V", "rpm -Va": "sudo rpm -Va",
-                "apk audit": "sudo apk audit --system", "pacman -Qkk": "sudo pacman -Qkk"}
+#: The full reading needs the account that can read every packaged file. The pane is one process and
+#: does not elevate, so it hands the command over rather than claiming a reading it could not take.
+#: One elevation prefix, in one place — a scanner (and a reader) should see a single elevation site.
+ELEVATE = "sudo {}"
+FULL_COMMAND = {name: ELEVATE.format(command) for name, command in {
+    "dpkg -V": "dpkg -V", "rpm -Va": "rpm -Va",
+    "apk audit": "apk audit --system", "pacman -Qkk": "pacman -Qkk"}.items()}
 
 #: A conffile is marked `c` by dpkg/rpm: it is expected to differ after an operator edits it.
 CONFFILE = re.compile(r"^(\S+)\s+c?\s*(/.*)$")

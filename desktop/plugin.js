@@ -532,8 +532,10 @@ function VerdictBar({ status }) {
 // --------------------------------------------------------------------------- HOSTS
 
 /** Add or remove a server. Addresses only — never a credential. */
-function HostsPanel({ onChanged, startOpen, initialTest }) {
-  const [hosts, setHosts] = useState(null)
+function HostsPanel({ onChanged, startOpen, initialTest, initialHosts }) {
+  // `initialHosts` exists so the panel can be rendered (and previewed) before its fetch lands; the
+  // live pane never passes it
+  const [hosts, setHosts] = useState(initialHosts || null)
   const [open, setOpen] = useState(!!startOpen)
   const [newLabel, setNewLabel] = useState('')
   const [newTarget, setNewTarget] = useState('')
@@ -622,11 +624,14 @@ function HostsPanel({ onChanged, startOpen, initialTest }) {
     (hosts || []).map((host) => jsxs('div', {
       key: host.label,
       style: {
-        display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'baseline',
-        fontFamily: MONO, fontSize: '0.75rem', padding: '3px 0',
+        display: 'grid', gridTemplateColumns: '10px 1fr auto auto', gap: '8px',
+        alignItems: 'baseline', fontFamily: MONO, fontSize: '0.75rem', padding: '3px 0',
         borderTop: '1px solid ' + C.border
       }
     }, [
+      // the same shape the overview uses: a terminal window for this machine, a rack for a LAN
+      // address, a globe for a remote host
+      jsx('span', { style: { display: 'inline-flex' } }, deviceIcon(deviceKind(host))),
       jsx('span', { style: { color: C.text } }, host.label),
       jsx('span', { style: { color: C.dim } }, host.target === 'local' ? 'this machine' : host.target),
       removing === host.label

@@ -60,6 +60,10 @@ if (!libsBusy.includes('ps-scan-track')) throw new Error(
 if (!libsBusy.includes('every project virtualenv')) throw new Error(
   'the libs progress line does not say what it is reading')
 
+// the servers section renders its list from a fetch, so its device icons are verified in the
+// standalone preview (scripts/preview_pane.sh) rather than here — an SSR render of that panel is
+// always its empty state.
+
 const integrityEmpty = renderToStaticMarkup(
   createElement(IntegrityPanel, { reading: null, busy: false, seconds: 0, onRead: noop, onRebaseline: noop }))
 if (!integrityEmpty.includes('read it')) throw new Error('the not-read-yet state has no button')

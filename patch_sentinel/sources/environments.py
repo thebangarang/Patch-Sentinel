@@ -32,8 +32,11 @@ SKIP = ("/node_modules/", "/.cache/", "/site-packages/pip/", "/.git/", "/.hermes
 
 #: Only *environments* count. A bare `*.dist-info` walk also finds uv's unpacked-wheel cache
 #: (`~/.cache/uv/archive-v0/…`), which is 485 "environments" of nothing — the path has to name a venv.
+#: `~/.local/lib/python3.11/site-packages` is the shape `pip install --user` makes, and on Debian and
+#: Ubuntu (PEP 668) it is the *only* way a user may install a Python package at all. Missing it means
+#: every user-installed package is invisible on the distros where the plugin started.
 ENV_MARKERS = ("'*/.venv/*'", "'*/venv/*'", "'*/virtualenvs/*'", "'*/pipx/environments/*'",
-               "'*/envs/*'", "'*/site-venvs/*'")
+               "'*/envs/*'", "'*/site-venvs/*'", "'*/.local/lib/python*/site-packages/*'")
 #: The exclusions are in the walk, not only in the parser: `head` runs before Python sees a line, so a
 #: filtered-out tree would otherwise eat the whole budget (a home-directory backup held 350 of 600).
 _CLAUSE = r"\( " + " -o ".join("-path " + marker for marker in ENV_MARKERS) + r" \)"
@@ -65,7 +68,11 @@ def parse(paths: list[str]) -> list[dict]:
         name = match.group("name").replace("_", "-").lower()
         version = match.group("version")
         # /home/x/projects/api/.venv/lib/python3.12/site-packages → that venv
-        store = line.split("/lib/")[0] if "/lib/" in line else line.rsplit("/site-packages", 1)[0]
+        # ~/.local/lib/python3.11/site-packages → the user site, which has no `/lib/` split point
+        if "/.local/lib/" in line:
+            store = line.rsplit("/", 1)[0]
+        else:
+            store = line.split("/lib/")[0] if "/lib/" in line else line.rsplit("/site-packages", 1)[0]
         key = (name, version, store)
         if key in seen:
             continue

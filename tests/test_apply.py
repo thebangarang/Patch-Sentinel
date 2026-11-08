@@ -58,7 +58,8 @@ class SudoRefusal(unittest.TestCase):
         self.assertEqual(len(result["handoff"]["commands"]), 2)
         self.assertIn("apt-get update", result["handoff"]["commands"][0])
         self.assertIn("full-upgrade", result["handoff"]["commands"][1])
-        self.assertIn("never sees it", result["handoff"]["note"])
+        self.assertIn("never", result["handoff"]["note"])
+        self.assertIn("credentials", result["handoff"]["note"])
         # where to type them: a remote handoff carries the ssh line, a local one names the account
         self.assertEqual(result["handoff"]["where"]["kind"], "remote")
         self.assertIn("ssh", result["handoff"]["where"]["ssh"])
