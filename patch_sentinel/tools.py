@@ -1438,11 +1438,11 @@ def cve_rescan(args: dict, **kwargs) -> str:
                                      "seconds": round(time.time() - started, 1), "at": time.time()})
             rescan.write(data_dir, bundle)
 
-    # pane order: packages → language stack → integrity. One at a time, so the section that animates
-    # is the section being read, and the same order on every device.
+    # The order the page draws its sections in: system packages → integrity → libs & runtimes. One at a
+    # time, so the section that animates is the section being read; the same order on every device.
     for stage in (("scan", cve_scan, {"host": label}),
-                  ("libraries", cve_libraries, {"host": label}),
-                  ("integrity", cve_integrity, {"host": label})):
+                  ("integrity", cve_integrity, {"host": label}),
+                  ("libraries", cve_libraries, {"host": label})):
         run_stage(*stage)
 
     # the plan is built from the scan that just ran, so it comes after them

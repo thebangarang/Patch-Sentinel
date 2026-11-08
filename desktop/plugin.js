@@ -148,7 +148,8 @@ const SECTIONS = [
     long: 'Every command the rows above imply, grouped by device and numbered: the package upgrade '
         + 'steps (with risk, downtime, how to verify and how to undo), the language-store upgrades '
         + 'that have a published fix, and the root verification for files this account cannot read. '
-        + 'COPY ALL gives the whole set for every device; APPLY is an optional shortcut on top of it.' },
+        + 'COPY ALL gives the whole set for every device. Nothing here runs anything: every command is '
+        + 'meant to be pasted into a terminal on the device it names.' },
   { key: 'packages', title: 'system packages', blurb: "the distro's update list",
     long: 'Every package apt, dnf, pacman or zypper would upgrade, with which USN or advisory names '
         + 'that exact version. Empty means the package manager listed nothing — it stays on screen so '

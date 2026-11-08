@@ -255,7 +255,7 @@ The pane answers two questions about **the device you picked**: **what has to be
 what**. Every section below the servers list belongs to that one device.
 
 1. **scan all · <device>** — the only control, and it measures that device completely: the package
-   list, kernel and images, then the language stack, then the integrity reading, then the commands the
+   list, kernel and images, then the integrity reading, then the language stack, then the commands the
    measurement implies. **In that order, every time** — the same order as the sections on the page, one
    surface at a time, so the section that animates is the section being read and two devices are never
    checked in a different sequence. ~60 s on this machine, ~45 s over ssh: reading the three surfaces
