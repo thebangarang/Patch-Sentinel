@@ -266,8 +266,12 @@ The pane answers two questions and nothing else: **what has to be done**, and **
    the package steps (with risk, downtime, verify and reverse), the language-store upgrades that have
    a published fix, and the root verification for files the pane cannot read. *COPY ALL* gives the
    whole set; each row copies on its own. A finding with no published fix never becomes a command.
-4. **what was read, and what could not be** — collapsed. The pending list with its advisory ids, the
-   integrity reading and the language inventory: the proof for the rows above, not another control.
+4. **system packages · integrity · libs & runtimes** — always on screen, for the device whose name is
+   underlined in the servers list (click a name to change it; there is no dropdown). Each keeps its
+   empty state — `nothing available — this host is up to date, as measured`, `not read yet`, `0
+   package(s) read` — because a section that vanishes when it has nothing to say reads as a broken
+   pane, and "nothing found" is a result worth showing.
+5. **gaps** — what the run could not see, and why.
 
 **run it from here instead — optional** stays a collapsed row under the commands: it runs the same
 commands from the pane, for hosts where the account Hermes runs as can patch unattended. The row

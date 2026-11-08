@@ -136,8 +136,9 @@ const LEVEL_COLOUR = { green: C.ok, amber: C.warn, red: C.danger, grey: C.faint 
 // like documentation instead of an answer.
 const SECTIONS = [
   { key: 'servers', title: 'servers', blurb: 'the machines this pane answers for',
-    long: 'This machine plus any host you add. A host is added only after a probe of it succeeds, and '
-        + 'only the address is stored — never a key.' },
+    long: 'This machine plus any host you add. Click a name to make it the one the detail sections '
+        + 'below are about. A host is added only after a probe of it succeeds, and only the address is '
+        + 'stored — never a key.' },
   { key: 'todo', title: 'what must be done', blurb: 'the actions, per device',
     long: 'Everything the measurement turned into something to do, one device at a time: pending '
         + 'packages, a kernel that is not running, library findings that name a fix, sockets that '
@@ -148,29 +149,22 @@ const SECTIONS = [
         + 'steps (with risk, downtime, how to verify and how to undo), the language-store upgrades '
         + 'that have a published fix, and the root verification for files this account cannot read. '
         + 'COPY ALL gives the whole set for every device; APPLY is an optional shortcut on top of it.' },
-  { key: 'evidence', title: 'what was read', blurb: 'the readings the rows are built from',
-    long: 'The pending package list with its advisory ids, the integrity reading (checksums, preload '
-        + 'hook, listening sockets) and the language inventory. Closed by default: it is the proof, '
-        + 'not the to-do list.' },
+  { key: 'packages', title: 'system packages', blurb: "the distro's update list",
+    long: 'Every package apt, dnf, pacman or zypper would upgrade, with which USN or advisory names '
+        + 'that exact version. Empty means the package manager listed nothing — it stays on screen so '
+        + 'a quiet machine does not look like a missing section.' },
+  { key: 'integrity', title: 'integrity', blurb: 'is this still what we installed?',
+    long: 'Package checksums, the /etc/ld.so.preload hook and the listening sockets against the '
+        + 'baseline recorded earlier. A patch scanner reads versions; an intrusion does not change a '
+        + 'version. It never says "not compromised".' },
+  { key: 'libs', title: 'libs & runtimes', blurb: 'language packages, against OSV',
+    long: 'What each toolchain has installed machine-wide and in every project virtualenv — npm, pip, '
+        + 'PHP, Ruby, Rust, .NET, Maven, Go, Dart — plus jars on disk and lockfile pins.' },
   { key: 'gaps', title: 'gaps', blurb: 'what this scan could not see',
     long: 'Red here is a fact about the scan, not about the server: a host that did not answer, a feed '
         + 'that refused, a surface with no reader yet.' },
 ]
 const SECTION = SECTIONS.reduce((acc, section) => { acc[section.key] = section; return acc }, {})
-// The two panels that survive as *evidence* still title themselves from this map. They are not part of
-// the reading order any more — the legend lists what the page is for, not where each reading came from.
-Object.assign(SECTION, {
-  packages: { key: 'packages', title: 'system packages',
-              long: 'Every package apt, dnf, pacman or zypper would upgrade, with which USN or '
-                  + 'advisory names that exact version.' },
-  integrity: { key: 'integrity', title: 'integrity',
-               long: 'Package checksums, the /etc/ld.so.preload hook and the listening sockets against '
-                   + 'the baseline recorded earlier. It never says "not compromised".' },
-  libs: { key: 'libs', title: 'libs & runtimes',
-          long: 'What each toolchain has installed machine-wide and in every virtualenv — npm, pip, '
-              + 'PHP, Ruby, Rust, .NET, Maven, Go, Dart — plus jars on disk and lockfile pins.' }
-})
-
 /** Every section gets the legend's slim bar — one colour for all of them, so the page reads as
  *  blocks without six competing accents. The bar separates; the section title distinguishes. */
 function sectionStyle() {
@@ -551,7 +545,7 @@ function VerdictBar({ status }) {
 // --------------------------------------------------------------------------- HOSTS
 
 /** Add or remove a server. Addresses only — never a credential. */
-function HostsPanel({ onChanged, startOpen, initialTest, initialHosts }) {
+function HostsPanel({ onChanged, startOpen, initialTest, initialHosts, onSelect, selected }) {
   // `initialHosts` exists so the panel can be rendered (and previewed) before its fetch lands; the
   // live pane never passes it
   const [hosts, setHosts] = useState(initialHosts || null)
@@ -642,16 +636,22 @@ function HostsPanel({ onChanged, startOpen, initialTest, initialHosts }) {
     ]),
     (hosts || []).map((host) => jsxs('div', {
       key: host.label,
+      onClick: onSelect ? () => onSelect(host.label) : undefined,
+      title: onSelect ? 'show this device in the sections below' : undefined,
       style: {
         display: 'grid', gridTemplateColumns: '10px 1fr auto auto', gap: '8px',
         alignItems: 'baseline', fontFamily: MONO, fontSize: '0.75rem', padding: '3px 0',
-        borderTop: '1px solid ' + C.border
+        borderTop: '1px solid ' + C.border,
+        cursor: onSelect ? 'pointer' : 'default'
       }
     }, [
       // the same shape the overview uses: a terminal window for this machine, a rack for a LAN
       // address, a globe for a remote host
       jsx('span', { style: { display: 'inline-flex' } }, deviceIcon(deviceKind(host))),
-      jsx('span', { style: { color: C.text } }, host.label),
+      jsx('span', {
+        style: { color: selected === host.label ? C.accent : C.text,
+                 textDecoration: selected === host.label ? 'underline' : 'none' }
+      }, host.label),
       jsx('span', { style: { color: C.dim } }, host.target === 'local' ? 'this machine' : host.target),
       removing === host.label
         ? jsxs('span', { style: { display: 'flex', gap: '4px' } }, [
@@ -2370,7 +2370,6 @@ export function PatchSentinel({ compact }) {
   const [selected, setSelected] = useState(null)
   const [coverage, setCoverage] = useState(null)
   const [health, setHealth] = useState(null)
-  const [evidence, setEvidence] = useState(false)
   // the reading order, spelled out on demand — the same array the sections are titled from
   const [legend, setLegend] = useState(false)
   const [libBusy, setLibBusy] = useState(false)
@@ -2567,17 +2566,6 @@ export function PatchSentinel({ compact }) {
     jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', marginBottom: '10px' } }, [
       jsx('span', { className: 'ps-title', 'data-text': 'Patch Sentinel' }, 'Patch Sentinel'),
       jsx('span', { style: { flex: 1 } }),
-      labels.length
-        ? jsx('select', {
-            value: selected || '',
-            onChange: (event) => setSelected(event.target.value),
-            style: {
-              fontFamily: MONO, fontSize: '0.8125rem', padding: '2px 4px',
-              background: 'Canvas', color: 'CanvasText', border: '1px solid ' + C.border,
-              borderRadius: '3px', colorScheme: 'light dark'
-            }
-          }, labels.map((name) => jsx('option', { key: name, value: name }, name)))
-        : null,
       jsx('button', {
         type: 'button',
         onClick: rescanAll,
@@ -2663,35 +2651,27 @@ export function PatchSentinel({ compact }) {
            + 'and changes nothing.')
       : null,
     jsx(VerdictBar, { status: bundle.scan }),
-    jsx(HostsPanel, { onChanged: loadBundle }),
+    jsx(HostsPanel, { onChanged: loadBundle, onSelect: setSelected, selected }),
     jsx(TodoPanel, { bundle, selected, onSelect: setSelected }),
     jsx(CommandsPanel, { bundle, selected, where }),
-    // The evidence is behind one toggle. It is the proof for the rows above — a checksum list, a
-    // package inventory — not another set of controls to operate before anything makes sense.
-    jsxs('div', { style: { marginBottom: evidence ? '8px' : '14px' } }, [
-      jsx('button', {
-        type: 'button',
-        onClick: () => setEvidence((current) => !current),
-        title: 'the readings the rows above are built from',
-        style: {
-          fontFamily: MONO, fontSize: '0.75rem', padding: '3px 9px', cursor: 'pointer',
-          color: evidence ? C.accent : C.faint, background: 'transparent',
-          border: '1px solid ' + C.border, borderRadius: '3px'
-        }
-      }, (evidence ? '▾ ' : '▸ ') + 'what was read, and what could not be'),
-      health === null ? null : jsx('span', { style: { marginLeft: '8px', fontSize: '0.75rem', color: C.faint } },
-        'checksums, preload hook, sockets · ' + ((bundle.libraries && bundle.libraries.components) || 0)
-        + ' language package(s)')
-    ]),
-    evidence ? jsx(UpdatesPanel, { entry: hosts[selected] || null, hostLabel: selected }) : null,
-    evidence ? jsx(IntegrityPanel, {
+    // The detail sections stay on screen whether or not they found something: an empty section that
+    // says why it is empty is information, and a section that vanishes reads as a broken pane. The
+    // rows above are the answer; these are the readings it was built from.
+    // no dropdown any more, so the three readings below have to say whose they are
+    jsx('div', {
+      style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint, marginBottom: '4px' }
+    }, selected
+        ? 'the three readings below are ' + selected + ' — click a device name above to change it'
+        : 'click a device name above to choose whose readings these are'),
+    jsx(UpdatesPanel, { entry: hosts[selected] || null, hostLabel: selected }),
+    jsx(IntegrityPanel, {
       reading: bundle.integrity, busy: busy && stage === 'integrity',
       seconds: busy && stage === 'integrity' ? seconds : 0,
       onRead: () => readIntegrity('check'),
       onRebaseline: () => readIntegrity('baseline'),
       onImport: importIntegrity
-    }) : null,
-    evidence ? jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }) : null,
+    }),
+    jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }),
     // the optional shortcut, folded under the plan it belongs to — not a step of its own
     jsxs('div', { style: { marginBottom: '14px' } }, [
       jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } }, [
