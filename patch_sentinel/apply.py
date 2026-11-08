@@ -127,7 +127,9 @@ def apply(host_entry: dict, target: str | None, confirm: str, dry_run: bool = Tr
     family = str(host_entry.get("adapter") or "")
     typed = (confirm or "").strip()
     before = _before(host_entry)
-    base = {"applied": False, "dry_run": bool(dry_run), "host": label,
+    # exit_code follows the plugin's contract: 0 answered, 1 ran but left work behind, 2 refused.
+    # Nothing applied is the starting assumption, and every early return below is a refusal.
+    base = {"applied": False, "dry_run": bool(dry_run), "host": label, "exit_code": 2,
             "target": target or "local", "started_at": _now(), "before": before, "steps": []}
 
     # 1. the typed name
@@ -178,7 +180,9 @@ def apply(host_entry: dict, target: str | None, confirm: str, dry_run: bool = Tr
                "— the first refreshes the index and downloads, the second installs. Re-call with "
                "dry_run=false and the host name typed again to apply.")
         receipt = _receipt(base, [], why, True)
-        return {**base, "reason": why, "would_run": [commands["stage"], commands["apply"]],
+        # a dry run answered its question: the code says so, and nothing was executed
+        return {**base, "exit_code": 0, "reason": why,
+                "would_run": [commands["stage"], commands["apply"]],
                 "preflight": check, "receipt": receipt}
 
     # 2b. the stage, always, before the apply
@@ -208,7 +212,8 @@ def apply(host_entry: dict, target: str | None, confirm: str, dry_run: bool = Tr
     # in effect. Both are read again here, after the run.
     effect = services.collect(target, timeout=90)
     receipt = _receipt({**base, "after": after}, steps, why, False, applied=applied_ok)
-    return {**base, "applied": applied_ok, "reason": why, "after": after, "effect": effect,
+    return {**base, "applied": applied_ok, "exit_code": 0 if applied_ok else 1,
+            "reason": why, "after": after, "effect": effect,
             "verified_by": "uname -r, the package manager's pending list, and the reboot/service state, "
                            "all re-measured",
             "reboot_required": (after.get("kernel_verdict") == "kernel-reboot-needed"

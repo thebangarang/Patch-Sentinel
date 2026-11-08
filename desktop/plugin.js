@@ -83,7 +83,11 @@ function withCode(text) {
 /** `read_at` is an epoch second, `ago` takes an age. Mixing them printed "20765 d ago". */
 function agoAt(epoch) {
   if (!epoch) return null
-  return ago(Math.max(0, Math.floor(Date.now() / 1000 - epoch)))
+  const drift = Math.floor(Date.now() / 1000 - epoch)
+  // a reading stamped in the future means the clock moved, and an age is then meaningless — say that
+  // rather than print "just now" over a timestamp that cannot be trusted
+  if (drift < -120) return 'timestamp is in the future — the clock on this host disagrees with the reader'
+  return ago(Math.max(0, drift))
 }
 
 function ago(seconds) {

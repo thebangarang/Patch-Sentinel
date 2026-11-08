@@ -149,6 +149,11 @@ def workaround(record: dict) -> str | None:
     following = _HEADING_RE.search(rest)
     section = (rest[:following.start()] if following else rest).strip()
     section = " ".join(line.strip() for line in section.splitlines() if line.strip())
+    # several advisories carry a "Workarounds" heading whose entire body is "None. Upgrade to the
+    # patched version." — quoting that back as a mitigation tells an operator nothing, and reads like
+    # a bug. If the vendor's first sentence is "none", there is no workaround to surface.
+    if section.split(".")[0].strip().lower() in ("none", "no", "n/a", "not applicable"):
+        return None
     return section[:700] or None
 
 

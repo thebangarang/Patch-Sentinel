@@ -99,8 +99,10 @@ def _gap_advice(klass: str, label: str, reason: str) -> str:
 
 def _refusal(reason: str, nearest: list | None = None, answer=None, **extra) -> dict:
     """The refusal shape: ``{"match": "none", "answer": null, "reason": ..., "nearest": [...]}``."""
-    return {"match": "none", "answer": answer, "reason": reason,
-            "nearest": list(nearest or []), **extra}
+    # exit_code 2 is the refusal code everywhere else in the plugin, and `answer` is a sentence
+    # rather than null: a pane that renders the answer must never have to render nothing.
+    return {"match": "none", "answer": reason if answer is None else answer, "reason": reason,
+            "nearest": list(nearest or []), "exit_code": 2, **extra}
 
 
 def _never_raises(handler):
@@ -109,8 +111,10 @@ def _never_raises(handler):
         try:
             return handler(args or {}, **kwargs)
         except Exception as exc:                      # noqa: BLE001 - a raise costs the whole call
-            return _json({"error": f"{type(exc).__name__}: {exc}",
-                          **_refusal("the tool failed internally; nothing was measured")})
+            why = (f"{handler.__name__} could not finish: {type(exc).__name__}: {exc} — nothing was "
+                   f"measured, and this is a limit of the run, not a result")
+            return _json({"tool": handler.__name__, "error": f"{type(exc).__name__}: {exc}",
+                          **_refusal(why)})
     return wrapper
 
 
@@ -727,7 +731,7 @@ def cve_apply(args: dict, **kwargs) -> str:
     # wrong name used to cost a full scan of the inventory before being refused — measured, the pane
     # sat for over 20 s on a refusal that could not have run anything.
     if confirm.strip() != str(host["label"]).strip():
-        return _json({"tool": "cve_apply", "applied": False, "dry_run": dry_run,
+        return _json({"tool": "cve_apply", "applied": False, "dry_run": dry_run, "exit_code": 2,
                       "host": host["label"], "steps": [],
                       "reason": f"the gate is armed by typing {host['label']!r} exactly — got "
                                 f"{confirm.strip()!r}. Nothing was run, and nothing was measured."})
@@ -1260,24 +1264,40 @@ def cve_integrity(args: dict, **kwargs) -> str:
                       "integrity": state, "answers": integrity.answers(state),
                       "answer": merged.get("answer"), "read_at": time.time(), "exit_code": 0})
 
+    def keep(current: dict) -> tuple[bool, str]:
+        """Store the reading; a read-only data directory costs the *storage*, not the measurement."""
+        try:
+            integrity.save_result(data_dir, host["label"], current)
+            return True, ""
+        except integrity.CannotStore as exc:
+            return False, str(exc)
+
     state = integrity.collect(host.get("target"), data_dir, host["label"],
                               timeout=int(_settings.get("timeout") or 180))
     if (action in ("baseline", "rebase")
             and (state.get("listeners") or {}).get("set") is not None):
         # re-baselining is an explicit act: it accepts today's sockets as the known set, and the
         # previous set is not lost — it is replaced, so the pane says the baseline was renewed now
-        record = integrity.write_baseline(data_dir, host["label"],
-                                          state["listeners"].get("records")
-                                          or state["listeners"]["set"])
+        try:
+            record = integrity.write_baseline(data_dir, host["label"],
+                                             state["listeners"].get("records")
+                                             or state["listeners"]["set"])
+        except integrity.CannotStore as exc:
+            return _json({"tool": "cve_integrity", "exit_code": 2,
+                          "reason": f"a baseline was requested but cannot be stored: {exc} — "
+                                    f"nothing was re-baselined, so the sockets are still compared "
+                                    f"with the old set"})
         state["listeners"].update(state="baseline", new=[], baseline_at=record.get("at"),
                                   baseline_count=record.get("count"),
                                   reason=f"baseline renewed now with {record.get('count')} socket(s)")
-    integrity.save_result(data_dir, host["label"], state)
+    kept, why = keep(state)
     return _json({"tool": "cve_integrity",
                   "host": {"label": host["label"], "target": host.get("target") or "local"},
                   "integrity": state,
                   "answers": integrity.answers(state),
-                  "answer": integrity.summarise(state),
+                  "kept": kept,
+                  "answer": integrity.summarise(state) + ("" if kept else
+                             f" · this reading could not be kept: {why}"),
                   "read_at": time.time(),
                   "exit_code": 0 if state.get("state") in ("ok", "baseline") else (1 if state.get("state") == "finding" else 2)})
 

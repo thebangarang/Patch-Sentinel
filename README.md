@@ -70,6 +70,22 @@ dry-run apply. No venv, no Hermes, no configuration beyond one host line.
 | **Arch** (fresh VM, python 3.14) | same | `pacman`: 0 pending, kernel current · integrity **ok** via `pacman -Qkk` (0 changed, 13 conffiles, 12 unreadable) · libraries: distro packages tagged, venv found · apply: refused, Arch has no apply plan |
 | **openSUSE Leap 15.6** | command-level only | the `zypper`/`rpm` probe and parsers run against the real host; **the plugin itself cannot run on Leap's system python 3.6** (it needs the interpreter Hermes ships, 3.10+), so this family is not verified end to end |
 
+### Case scenarios: the situations a user lands in, not the ones we designed for
+
+`scripts/scenario_batch.py` builds a small world for each one — an empty home, a broken state file,
+a dead network, a lockfile set with four languages in it — and checks every answer against invariants
+that must hold for *any* answer the plugin gives: a JSON object with a `tool` and an `exit_code` in
+{0 nothing to do, 1 something to patch, 2 could not look}, counts that agree with the lists they count,
+no placeholder or invented command, no verdict that claims a clean it did not measure, and two
+identical runs on an unchanged machine.
+
+Eighteen scenarios, **152 assertions, 0 findings** as of the last run. What it caught, in the order it
+caught them: a read-only data directory crashing the integrity read instead of reporting the reading and
+saying it could not be kept; three refusal paths returning no `exit_code` at all and a `null` answer; an
+internal exception answering as "the tool failed internally" without naming the tool; an `integrity.json`
+that parses to a list crashing the writer; a vendor's "Workarounds: None." being surfaced as a mitigation
+worth trying; and a `read_at` in the future rendered as an age.
+
 ### What is *not* verified, and says so in the pane
 
 | surface | state |

@@ -276,18 +276,17 @@ def write_baseline(data_dir: str, host: str, listeners) -> dict:
     path = Path(data_dir or ".") / "integrity.json"
     try:
         payload = json.loads(path.read_text())
+        # a file that parses but is not an object (a list, a bare string) must not become an
+        # AttributeError halfway through a write
+        if not isinstance(payload, dict):
+            payload = {}
         if not isinstance(payload.get("hosts"), dict):
             payload["hosts"] = {}
     except (OSError, ValueError):
         payload = {"hosts": {}}
     record = {"listeners": sorted(ids), "scopes": scopes, "at": time.time(), "count": len(ids)}
     payload["hosts"][str(host).lower()] = record
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
-    os.replace(tmp, path)
+    _store(path, payload)
     return record
 
 
@@ -571,22 +570,38 @@ def _sockets(rows: list[dict]) -> str:
     return ", ".join(names) + (f" and {more} more" if more > 0 else "")
 
 
+class CannotStore(RuntimeError):
+    """The data directory cannot be written — a reading taken here would be lost the moment it ended."""
+
+
+def _store(path: Path, payload: dict) -> None:
+    """Write atomically, and turn a filesystem refusal into one sentence the caller can report."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+        os.replace(tmp, path)
+    except OSError as exc:
+        raise CannotStore(f"cannot write {path}: {exc.strerror or exc}") from exc
+
+
 def save_root_coverage(data_dir: str, host: str, reading: dict) -> dict:
     """Keep the last root run the operator pasted, apart from the reading it arrived with."""
     path = Path(data_dir or ".") / "integrity.json"
     try:
         payload = json.loads(path.read_text())
+        # a file that parses but is not an object (a list, a bare string) must not become an
+        # AttributeError halfway through a write
+        if not isinstance(payload, dict):
+            payload = {}
         if not isinstance(payload.get("hosts"), dict):
             payload["hosts"] = {}
     except (OSError, ValueError):
         payload = {"hosts": {}}
     payload["hosts"].setdefault(str(host).lower(), {})["root"] = reading
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
-    os.replace(tmp, path)
+    _store(path, payload)
     return reading
 
 
@@ -604,18 +619,17 @@ def save_result(data_dir: str, host: str, state: dict) -> dict:
     path = Path(data_dir or ".") / "integrity.json"
     try:
         payload = json.loads(path.read_text())
+        # a file that parses but is not an object (a list, a bare string) must not become an
+        # AttributeError halfway through a write
+        if not isinstance(payload, dict):
+            payload = {}
         if not isinstance(payload.get("hosts"), dict):
             payload["hosts"] = {}
     except (OSError, ValueError):
         payload = {"hosts": {}}
     payload["hosts"].setdefault(str(host).lower(), {})
     payload["hosts"][str(host).lower()]["last"] = {"at": time.time(), "state": state}
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
-    os.replace(tmp, path)
+    _store(path, payload)
     return {"at": time.time(), "state": state}
 
 
