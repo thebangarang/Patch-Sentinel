@@ -314,6 +314,56 @@ class TheBaselineIsAFact(unittest.TestCase):
                              ["package checksums", "preload hook", "listening sockets"])
 
 
+class PasteValidation(unittest.TestCase):
+    """A paste must be a verification run. An install log is not one, and it once closed a finding."""
+
+    APT_LOG = """Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+0 upgraded, 0 newly installed, 1 reinstalled, 0 to remove and 5 not upgraded.
+Preparing to unpack .../apparmor_5.0.2-0ubuntu1~26.04.1_amd64.deb ...
+Unpacking apparmor (5.0.2-0ubuntu1~26.04.1) over (5.0.2-0ubuntu1~26.04.1) ...
+Setting up apparmor (5.0.2-0ubuntu1~26.04.1) ...
+Processing triggers for man-db (2.13.1-1build1) ...
+"""
+
+    def _state(self):
+        return {"state": "finding",
+                "tamper": {"tool": "dpkg -V", "state": "finding", "command": "sudo dpkg -V",
+                           "changed_count": 1, "missing_count": 1, "changed": ["/etc/apparmor.d/disable"],
+                           "missing": ["/etc/apparmor.d/disable"], "unreadable": [], "unreadable_count": 0},
+                "answers": [{"check": "package checksums", "state": "finding",
+                             "detail": "1 file(s) changed", "items": ["/etc/apparmor.d/disable"]}],
+                "listeners": {"state": "ok"}, "preload": {"state": "ok"}}
+
+    def test_an_install_log_is_refused(self):
+        result = integrity.merge_pasted(self._state(), self.APT_LOG)
+        self.assertFalse(result["ok"])
+        self.assertIn("install log", result["reason"])
+
+    def test_text_that_is_not_a_verification_is_refused(self):
+        result = integrity.merge_pasted(self._state(), "hello, I ran something")
+        self.assertFalse(result["ok"])
+        self.assertIn("does not look like", result["reason"])
+
+    def test_a_clean_verify_line_closes_the_finding_immediately(self):
+        state = self._state()
+        result = integrity.merge_pasted(state, "??5?????? c /etc/default/ufw")
+        self.assertTrue(result["ok"])
+        self.assertEqual(state["tamper"]["changed_count"], 0)
+        self.assertEqual(state["tamper"]["missing_count"], 0)
+        self.assertEqual(state["tamper"]["state"], "ok")
+        self.assertEqual(state["state"], "ok", "the reading still says finding after a clean root run")
+        self.assertEqual(state["answers"][0]["state"], "ok")
+
+    def test_a_root_run_that_names_a_change_stays_a_finding(self):
+        state = self._state()
+        result = integrity.merge_pasted(state, "??5?????? /usr/bin/ssh")
+        self.assertTrue(result["ok"])
+        self.assertEqual(state["state"], "finding")
+        self.assertIn("finding", result["answer"])
+
+
 class RepairHints(unittest.TestCase):
     """A mismatch with no command is a dead end — the owner is resolved on the host, not guessed."""
 

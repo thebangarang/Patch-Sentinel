@@ -1596,6 +1596,8 @@ function Line({ name, children }) {
 function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport, onAttest }) {
   const [limits, setLimits] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
+  // what the last paste or attestation changed — a silent success reads as "nothing happened"
+  const [notice, setNotice] = useState(null)
   const [pasteText, setPasteText] = useState('')
   const [error, setError] = useState(null)
 
@@ -1630,6 +1632,8 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
     }
     setPasteOpen(false)
     setPasteText('')
+    setNotice((answer && answer.answer)
+      || 'coverage complete — the root run found nothing changed. The finding is closed.')
   }
 
   return jsxs('section', { style: sectionStyle('integrity') }, [
@@ -1678,6 +1682,12 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
                  + (seconds ? ' · ' + seconds + ' s' : '')
         })
       : null,
+    notice
+      ? jsx('div', {
+          style: { fontSize: '0.8125rem', color: C.ok, lineHeight: 1.5, marginBottom: '6px',
+                   paddingLeft: '9px', borderLeft: '2px solid ' + C.ok }
+        }, notice)
+      : null,
     !state && !busy
       ? jsx('div', { style: { fontSize: '0.8125rem', color: C.dim, lineHeight: 1.5 } },
           'Not read yet — this is the check that answers “has anything on this host changed without '
@@ -1720,7 +1730,15 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
                             'the pane cannot run sudo; paste what the command above printed and it '
                             + 'will read it'),
                           onAttest
-                            ? smallButton('it printed nothing', () => onAttest(),
+                            ? smallButton('it printed nothing', async () => {
+                                const answer = await onAttest()
+                                if (answer && answer.exit_code !== 2) {
+                                  setNotice(answer.answer || 'coverage complete — the finding is closed.')
+                                } else if (answer) {
+                                  setNotice(null)
+                                  setError(answer.reason || 'that could not be recorded')
+                                }
+                              },
                                 'a clean run prints nothing — this records that you ran it as root '
                                 + 'and there was nothing to paste')
                             : null
@@ -2782,6 +2800,20 @@ export function PatchSentinel({ compact }) {
     }
   }, [selected, refreshIntegrity])
 
+  /** "I ran it as root and it printed nothing" — answered in the request, like a paste. */
+  const attestIntegrity = useCallback(async () => {
+    if (!selected) return false
+    try {
+      const answer = await call('/integrity', {
+        method: 'POST', body: { host: selected, action: 'attest' }
+      })
+      await refreshIntegrity(selected)
+      return answer
+    } catch (err) {
+      return false
+    }
+  }, [selected, refreshIntegrity])
+
   const importIntegrity = useCallback(async (output) => {
     if (!selected) return false
     try {
@@ -2953,7 +2985,7 @@ export function PatchSentinel({ compact }) {
       onRead: () => readIntegrity('check'),
       onRebaseline: () => readIntegrity('baseline'),
       onImport: importIntegrity,
-      onAttest: () => readIntegrity('attest')
+      onAttest: attestIntegrity
     }),
     jsx(LanguagesPanel, { libraries: deviceLibraries(bundle, selected) || libraries,
                           onCheck: checkLibraries, busy: libBusy }),

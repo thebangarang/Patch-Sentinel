@@ -593,6 +593,32 @@ PARSERS = {"dpkg -V": parse_dpkg, "rpm -Va": parse_rpm, "apk audit": parse_apk,
            "pacman -Qkk": parse_pacman}
 
 
+_INSTALL_LOG = ("Reading package lists", "Building dependency tree", "Following packages",
+                "Setting up ", "Preparing to unpack", "Processing triggers", "Fetched ",
+                "Need to get ", "Unpacking ", "Preconfiguring packages")
+
+
+def _looks_like_install_log(text: str) -> bool:
+    return sum(1 for marker in _INSTALL_LOG if marker in (text or "")) >= 2
+
+
+def _parses_as_verify(text: str, tool: str | None) -> bool:
+    """At least one line must look like a verification result: a flag field and a path."""
+    for line in (text or "").splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        flags = parts[0]
+        path = next((token for token in parts[1:] if token.startswith("/")), "")
+        if not path:
+            continue
+        if tool == "dpkg -V" and (set(flags) == {"?"} or flags == "missing" or len(flags) == 9):
+            return True
+        if tool in ("rpm -Va", "apk audit", "pacman -Qkk") and path:
+            return True
+    return False
+
+
 def merge_pasted(state: dict, output: str, now: float | None = None,
                  data_dir: str | None = None, host: str | None = None) -> dict:
     """Take a reading the operator ran as root and paste-read it.
@@ -609,6 +635,20 @@ def merge_pasted(state: dict, output: str, now: float | None = None,
                 "reason": "this reading did not come from a package database this plugin knows, so a "
                           "pasted output cannot be placed against it"}
     text = str(output or "")
+    # An install log is not a verification. The operator pasted `apt-get install --reinstall` output
+    # here, and the parser found no verify lines — which read as "0 changed, coverage complete" and
+    # closed a finding nobody had checked. Refuse it and say what to paste instead.
+    if _looks_like_install_log(text):
+        return {"ok": False,
+                "reason": "this is a package-manager install log, not a verification run. It says the "
+                          "reinstall happened, which is useful — but it does not compare file contents, "
+                          "so it cannot close this finding. Press scan all to re-read the host, or paste "
+                          "the output of `dpkg -V` (nothing at all means clean — use 'it printed nothing')."}
+    if text.strip() and not _parses_as_verify(text, tool):
+        return {"ok": False,
+                "reason": "this does not look like the output of a verification command: no line names "
+                          "a packaged file. Paste the output of `dpkg -V` (or press 'it printed nothing' "
+                          "when that command printed nothing)."}
     if not text.strip():
         # an empty `dpkg -V` is the clean result; an empty *paste* is indistinguishable from it, and
         # saying so is better than accepting a blank as a clean host
@@ -635,6 +675,23 @@ def merge_pasted(state: dict, output: str, now: float | None = None,
         state["state"] = "finding"
     else:
         tamper["covered"] = True
+        # the root run checked the same files and found nothing: the finding it replaces is gone, so
+        # the pane stops showing it without waiting for another scan
+        tamper["state"] = "ok"
+        tamper["changed_count"] = 0
+        tamper["missing_count"] = 0
+        tamper["changed"] = []
+        tamper["missing"] = []
+        detail_rows = state.get("answers") or []
+        for row in detail_rows:
+            if row.get("check") == "package checksums":
+                row["state"] = "ok"
+                row["detail"] = (f"0 file(s) changed, {len(parsed['conffiles'])} conffile(s) edited by "
+                                 f"the operator (verified as root)")
+                row["items"] = []
+        state["state"] = ("finding" if "finding" in [(state.get("listeners") or {}).get("state"),
+                                                     (state.get("preload") or {}).get("state")]
+                          else "ok")
         state["note"] = (
             f"coverage completed by a root reading pasted on "
             f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(reading['at']))}: "
