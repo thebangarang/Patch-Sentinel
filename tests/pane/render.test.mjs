@@ -9,7 +9,8 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, UpdatesPanel, LanguagesPanel, IntegrityPanel,
+import { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, HowItWorks, UpdatesPanel,
+         LanguagesPanel, IntegrityPanel,
          GapsPanel, PatchSentinel, SECTIONS } from './pane.mjs'
 
 const dataPath = process.env.PANE_DATA || '../pane-data.json'
@@ -216,6 +217,26 @@ const running = renderToStaticMarkup(createElement(ScanButton, {
 if (!running.includes('integrity · webasix')) throw new Error('the running button names another device: ' + running)
 if (running.includes('beelink')) throw new Error('the running button shows a device that was not asked for')
 console.log('  the scan button names the device it will measure')
+
+// A first-time user must not need the repository: the pane carries the four steps, and the same verb
+// for the same action in both panels (it used to say "read again" in one and "re-check" in the other).
+const howto = renderToStaticMarkup(createElement(HowItWorks, { open: true, onToggle: noop }))
+for (const phrase of ['pick a device', 'press scan all', 'read what must be done', 'copy the commands',
+                      'never calls a machine clean', 'No credential is stored']) {
+  if (!howto.includes(phrase)) throw new Error('the how-to is missing: ' + phrase)
+}
+const howtoClosed = renderToStaticMarkup(createElement(HowItWorks, { open: false, onToggle: noop }))
+if (howtoClosed.includes('press scan all')) throw new Error('the closed how-to still renders its steps')
+if (!howtoClosed.includes('how this works')) throw new Error('the closed how-to has no way back in')
+
+const neverRead = renderToStaticMarkup(createElement(IntegrityPanel, {
+  reading: null, busy: false, seconds: 0, onRead: noop, onRebaseline: noop }))
+if (!neverRead.includes('read it')) throw new Error('the integrity panel does not offer a first read')
+if (neverRead.includes('read again')) throw new Error('the integrity panel offers a re-read before a read')
+const libsNever = renderToStaticMarkup(createElement(LanguagesPanel, { libraries: null, onCheck: noop,
+                                                                     busy: false }))
+if (!libsNever.includes('read it')) throw new Error('the libs panel does not use the same verb as integrity')
+console.log('  the how-to is in the pane, and both panels use the same verb')
 
 for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXTURE],
                                  ['libs (nothing read)', null]]) {

@@ -54,7 +54,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, IntegrityPanel, UpdatesPanel,
-         LanguagesPanel, GapsPanel } from './pane.mjs'
+         LanguagesPanel, GapsPanel, HowItWorks } from './pane.mjs'
 
 const bundle = JSON.parse(readFileSync(process.env.PREVIEW + '/bundle.json', 'utf8'))
 const scan = bundle.scan || { hosts: {}, blind: [], note: '' }
@@ -71,6 +71,7 @@ const libraries = device.libraries || bundle.libraries
 const integrity = device.integrity || bundle.integrity
 
 const body = renderToStaticMarkup(createElement('div', {}, [
+  createElement(HowItWorks, { key: 'how', open: process.env.PREVIEW_HOWTO !== 'closed', onToggle: noop }),
   createElement(VerdictBar, { key: 'v', status: { ...scan, hosts: selected ? { [selected]: deviceEntry || {} } : {} } }),
   createElement(HostsPanel, { key: 'h', onChanged: noop, initialHosts: labels.map((label) => ({
     label, target: (scan.hosts[label] || {}).target || 'local' })) }),

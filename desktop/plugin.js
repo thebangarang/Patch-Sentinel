@@ -1176,7 +1176,8 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
           color: busy ? C.faint : C.accent, background: 'transparent',
           border: '1px solid ' + C.border, borderRadius: '3px'
         }
-      }, busy ? [jsx('span', { key: 'dot', className: 'ps-dot' }), 'checking'] : libraries ? 're-check' : 'check')
+      }, busy ? [jsx('span', { key: 'dot', className: 'ps-dot' }), 'reading']
+         : libraries ? 'read again' : 'read it')
     ]),
     busy
       ? jsx(ScanLine, {
@@ -2196,6 +2197,67 @@ function CommandsPanel({ bundle, selected, where, devices }) {
   ])
 }
 
+// --------------------------------------------------------------------- HOW THIS WORKS
+// A first-time user should not need the repository to know what to do. Four steps, one screen, and the
+// one rule that explains every red row.
+
+function HowItWorks({ open, onToggle }) {
+  if (!open) {
+    return jsx('div', { style: { marginBottom: '10px' } }, jsx('button', {
+      type: 'button',
+      onClick: onToggle,
+      style: {
+        fontFamily: MONO, fontSize: '0.6875rem', padding: '2px 8px', cursor: 'pointer',
+        color: C.faint, background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
+      }
+    }, '▸ how this works'))
+  }
+  const step = (index, title, body) => jsxs('div', {
+    key: index, style: { display: 'grid', gridTemplateColumns: '14px 1fr', gap: '7px', marginBottom: '3px' }
+  }, [
+    jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.accent } }, String(index)),
+    jsxs('div', {}, [
+      jsx('span', { style: { fontSize: '0.8125rem', fontWeight: 600, color: C.text } }, title),
+      jsx('span', { style: { fontSize: '0.8125rem', color: C.dim } }, ' ' + body)
+    ])
+  ])
+  return jsxs('section', {
+    style: {
+      marginBottom: '14px', padding: '9px 11px', background: C.panel,
+      border: '1px solid ' + C.border, borderLeft: '2px solid ' + C.accent, borderRadius: '4px'
+    }
+  }, [
+    jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '6px' } }, [
+      jsx('span', {
+        style: { fontFamily: MONO, fontSize: '0.6875rem', letterSpacing: '0.12em', textTransform: 'uppercase',
+                 color: C.dim }
+      }, 'how this works'),
+      jsx('span', { style: { flex: 1 } }),
+      jsx('button', {
+        type: 'button', onClick: onToggle,
+        style: {
+          fontFamily: MONO, fontSize: '0.6875rem', padding: '1px 7px', cursor: 'pointer',
+          color: C.faint, background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
+        }
+      }, 'hide')
+    ]),
+    step(1, 'pick a device.', 'Click its name in the servers list. Everything below is about that one machine.'),
+    step(2, 'press scan all.', 'It reads packages, kernel, container images, the language '
+      + 'stack and file checksums for one device at the same time — about half a minute — and '
+      + 'changes nothing.'),
+    step(3, 'read what must be done.', 'Every row is something observed, with the reason it matters. '
+      + 'Green: measured, nothing to act on. Grey: it could not look, and says so.'),
+    step(4, 'copy the commands.', 'They are under “the fix, as commands”, in order, and say which device '
+      + 'to run them on. Run them there, then scan again.'),
+    jsx('div', {
+      style: { fontSize: '0.75rem', color: C.faint, marginTop: '6px', lineHeight: 1.55,
+               paddingTop: '6px', borderTop: '1px solid ' + C.border }
+    }, 'It never calls a machine clean when a surface could not be read — those appear as gaps in red, '
+       + 'and a gap is a fact about the scan, not about the host. No credential is stored: ssh uses your '
+       + 'own agent, and the only thing sent anywhere is package names and versions, to OSV.')
+  ])
+}
+
 // --------------------------------------------------------------------------- GAPS
 
 /**
@@ -2295,7 +2357,8 @@ function GapsPanel({ coverage, selected }) {
 
 // --------------------------------------------------------------------------- root
 
-export { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, orderedHosts, todoRows, commandsForHost,
+export { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, HowItWorks, orderedHosts,
+         todoRows, commandsForHost,
          fixableRows, UpdatesPanel, LanguagesPanel, IntegrityPanel, GapsPanel,
          buildFixCommand, fixBlock, actionableFixes, SECTIONS }
 
@@ -2384,6 +2447,25 @@ export function PatchSentinel({ compact }) {
   const [health, setHealth] = useState(null)
   // the reading order, spelled out on demand — the same array the sections are titled from
   const [legend, setLegend] = useState(false)
+  // first open: the four steps. Opening it once and closing it is enough; the link stays in the header.
+  const [howto, setHowto] = useState(() => {
+    try {
+      return !window.localStorage.getItem('patch-sentinel.howto-seen')
+    } catch (err) {
+      return true
+    }
+  })
+  const toggleHowto = useCallback(() => {
+    setHowto((current) => {
+      const next = !current
+      try {
+        if (!next) window.localStorage.setItem('patch-sentinel.howto-seen', '1')
+      } catch (err) {
+        // a pane that cannot remember this just shows the steps again next time
+      }
+      return next
+    })
+  }, [])
   const [libBusy, setLibBusy] = useState(false)
   // a project scan is a different question ("my app's dependencies"), so it is a separate answer kept
   // apart from the machine-wide one instead of overwriting it
@@ -2723,6 +2805,7 @@ export function PatchSentinel({ compact }) {
            + 'every surface of that device at the same time (about thirty seconds locally, longer over '
            + 'ssh) and changes nothing.')
       : null,
+    jsx(HowItWorks, { open: howto, onToggle: toggleHowto }),
     jsx(VerdictBar, { status: {
       ...(bundle.scan || {}),
       hosts: selected && hosts[selected] ? { [selected]: hosts[selected] } : {},
