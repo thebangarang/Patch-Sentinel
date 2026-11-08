@@ -470,9 +470,9 @@ def scenario_rescan_bundle(verbose: bool) -> None:
     tools.configure(settings_for(name, home, data))
     payload = run(name, "cve_rescan", {})
     bundle = payload.get("bundle") or {}
-    stages = {stage.get("name") for stage in bundle.get("stages") or []}
-    expect(name, stages == {"scan", "libraries", "integrity", "plans"},
-           f"a surface went missing from the run: {sorted(stages)}")
+    stages = [stage.get("name") for stage in bundle.get("stages") or []]
+    expect(name, stages == ["scan", "libraries", "integrity", "plans"],
+           f"the stages did not run in the pane's order: {stages}")
     expect(name, (bundle.get("stages") or [{}])[-1].get("name") == "plans",
            "the plan did not run last — it is built from the measurement that just ran")
     expect(name, os.path.exists(f"{data}/rescan.json"), "the bundle was not written to the data dir")

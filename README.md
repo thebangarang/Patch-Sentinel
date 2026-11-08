@@ -254,12 +254,15 @@ form of image scanning (Trivy-class) — the plugin does not pretend to see insi
 The pane answers two questions about **the device you picked**: **what has to be done**, and **with
 what**. Every section below the servers list belongs to that one device.
 
-1. **scan all · <device>** — the only control, and it measures that device completely: packages,
-   kernel, images, advisories, the language stack and the integrity reading **at the same time**, then
-   the commands the measurement implies. Because the three surfaces run together, the wait is the
-   slowest one rather than the sum — ~30 s on this machine, ~30-60 s over ssh, instead of the two and
-   a half minutes a fleet-wide run took. Press it once per device; each device keeps its own last
-   reading, and switching devices never re-scans.
+1. **scan all · <device>** — the only control, and it measures that device completely: the package
+   list, kernel and images, then the language stack, then the integrity reading, then the commands the
+   measurement implies. **In that order, every time** — the same order as the sections on the page, one
+   surface at a time, so the section that animates is the section being read and two devices are never
+   checked in a different sequence. ~60 s on this machine, ~45 s over ssh: reading the three surfaces
+   one after another costs about twice what running them at once did, and the progress was worth it —
+   a run that lit up one section on one machine and another on the next read as if the two had been
+   checked differently. Press it once per device; each device keeps its own last reading, and
+   switching devices never re-scans.
 2. **servers** — the list carries a per-device badge (`nothing to do`, `2 to do`, `not measured`) and
    the age of its last reading, so the fleet stays legible without merging five machines into one
    screen. Clicking a name is what selects the device; there is no dropdown.

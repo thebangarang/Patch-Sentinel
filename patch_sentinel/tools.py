@@ -1418,7 +1418,14 @@ def cve_rescan(args: dict, **kwargs) -> str:
     results: dict[str, dict] = {}
 
     def run_stage(name: str, handler, stage_args: dict) -> None:
+        # The stage is announced *before* it runs, one at a time and in the order the pane shows its
+        # sections. Running them at once was faster (28 s instead of 60) but the progress line jumped
+        # up and down the page, and a run that lights up one section on one device and another on the
+        # next reads as if the two machines were checked differently.
         started = time.time()
+        with lock:
+            bundle["stage"] = name
+            rescan.write(data_dir, bundle)
         try:
             payload = json.loads(handler(stage_args))
         except Exception as exc:                      # noqa: BLE001 - one stage cannot end the run
@@ -1427,19 +1434,16 @@ def cve_rescan(args: dict, **kwargs) -> str:
         with lock:
             results[name] = payload
             bundle["devices"][label][name] = payload
-            bundle["stage"] = name
             bundle["stages"].append({"name": name, "exit_code": int(payload.get("exit_code") or 0),
                                      "seconds": round(time.time() - started, 1), "at": time.time()})
             rescan.write(data_dir, bundle)
 
-    stages = [("scan", cve_scan, {"host": label}),
-              ("libraries", cve_libraries, {"host": label}),
-              ("integrity", cve_integrity, {"host": label})]
-    threads = [threading.Thread(target=run_stage, args=stage, daemon=True) for stage in stages]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    # pane order: packages → language stack → integrity. One at a time, so the section that animates
+    # is the section being read, and the same order on every device.
+    for stage in (("scan", cve_scan, {"host": label}),
+                  ("libraries", cve_libraries, {"host": label}),
+                  ("integrity", cve_integrity, {"host": label})):
+        run_stage(*stage)
 
     # the plan is built from the scan that just ran, so it comes after them
     started = time.time()
