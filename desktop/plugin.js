@@ -1974,11 +1974,12 @@ function todoRows({ bundle, label, entry }) {
   return rows
 }
 
-function TodoPanel({ bundle, selected, onSelect }) {
+function TodoPanel({ bundle, selected, onSelect, devices }) {
   // One device, the selected one. A merged list across five machines was the confusion the operator
   // named: the sections below are per device, so this one is too. The servers list carries the badge
   // that says which other device needs attention.
-  const rows = orderedHosts(bundle).filter((row) => !selected || row.label === selected)
+  const all = devices && devices.length ? devices : orderedHosts(bundle)
+  const rows = all.filter((row) => !selected || row.label === selected)
   if (!rows.length) return null
   return jsxs('section', { style: sectionStyle('now') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '6px' } }, [
@@ -2111,8 +2112,9 @@ function whereLine(where) {
                       : 'run it in a terminal on this machine')
 }
 
-function CommandsPanel({ bundle, selected, where }) {
-  const hosts = orderedHosts(bundle).filter((row) => !selected || row.label === selected)
+function CommandsPanel({ bundle, selected, where, devices }) {
+  const all = devices && devices.length ? devices : orderedHosts(bundle)
+  const hosts = all.filter((row) => !selected || row.label === selected)
   if (!hosts.length) return null
   const blocks = hosts.map(({ label: name }) => ({ name, commands: commandsForHost(bundle, name) }))
   const withCommands = blocks.filter((block) => block.commands.length)
@@ -2490,9 +2492,75 @@ function ApplyGate({ hostLabel, entry, initialResult, probe }) {
 
 // --------------------------------------------------------------------------- root
 
-export { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, orderedHosts, todoRows, commandsForHost,
+export { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, orderedHosts, todoRows, commandsForHost,
          fixableRows, UpdatesPanel, LanguagesPanel, IntegrityPanel, GapsPanel, ApplyGate,
          buildFixCommand, fixBlock, actionableFixes, SECTIONS }
+
+
+/**
+ * The selected device is one choice for the whole app, not one per surface.
+ *
+ * The pane and the page are two instances of this component: selecting webasix in one and pressing
+ * scan in the other measured *this machine*, because the second instance still held its own default.
+ * A module-level store with a subscriber set makes them agree immediately; localStorage remembers the
+ * choice across restarts.
+ */
+const SELECTION = { value: null, listeners: new Set() }
+
+function readSelection() {
+  try {
+    return window.localStorage.getItem('patch-sentinel.selected') || null
+  } catch (err) {
+    return null                                   // a render without storage (SSR, a test) is fine
+  }
+}
+
+function useSelectedDevice() {
+  const [value, setValue] = useState(() => SELECTION.value || readSelection())
+  useEffect(() => {
+    const listener = (next) => setValue(next)
+    SELECTION.listeners.add(listener)
+    return () => { SELECTION.listeners.delete(listener) }
+  }, [])
+  const set = useCallback((label) => {
+    SELECTION.value = label
+    try {
+      if (label) window.localStorage.setItem('patch-sentinel.selected', label)
+    } catch (err) {
+      // a pane that cannot remember the choice still works; it just starts on this machine
+    }
+    for (const listener of Array.from(SELECTION.listeners)) listener(label)
+  }, [])
+  return [value, set]
+}
+
+/**
+ * The one control. Its label is the operator's evidence of *which device* is about to be measured, so
+ * it is a component of its own with its own test: a button that says "beelink" while webasix is
+ * selected is the failure this had.
+ */
+function ScanButton({ selected, busy, stage, currentHost, seconds, onClick }) {
+  return jsx('button', {
+    type: 'button',
+    onClick,
+    disabled: busy,
+    title: 'measures every surface of the selected device at once — packages, kernel, images, '
+           + 'advisories, the language stack, the integrity reading — then the commands it implies. '
+           + 'One press per device; switching devices never re-scans.',
+    style: {
+      fontFamily: MONO, fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.06em',
+      textTransform: 'uppercase', padding: '7px 16px',
+      cursor: busy ? 'default' : 'pointer',
+      color: busy ? C.faint : '#06090c', background: busy ? 'transparent' : C.accent,
+      border: '1px solid ' + (busy ? C.border : C.accent), borderRadius: '4px'
+    }
+  }, busy
+    ? [jsx('span', { key: 'ring', className: 'ps-ring' }),
+       (stage && stage !== 'starting' && stage !== 'done' ? stage : 'measuring')
+         + (currentHost ? ' · ' + currentHost : '')
+         + (seconds ? ' ' + Math.round(seconds) + ' s' : ' …')]
+    : selected ? 'scan all · ' + selected : 'scan all')
+}
 
 export function PatchSentinel({ compact }) {
   // ONE measurement document, ONE button. Every section renders out of the bundle "rescan all" writes
@@ -2505,8 +2573,11 @@ export function PatchSentinel({ compact }) {
   const [currentHost, setCurrentHost] = useState(null)
   const [seconds, setSeconds] = useState(0)
   const [scanError, setScanError] = useState(null)
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useSelectedDevice()
   const [coverage, setCoverage] = useState(null)
+  // the inventory, not only the devices that were measured: a machine that has never been scanned must
+  // still be selectable, or a fresh install has nothing to press scan on
+  const [inventory, setInventory] = useState([])
   const [health, setHealth] = useState(null)
   // the reading order, spelled out on demand — the same array the sections are titled from
   const [legend, setLegend] = useState(false)
@@ -2538,15 +2609,24 @@ export function PatchSentinel({ compact }) {
   }, [])
 
   const loadRest = useCallback(async () => {
-    const [nextCoverage, nextHealth] = await Promise.all([
-      call('/coverage').catch(() => null), call('/health').catch(() => null)])
+    const [nextCoverage, nextHealth, nextHosts] = await Promise.all([
+      call('/coverage').catch(() => null), call('/health').catch(() => null),
+      call('/hosts').catch(() => null)])
     setCoverage(nextCoverage)
     setHealth(nextHealth)
+    setInventory(((nextHosts && nextHosts.hosts) || []).map((host) => ({
+      label: host.label, target: host.target || 'local' })))
   }, [])
 
   useEffect(() => { loadBundle(); loadRest() }, [loadBundle, loadRest])
 
-  const devices = useMemo(() => orderedHosts(bundle), [bundle])
+  const devices = useMemo(() => {
+    const measured = orderedHosts(bundle)
+    const seen = new Set(measured.map((row) => row.label))
+    const rest = inventory.filter((host) => !seen.has(host.label))
+      .map((host) => ({ label: host.label, entry: { target: host.target } }))
+    return [...measured, ...rest]
+  }, [bundle, inventory])
   // devices in reading order: this machine first, then the declared hosts
   const labels = useMemo(() => devices.map((row) => row.label), [devices])
   const entryOf = (label) => deviceScan(bundle, label) || {}
@@ -2556,9 +2636,12 @@ export function PatchSentinel({ compact }) {
     return out
   }, [devices])
 
+  // The remembered device can be gone (renamed, removed, or a different machine's inventory). Fall back
+  // rather than keep a selection nothing can be measured for.
   useEffect(() => {
-    if (!selected && labels.length) setSelected(labels[0])
-  }, [labels, selected])
+    if (!labels.length) return
+    if (!selected || !labels.includes(selected)) setSelected(labels[0])
+  }, [labels, selected, setSelected])
 
   useEffect(() => {
     let live = true
@@ -2577,6 +2660,12 @@ export function PatchSentinel({ compact }) {
    */
   const rescanAll = useCallback(async () => {
     if (busy) return
+    if (!selected) {
+      // pressing with no device measured *this machine* silently, which reads as "the button ignores
+      // my selection". A device has to be named first.
+      setScanError('pick a device first — click its name in the servers list; nothing was scanned')
+      return
+    }
     setBusy(true)
     setScanError(null)
     setSeconds(0)
@@ -2599,7 +2688,7 @@ export function PatchSentinel({ compact }) {
       }
       // The device the backend says it is measuring must be the one this pane asked for. It was not,
       // once: the route dropped the host and measured this machine for every press, silently.
-      if (started && started.host && selected && started.host !== selected) {
+      if (started && started.host && started.host !== selected) {
         setScanError('the backend started a run for ' + started.host + ' while this pane asked for '
           + selected + ' — it is running an older route, so nothing was measured for ' + selected
           + '. Restart the Hermes gateway, then press scan again.')
@@ -2743,26 +2832,7 @@ export function PatchSentinel({ compact }) {
     jsxs('div', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', marginBottom: '10px' } }, [
       jsx('span', { className: 'ps-title', 'data-text': 'Patch Sentinel' }, 'Patch Sentinel'),
       jsx('span', { style: { flex: 1 } }),
-      jsx('button', {
-        type: 'button',
-        onClick: rescanAll,
-        disabled: busy,
-        title: 'measures every surface of the selected device at once — packages, kernel, images, '
-               + 'advisories, the language stack, the integrity reading — then the commands it '
-               + 'implies. One press per device; switching devices never re-scans.',
-        style: {
-          fontFamily: MONO, fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.06em',
-          textTransform: 'uppercase', padding: '7px 16px',
-          cursor: busy ? 'default' : 'pointer',
-          color: busy ? C.faint : '#06090c', background: busy ? 'transparent' : C.accent,
-          border: '1px solid ' + (busy ? C.border : C.accent), borderRadius: '4px'
-        }
-      }, busy
-        ? [jsx('span', { key: 'ring', className: 'ps-ring' }),
-           (stage && stage !== 'starting' && stage !== 'done' ? stage : 'measuring')
-             + (currentHost ? ' · ' + currentHost : '')
-             + (seconds ? ' ' + Math.round(seconds) + ' s' : ' …')]
-        : selected ? 'scan all · ' + selected : 'scan all')
+      jsx(ScanButton, { selected, busy, stage, currentHost, seconds, onClick: rescanAll })
     ]),
     // the stylesheet is always mounted; the line appears only while something is being measured
     jsx('style', {}, SCAN_CSS),
@@ -2837,8 +2907,8 @@ export function PatchSentinel({ compact }) {
         : null
     }, label: selected }),
     jsx(HostsPanel, { onChanged: loadBundle, onSelect: setSelected, selected, bundle }),
-    jsx(TodoPanel, { bundle, selected, onSelect: setSelected }),
-    jsx(CommandsPanel, { bundle, selected, where }),
+    jsx(TodoPanel, { bundle, selected, onSelect: setSelected, devices }),
+    jsx(CommandsPanel, { bundle, selected, where, devices }),
     // The detail sections stay on screen whether or not they found something: an empty section that
     // says why it is empty is information, and a section that vanishes reads as a broken pane. The
     // rows above are the answer; these are the readings it was built from.

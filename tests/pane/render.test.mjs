@@ -9,7 +9,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, UpdatesPanel, LanguagesPanel, IntegrityPanel,
+import { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, UpdatesPanel, LanguagesPanel, IntegrityPanel,
          GapsPanel, ApplyGate, PatchSentinel, SECTIONS } from './pane.mjs'
 
 const dataPath = process.env.PANE_DATA || '../pane-data.json'
@@ -207,6 +207,17 @@ for (const [name, bundle] of PARTIALS) {
   }
 }
 console.log('  every section renders from a partial bundle')
+
+// The button must name the device that will be measured, and while running, the device being measured.
+// It said "measuring beelink" with webasix selected, twice.
+const idle = renderToStaticMarkup(createElement(ScanButton, {
+  selected: 'webasix', busy: false, stage: null, currentHost: null, seconds: 0, onClick: noop }))
+if (!idle.includes('scan all · webasix')) throw new Error('the idle button does not name the device: ' + idle)
+const running = renderToStaticMarkup(createElement(ScanButton, {
+  selected: 'webasix', busy: true, stage: 'integrity', currentHost: 'webasix', seconds: 12, onClick: noop }))
+if (!running.includes('integrity · webasix')) throw new Error('the running button names another device: ' + running)
+if (running.includes('beelink')) throw new Error('the running button shows a device that was not asked for')
+console.log('  the scan button names the device it will measure')
 
 for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXTURE],
                                  ['libs (nothing read)', null]]) {
