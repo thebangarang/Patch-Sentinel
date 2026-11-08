@@ -1,54 +1,94 @@
-# PR: add `patch-sentinel` to the plugin catalogue
+# Add `patch-sentinel` to the plugin catalogue
 
-## What it does
+Adds one entry: `plugin-catalog/patch-sentinel.yaml`. Community tier, MIT, Linux.
 
-Patch Sentinel answers *"are we patched?"* with evidence, for whatever the host actually runs. It
-picks a package-manager adapter from the host's own `/etc/os-release` (`apt` for Ubuntu/Debian and
-relatives, `dnf` for Fedora/RHEL/Rocky/Alma/CentOS/Amazon, `pacman` for Arch, `zypper` for
-openSUSE/SLES), and reports three surfaces: the running kernel versus the newest installed and the
-newest installable; every pending package update, unfiltered by `-security`, annotated with the
-advisory that names that exact version; and each running container image's tag against its registry
-digest. A fifth tool checks the language stack (npm global, pip on PATH) through OSV.
+`patch-sentinel` answers *"are we patched?"* with evidence, for whatever the host actually runs — the
+machine Hermes runs on, and any host it can reach over SSH.
 
-**Every check has three outcomes** — clean, finding, could-not-look. An unreachable host, a distro
-with no adapter, or a registry that rate-limited us is reported as `unknown` with its reason and a
-non-zero exit code, never as patched. That is the plugin's whole argument.
+- **Adapter from `/etc/os-release`**: apt, dnf, pacman, zypper, apk. Any other OS answers
+  `unsupported` with its name rather than a green.
+- **The running kernel** against the newest installed and the newest installable — a kernel update
+  that is installed but not booted is its own verdict, because it is the commonest false clean there is.
+- **Every pending package update**, deliberately unfiltered by `-security`, annotated with the advisory
+  that names that fixed version per release (Ubuntu notices; OSV per release for Debian, Alpine and the
+  RHEL family; Arch's tracker; Bodhi for Fedora; SUSE's OVAL).
+- **Container image digests** against the registry, anonymously, without starting the image.
+- **Integrity**: package checksums, `/etc/ld.so.preload`, and listening sockets against a recorded
+  baseline. It says *no evidence of tampering in the surfaces read*, never "not compromised".
+- **The language stack**: nine ecosystems through OSV — npm, pip (global *and* every virtualenv),
+  Packagist, RubyGems, crates.io, Maven, Go, NuGet, Pub — plus jars on disk and eight lockfile kinds.
+- **A CycloneDX SBOM** export.
 
-`cve_apply` is the only tool that changes a machine: it refuses unless the operator types the host
-label, the user can run `sudo` without a prompt on that host, and `dry_run=false`. It stages first,
-applies, then re-measures the host so the receipt says what the machine *is*.
+**Every check has three outcomes: clean, finding, could-not-look.** An unreachable host, a distro with
+no adapter, a registry that rate-limited us, or a language store that is not installed is reported as
+unknown *with its reason*, never as patched. `exit_code` is 0/1/2 on that contract, and the pane shows
+the same thing the tools do.
 
-## Evidence (all on real machines, 2026-11-06)
+The desktop pane has **one control** — `scan all · <device>` — which reads one device at a time in the
+order the page draws its sections, and then hands over the exact commands per device, numbered, with the
+risk, the downtime, how to verify each step and how to undo it. **The pane changes nothing.**
 
-- Five hosts, four families, one call: Ubuntu 26.04, Debian 12, Fedora 45, Arch, openSUSE Leap 15.6
-  → `exit_code 0, findings 0, blind 0`.
-- A real gated apply on the Fedora VM: 109 pending → stage rc 100 → apply rc 0 (3 installing / 107
-  upgrading, 105 s) → re-measured: kernel **installed** 7.2.15, **running** 7.2.11 →
-  `reboot_required: true` → after rebooting, `uname -r` reads `7.2.15-300.fc45`.
-- 348 unit tests; the 23 assertions ported from our standing routine (differentially checked against
-  it over 770 comparisons) are among them.
+`cve_apply` is the only tool that changes a machine. It refuses unless the operator types the host label,
+`sudo -n` works on that host, and `dry_run=false`; it stages, applies, re-measures and writes a receipt,
+and it hands the same commands over when it refuses. It never asks for, holds or forwards a password.
 
-## Disclosure (also in the README and SECURITY.md)
+## Verification at the pinned SHA
 
-- **Network**: `ubuntu.com/security/notices.json` and `/cves/<CVE>.json`, `api.osv.dev`, and the
-  container registry's manifest API via `docker buildx imagetools`. No telemetry, no analytics.
-- **Subprocesses**: `uname`, `dpkg-query`, `apt-cache`, `apt-get -s dist-upgrade`, `rpm`, `dnf -q
-  check-upgrade`/`list`, `pacman -Q`/`-Qu`, `zypper -q lu`, `docker ps|inspect|buildx`, and
-  `ssh <host>` — all read-only in the scan. The apply runs `apt-get -y full-upgrade` or
-  `dnf -y upgrade --refresh` with `sudo`, only after the typed host name, and writes a receipt.
-- **Credentials**: none. No `requires_env`/`optional_env`; registry reads are anonymous, remote hosts
-  use the operator's own SSH agent. The plugin never reads `.env` or `auth.json`.
-- **Files written**: `last_scan.json`, `settings.json` and `receipts.jsonl` under
-  `$HERMES_HOME/patch-sentinel`, mode 600.
-- **Desktop half**: opt-in (`defaultEnabled: false`), three panels + a gated apply control, talks
-  only to its own `/api/plugins/patch-sentinel` routes.
+- `python3 -m unittest discover -s tests -t .` — **349 tests**, green.
+- `python3 scripts/scenario_batch.py` — **19 situations, 176 assertions, 0 findings**: an empty home, a
+  read-only data dir, a corrupt state file, clock skew, no network, HTTP 429, a data dir that is a file,
+  a host entry shaped like a command, duplicate labels, and two identical runs on an unchanged machine.
+- `./scripts/pane_check.sh` — every panel rendered, both states.
+- `hermes plugins validate .` and `hermes plugins doctor . --ci` — green (11 tools, 0 hooks, no network
+  at import time).
+- `scripts/validate_plugin_catalog.py` on the entry file in this PR — **OK, 1 file(s) valid**.
+
+Read live, not from documentation: Ubuntu 26.04 (this machine) and a VPS over ssh, Debian 12, Fedora 45
+and Arch, by copying the plugin onto each VM and running it with that distro's own `python3`. The
+README's verified table names, per family, what was actually run — and the rows that are *not* verified
+(openSUSE is command-level only; Alpine has never accepted the lab key; the RHEL family has no live
+host) say so in the table, in the pane's gap list, and in every coverage answer.
+
+## Disclosure
+
+- **Network, anonymously**: `api.osv.dev`; `ubuntu.com/security/notices.json` and `/cves/<id>` on Ubuntu
+  hosts only; `bodhi.fedoraproject.org` on Fedora; `security.archlinux.org` on Arch; SUSE's OVAL document
+  on SUSE; and the container registries the user's images already come from, through
+  `docker buildx imagetools`. No telemetry, no analytics, no other third party.
+- **Subprocesses**: `uname`, `dpkg-query`/`dpkg -V`, `apt-cache`, `apt-get -s`, `rpm -qa`/`rpm -Va`,
+  `dnf -q check-update`, `pacman -Q`/`-Qu`/`-Qkk`, `zypper -q lu`, `apk version`/`apk audit`, `ss`,
+  `docker ps|inspect|buildx`, and `ssh <host>` for remote hosts. All read-only in the scan; every call is
+  an argv list, never `shell=True`. The one privileged path is `cve_apply`, which runs `sudo -n` on the
+  plan it just printed.
+- **Credentials**: none. No `requires_env`, no `optional_env`, no credential file read. Registry and
+  advisory reads are anonymous; remote hosts use the operator's own SSH agent, so `ssh` sees the key and
+  the plugin never does. `docker login` on a host is used by the docker CLI, not read by the plugin.
+- **Files written**: `last_scan.json`, `rescan.json`, `integrity.json`, `acks.json` and the apply
+  receipts under `$HERMES_HOME/patch-sentinel` (directory 700, files 600). Nothing outside it.
+- **Desktop half**: `desktop/plugin.js` uses only the plugin SDK and React — no prototype patching, no
+  `eval`, no `import()` beyond `@hermes/plugin-sdk`/`react`, no access to the app's markup or stores.
+
+## Admission scan
+
+`hermes plugins validate .` passes; the install scanner rates the plugin **caution**, not dangerous. The
+findings are `privilege_escalation` matches on strings like `sudo apt-get full-upgrade` — the plugin's
+output *is* patch commands, and those strings are what it prints for a human to run. Nothing in the scan
+executes them; the one tool that can is gated on a typed host name and `sudo -n`.
+
+## The pin
+
+The entry pins `d13d3693382ab8140b51873211831a3d4436590e`, which is the reviewed tree: README,
+SECURITY, MIT licence, the pane and its tests, the 78-second demo, the banner. The commit that writes the
+pin follows it, because a commit cannot contain its own hash. The `image:` URL is pinned to the same SHA,
+so the banner cannot change under a reviewer.
 
 ## Known gaps, stated as gaps
 
-- No in-image CVE scanning (needs trivy) and no per-project lockfile scanning; both are named in
-  every `cve_coverage` answer and on the pane's GAPS panel.
-- No adapter for Alpine (the `apk` code exists but has never read a real Alpine host, so it is not
-  registered — Alpine answers `unsupported`), macOS, or Windows (which needs a PowerShell transport
-  rather than a shell block).
-- The pinned SHA points at the reviewed tree; the pin itself lands in a follow-up commit, since a
-  commit cannot contain its own hash.
+- No CVE scanning inside image layers (needs an image scanner), and no coverage of a project that has
+  only a manifest and no lockfile. Both are named in every coverage answer and in the pane.
+- Alpine's `apk` adapter exists and is unit-tested against captured output but is **not registered** —
+  every headless Alpine image in the lab refused the key, so no live host has been read. Such a host
+  answers `unsupported`.
+- openSUSE Leap ships python 3.6 and the plugin needs 3.10+, so that family is command-level only.
+- No macOS or Windows: the probe is a POSIX shell block, and Windows would need a PowerShell transport
+  before it could be a claim.
