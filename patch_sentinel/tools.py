@@ -110,9 +110,13 @@ def _gap_advice(klass: str, label: str, reason: str) -> str:
     if klass == "images":
         # the advice has to fit the cause: a rate limit clears by waiting, a private tag needs a login
         if "429" in reason or "rate" in reason.lower():
-            return ("the registry rate-limited the check (HTTP 429) — Docker Hub does this from shared "
-                    "addresses, and it says nothing about this machine. Nothing changed on the host; "
-                    "the digest could not be compared. Try again in a few minutes.")
+            # The lever is not "a few minutes": Hub's anonymous allowance is a per-IP hourly bucket,
+            # and the durable fix is a login the plugin never sees but the docker CLI uses.
+            return ("the registry rate-limited this address (HTTP 429). Nothing changed on the host; the "
+                    "digest simply could not be compared, and Docker Hub counts anonymous pulls per IP "
+                    "per hour, so it clears as the window rolls. `docker login` on that host raises the "
+                    "allowance for good: this plugin runs the docker CLI, which uses that login — the "
+                    "credential never reaches the plugin.")
         if any(code in reason for code in ("401", "403", "unauthorized", "denied")):
             return ("the registry refused the check for this tag (HTTP 401/403): it is private, or it "
                     "needs a login this plugin does not have. Nothing changed on the host. Make the tag "

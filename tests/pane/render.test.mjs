@@ -293,7 +293,16 @@ for (const [name, render] of readStates) {
   if (!while_.includes('ps-ring')) throw new Error(name + ' does not animate while it reads')
   if (!while_.includes('reading')) throw new Error(name + ' does not say it is reading')
 }
-console.log('  read / read again / reading, with the same ring, in all three sections')
+// and all three show the elapsed seconds while they read: the language control used to say only
+// "reading" while the other two counted
+const timed = renderToStaticMarkup(createElement(IntegrityPanel, {
+  reading: { integrity: { state: 'ok', tamper: {} }, answers: [], read_at: 1, answer: 'x' },
+  busy: true, seconds: 7, onRead: noop, onRebaseline: noop }))
+if (!timed.includes('reading 7s')) throw new Error('the integrity control lost its timer')
+const timedLibs = renderToStaticMarkup(createElement(LanguagesPanel, {
+  libraries: { packages: [], vulnerable: [] }, onCheck: noop, busy: true, seconds: 7 }))
+if (!timedLibs.includes('reading 7s')) throw new Error('the language control does not count its seconds')
+console.log('  read / read again / reading 7s, with the same ring, in all three sections')
 
 // A stage of the run that could not look must appear in the to-do rows: exit 2 with counts on screen
 // and no sentence saying what was not measured reads as a complete scan.
@@ -376,7 +385,9 @@ const gaps = renderToStaticMarkup(createElement(GapsPanel, {
     { gap: 'project lockfiles', kind: 'limit', state: 'not measured', why: 'SECOND-DETAIL' }
   ] }
 }))
-if (!gaps.includes('1 fixable')) throw new Error('the fixable count is missing')
+// "fixable" overpromised: a blocked row is one the scan could not see, and a registry rate limit is
+// not something the operator fixes from the pane
+if (!gaps.includes('1 blocked')) throw new Error('the blocked count is missing')
 if (!gaps.includes('2 inherent limits')) throw new Error('the inherent-limit count is missing')
 if (!gaps.includes('explain them')) throw new Error('the detail toggle is missing')
 if (gaps.includes('STRUCTURAL-DETAIL')) throw new Error('inherent limits must start collapsed')

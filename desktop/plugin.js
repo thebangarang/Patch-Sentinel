@@ -1050,7 +1050,7 @@ function UpdatesPanel({ entry, hostLabel, scanning, busy, seconds, onRead }) {
 // --------------------------------------------------------------------------- LANGUAGES
 
 /** What the language check actually read, and what it found. Nothing runs until you ask. */
-function LanguagesPanel({ libraries, onCheck, busy, scanning }) {
+function LanguagesPanel({ libraries, onCheck, busy, scanning, seconds }) {
   const [projectPath, setProjectPath] = useState('')
   const [query, setQuery] = useState('')
   // a list of 130 rows where 127 say "clean" buries the three that matter: findings first, the rest
@@ -1224,7 +1224,7 @@ function LanguagesPanel({ libraries, onCheck, busy, scanning }) {
         // no second sentence: the header already says "nothing to run" and why. Saying it twice in
         // the same row is how a screen with nothing to do reads like a to-do list.
         : null,
-      jsx(ReadButton, { busy: busy, hasReading: !!libraries, onRead: () => onCheck(),
+      jsx(ReadButton, { busy: busy, hasReading: !!libraries, onRead: () => onCheck(), seconds: seconds,
                         title: 'Reads the machine\'s language stores and every virtualenv, then asks '
                           + 'osv.dev for advisories naming those exact versions' })
     ]),
@@ -2382,7 +2382,7 @@ function GapsPanel({ coverage, selected }) {
     blocked.length
       ? jsxs('div', { style: { marginBottom: '6px' } }, [
           jsx('div', { style: { fontSize: '0.75rem', color: C.danger, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '2px' } },
-            blocked.length + ' fixable — why a row is not green'),
+            blocked.length + ' blocked — could not look, and what to do about each'),
           blocked.map((gap, index) => gapRow(gap, index, true))
         ])
       : null,
@@ -2531,6 +2531,7 @@ export function PatchSentinel({ compact }) {
     })
   }, [])
   const [libBusy, setLibBusy] = useState(false)
+  const [libSeconds, setLibSeconds] = useState(0)
   // integrity read on its own: without this, pressing its "read again" showed nothing while the check
   // ran for a minute — the section's animation was tied only to the scan stage
   const [integrityBusy, setIntegrityBusy] = useState(false)
@@ -2757,6 +2758,11 @@ export function PatchSentinel({ compact }) {
   const libraries = libProject || bundle.libraries
   const checkLibraries = useCallback(async (projectPath) => {
     setLibBusy(true)
+    setLibSeconds(0)
+    const started = Date.now()
+    const ticker = setInterval(() => {
+      setLibSeconds(Math.round((Date.now() - started) / 1000))
+    }, 500)
     try {
       const query = projectPath ? '?project=' + encodeURIComponent(projectPath) : ''
       const answer = await call('/libraries' + query)
@@ -2766,7 +2772,9 @@ export function PatchSentinel({ compact }) {
       setLibProject({ answer: 'could not look: ' + (err && err.message ? err.message : err),
                       packages: [], vulnerable: [] })
     } finally {
+      clearInterval(ticker)
       setLibBusy(false)
+      setLibSeconds(0)
     }
   }, [])
 
@@ -2944,6 +2952,7 @@ export function PatchSentinel({ compact }) {
     jsx(LanguagesPanel, { libraries: deviceLibraries(bundle, selected) || libraries,
                           onCheck: checkLibraries,
                           busy: libBusy || (busy && stage === 'libraries'),
+                          seconds: libBusy ? libSeconds : (busy && stage === 'libraries' ? seconds : 0),
                           scanning: busy && stage === 'libraries' }),
     // The answer comes after the evidence it was built from: what must be done, then the commands.
     jsx(TodoPanel, { bundle, selected, onSelect: setSelected, devices }),
