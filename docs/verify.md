@@ -28,8 +28,8 @@ Real output, 2026-11-06, five machines declared:
 ## 0. The test suite, in the environment that runs all of it
 
 ```bash
-python3 -m unittest discover -s tests -t .   # 110 tests — the full run
-.venv/bin/python -m unittest discover -s tests -t .   # 110 tests, 8 skipped
+python3 -m unittest discover -s tests -t .   # 348 tests — the full run
+.venv/bin/python -m unittest discover -s tests -t .   # the same run under the project venv
 ```
 
 The project's own venv has no FastAPI (the plugin declares no Python dependency), so the six
@@ -149,7 +149,8 @@ The desktop app stages a copy of `desktop/plugin.js` and imports it at launch, s
 disk and not on screen. The pane prints its own build in the footer:
 
 ```
-pane build 79ffd2d4 · matches the repo
+pane build: `GET /health` reports the build hash of the pane it serves — it must match
+`sha256sum desktop/plugin.js`
 ```
 
 If it disagrees, or no footer is visible, quit the app completely and relaunch — closing the pane

@@ -25,10 +25,8 @@
   `patch-sentinel`, Python package `patch_sentinel`), template leftovers removed (`CLAUDE.md`,
   `deploy_safe.py`), `LICENSE` (MIT) and a project `.gitignore`/`.env.example` written for a public
   plugin, remote wired to `git@github.com:thebangarang/Patch-Sentinel.git` and pushed.
-- **Result:** contest rules recorded in `project-context.md` (due 11 Nov 17:00 EST; entry = catalogue PR
-  + ≤90 s X video + Typeform), D1 closed, D8 (MIT) and D9 (deadline sets the scope) added.
-- **Next step:** unchanged — port the pure logic into `patch_sentinel/verdict.py` (task 1 in
-  `RESUME.md`), then the plugin shell so the catalogue PR has something to pin.
+- **Result:** D1 closed (name), D8 (MIT licence) and D9 (a fixed scope for the first release) added.
+- **Next step:** port the pure logic into `patch_sentinel/verdict.py`, then the plugin shell.
 
 ## 2026-11-06 (evening) — tasks 1 and 2 of RESUME done: the core and the four tools
 

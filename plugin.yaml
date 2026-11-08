@@ -2,24 +2,24 @@ name: patch-sentinel
 version: 0.1.0
 manifest_version: 2
 description: >
-  Answers "are we patched?" with evidence for whatever the machine actually runs, and says when it
-  could not look instead of reporting a clean. Chooses its package-manager adapter from the host's
-  own /etc/os-release (apt for Ubuntu/Debian and relatives, dnf for Fedora/RHEL/Rocky/Alma/CentOS/
-  Amazon; every other OS answers "unsupported" with its name rather than a green), and measures
-  three surfaces: the running kernel against the newest installed and the newest installable (a
-  kernel patch counts only when it is RUNNING); every pending package update, deliberately not
-  filtered to -security, with the advisory that names that exact version where a feed covers it;
-  and the container images whose tags no longer resolve to the digest you run. A fifth tool checks
-  the language stack (npm's global tree, the pip environment on PATH, and the same shape for other
-  ecosystems) against the OSV advisory database, returning each vulnerable package with its fixed
-  versions. Read-only in the scan: it installs nothing, reboots nothing. Every check has three
-  outcomes — clean, finding, could-not-look — and an unreachable host, an unimplemented distro or a
-  rate-limited registry is reported as unknown with its reason, never as patched. A sixth tool,
-  cve_apply, can apply the plan; it is the only one that changes a machine and it refuses unless the
-  operator types the host name, the user can sudo without a prompt there, and dry_run is explicitly
-  false — staging first, re-measuring afterwards, and writing a receipt. Known blind spots, stated in
-  every coverage answer: CVEs inside image layers, and language dependencies outside the global
-  trees.
+  Answers "are we patched?" with evidence, for whatever the host actually runs — and says when it
+  could not look instead of reporting a clean. The adapter is chosen from the host's own
+  /etc/os-release (apt, dnf, pacman, zypper, apk; any other OS answers "unsupported" with its name
+  rather than a green). It reads: every pending package update, deliberately not filtered to
+  -security, with the exact fixed version from that family's advisory source (Ubuntu USN, Bodhi for
+  Fedora, OSV per release for Debian/Alpine/RHEL, Arch's tracker, SUSE's OVAL); the running kernel
+  against the newest installed and installable, because a kernel patch counts only when it is
+  RUNNING; container image tags against their registry digests, anonymously; the language stack —
+  npm, pip (global and every virtualenv), PHP, Ruby, Rust, .NET, Maven, Go, Dart, jars on disk and
+  lockfile pins — against OSV; the installed files against their package checksums, the preload hook
+  and the listening sockets against a recorded baseline; and a CycloneDX SBOM export. The scan is
+  read-only: it installs nothing, reboots nothing. Every check has three outcomes — clean, finding,
+  could-not-look — and an unreachable host, an unimplemented distro or a rate-limited registry is
+  reported as unknown with its reason. cve_rescan reads every surface of one device in the order the
+  pane draws them; cve_apply is the only tool that changes a machine and refuses unless the operator
+  types the host name, sudo works without a prompt there, and dry_run is explicitly false. Known
+  blind spots, stated in every coverage answer: CVEs inside image layers, and dependencies without a
+  lockfile.
 license: MIT
 author: Kevin L. (AITurn)
 homepage: https://github.com/thebangarang/Patch-Sentinel

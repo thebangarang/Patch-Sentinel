@@ -46,18 +46,24 @@ tool's credential file, and it must never place a secret in a subprocess environ
 
 ## Privileged operations
 
-- Everything the scan does is unprivileged: `apt-get -s dist-upgrade`, `uname -r`, `docker ps`,
-  `docker buildx imagetools inspect`, `ssh <host>` (read-only commands).
-- **Nothing privileged is implemented in v0.1.0.** The plan's commands are strings for a human; the
-  test suite asserts that no apply path exists. When an apply is added it must be gated (host name
-  typed by the operator), recorded (a receipt line), reversible (documented per action) and never
-  reachable from the scheduler — the design for that is in `docs/design.md` *Apply gate*.
+- Everything the **scan** does is unprivileged: `apt-get -s dist-upgrade`, `uname -r`, `docker ps`,
+  `docker buildx imagetools inspect`, `ssh <host>` (read-only commands). The pane calls nothing that
+  changes a machine — it hands over commands.
+- **One privileged path exists, and it is a tool, not a control:** `cve_apply`. It refuses unless the
+  operator types the host name, `dry_run` is explicitly `false`, and `sudo -n` works on that host; it
+  runs `sudo -n` only, so a password prompt can never hang a call, and it hands the same commands over
+  when it refuses. It stages, applies, re-measures and writes a receipt, is reversible per step, and is
+  never reachable from a schedule. `tests/test_apply.py` holds the gate; `docs/apply-by-hand.md` has the
+  walkthrough.
 
 ## Tier checklist (High) — status
 
 - [x] Core security checklists read (`~/hermes-admin/security-framework.md`)
-- [ ] Dependency CVE audit — n/a in v0.1 (stdlib only); re-check if a dependency is added
-- [ ] Least-privilege review — before the first public release
+- [x] Dependency CVE audit — n/a while the plugin is stdlib only; re-check the day a dependency lands
+- [x] Least-privilege review (2026-11-08): every subprocess is an argv list (no `shell=True`, no
+  `eval`/`exec` anywhere in `patch_sentinel/` or `dashboard/`), ssh targets are validated against what
+  can legitimately sit in an ssh argv, state files are written 600 inside a 700 directory, and the
+  network surface is five anonymous HTTPS endpoints plus the registry
 - [x] Agent instructions reviewed for injection (this file + `AGENTS.md`)
 - [x] Secrets scan before each public commit — none read, none written, none in the tree
 - [x] Disclosure block in the README (network calls, subprocesses, credential handling)
@@ -79,3 +85,4 @@ tool's credential file, and it must never place a secret in a subprocess environ
 |---|---|---|---|
 | 2026-11-06 | Initial design + threat model, from the CVE-2026-98432 incident | tier High set; three false-all-clear classes named | Hermes |
 | 2026-11-06 | First code: the four read-only tools + the measurement layer | no credential path, no apply path; both admission gates green; 43 tests | Hermes |
+| 2026-11-08 | Pre-release audit: whole tree re-read, apply control removed from the pane, coverage claims per family | no secret in the tree; argv-only subprocesses; the pane calls nothing that writes; 348 tests | Hermes |

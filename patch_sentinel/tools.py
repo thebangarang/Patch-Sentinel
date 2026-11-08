@@ -1159,9 +1159,25 @@ def cve_libraries(args: dict, **kwargs) -> str:
                         "not package by package"}}
 
     if not components:
-        return _json({**base, "vulnerable": [], "exit_code": 2,
-                      "reason": "no supported language package manager answered on this host — "
-                                "nothing was measured, which is not the same as clean",
+        outcomes = (collected.get("outcomes") or {})
+        unreadable = sorted(eco for eco, state in outcomes.items() if state == "unreadable")
+        if unreadable:
+            why = (f"{host['label']}: {len(unreadable)} language store(s) answered but could not be "
+                   f"read ({', '.join(unreadable[:4])}) — nothing was measured here, which is not the "
+                   f"same as clean")
+            return _json({**base, "vulnerable": [], "exit_code": 2, "reason": why, "answer": why})
+        # Every installer answered "not on PATH", which is a positive `command -v` miss rather than a
+        # failed read — but it is still nothing measured, so it stays exit 2 and says what would make
+        # it actionable. Calling this clean would turn a broken PATH in the ssh session into a green
+        # library section on a host that does run npm.
+        absent = sorted(eco for eco, state in outcomes.items() if state == "missing")
+        listed = (", ".join(absent[:6]) + ("…" if len(absent) > 6 else "")
+                  if absent else "no ecosystem reported a state")
+        why = (f"{host['label']}: none of the supported language tools answered ({listed}) — each was "
+               f"checked with `command -v` and none read, which is not the same as clean. If this host "
+               f"does run one of them, the ssh session's PATH is what to look at")
+        return _json({**base, "vulnerable": [], "exit_code": 2, "reason": why, "answer": why,
+                      "absent": absent,
                       "limits": LIBRARY_LIMITS})
 
     answer = osv.query(components)
@@ -1474,8 +1490,17 @@ def cve_rescan(args: dict, **kwargs) -> str:
             continue
         name = stage["name"]
         payload = plan_payload if name == "plans" else (results.get(name) or {})
-        why = " ".join(str(payload.get("answer") or "").split())
-        blind.append({"name": name, "why": why or "no reason recorded"})
+        # a stage that reports blind surfaces says so in `blind`; its `answer` is a summary that would
+        # read as "everything is fine" once quoted here
+        entries = payload.get("blind")
+        if isinstance(entries, list) and entries:
+            why = "; ".join(
+                " ".join(str(item.get("class") or item.get("source") or "a surface").split())
+                + ": " + " ".join(str(item.get("reason") or item.get("why") or "").split())
+                for item in entries if isinstance(item, dict))
+        else:
+            why = " ".join(str(payload.get("answer") or payload.get("reason") or "").split())
+        blind.append({"name": name, "why": why.strip(" ;") or "no reason recorded"})
 
     with lock:
         bundle["devices"][label]["plan"] = plan_payload
@@ -1516,7 +1541,10 @@ def cve_rescan(args: dict, **kwargs) -> str:
     timings = " · ".join(f"{stage['name']} {round(stage['seconds'])}s" for stage in bundle["stages"])
     def _short(text):
         text = " ".join(str(text or "").split())
-        return text[:177].rstrip() + "..." if len(text) > 180 else text
+        if len(text) <= 220:
+            return text
+        cut = text[:220].rsplit(" ", 1)[0]
+        return cut.rstrip(",;:—-") + "…"
 
     blind_line = (" — could not look: " + " · ".join(
         f"{item['name']}: {_short(item['why'])}" for item in blind)) if blind else ""

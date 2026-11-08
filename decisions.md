@@ -47,7 +47,8 @@ them. That is honest, and it is a feature: an unexplained update is worth seeing
 (`docker buildx imagetools inspect --format '{{.Manifest.Digest}}'`). In-image CVEs are v0.2 via
 `trivy`.
 **Reason:** digests are a fact, need no database, and catch the common case (a rebuilt base image). A
-scanner adds a binary, a database and a licence to review — too much for a hackathon slice.
+scanner adds a binary, a database and a licence to review — too much for the first release, and the
+digest check already answers the question that comes up weekly.
 **Alternatives:** `docker manifest inspect -v` — **rejected after measurement**: its first digest never
 equals the image's own RepoDigest, so it reports every image stale for ever.
 **Consequence:** a rebuilt image is reported as "an update exists", never as "these CVEs are fixed".

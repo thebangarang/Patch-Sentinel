@@ -1,7 +1,7 @@
 # The 90-second demo — shot list, prompts, captions
 
 Everything below is filmable **as it stands**: every number comes from a run on this machine. Record
-one continuous take, then cut the dead air (the apply takes ~105 s — cut it to the receipt, and say
+one continuous take, then cut the dead air (the upgrade takes ~105 s — cut it to the re-read, and say
 the duration out loud).
 
 ## Before you record (5 minutes, once)
@@ -17,7 +17,7 @@ rm -f tmp/vms/fedora.qcow2 tmp/vms/fedora-seed.iso      # a fresh Fedora = 109 p
 Also have open: the Hermes window with the **Patch Sentinel pane**, and a terminal at
 `~/projects/patch-sentinel`.
 
-Do **not** reboot the beelink, and do not apply to it — every real change in the video happens on
+Do **not** reboot the beelink, and do not upgrade it — every real change in the video happens on
 the Fedora VM, which is disposable.
 
 ## The six shots
@@ -29,7 +29,7 @@ the Fedora VM, which is disposable.
 | 3 | 0:30–0:46 | **LIBS & RUNTIMES** on the log4j fixture: `8 advisories · critical · fix 2.15.0`, chips `EXPLOITED · RANSOMWARE` and `EPSS 100.0%` | "This is the part that decides tonight: not 'critical', but *being used in ransomware campaigns right now*, from CISA's own catalogue, with the probability score beside it." |
 | 4 | 0:46–1:02 | **SERVERS → add a server**: type `debian-lab` / `debian@10.0.0.9:2223` → test fails at chip `STOPPED AT AUTH` with the `ssh-copy-id` command → copy, run, test again → `reached it: apt · debian/12 · kernel-current` | "Adding a fleet member never fails with 'it didn't work'. It tells you which hop failed and gives you the one command that fixes it — and it only saves the host once a real probe came back." |
 | 5 | 1:02–1:16 | **SYSTEM PACKAGES** for `debian-lab`: the vendor-lag block — `fix exists upstream, this archive does not carry it` — plus the `archive index is older than 48 h` warning | "A fix can exist and still not be installable here. That's its own state, and it never gets folded into 'nothing to do'." |
-| 6 | 1:16–1:30 | **APPLY**: type `fedora-lab` → stage → apply (cut the 105 s) → receipt: kernel *installed* 7.2.15, *running* 7.2.11 → then `uname -r` after reboot | "Applying needs the name typed by hand. It applied, re-measured, and refused to call itself patched until the reboot — which is the whole point." |
+| 6 | 1:16–1:30 | **THE FIX COMMANDS** for `fedora-lab`: `copy all` → paste into that VM's terminal → the run finishes → back in the pane, `scan all · fedora-lab` again: the kernel line now reads *installed 7.2.15, running 7.2.11 — reboot owed* | "The pane never pretends to be the last step: it gives you the commands, for that machine, with the undo. And it still refuses to call it patched — the kernel is installed, not running." |
 
 Narration is optional; if you prefer silence, the six shots still tell it — subtitle them with those
 same lines.
@@ -38,7 +38,7 @@ same lines.
 
 > Patch Sentinel — a Hermes plugin that answers "are we patched?" with evidence, for whatever the
 > host runs: apt, dnf, pacman, zypper, container digests, your npm/pip stack. It refuses to say
-> "clean" when it couldn't look. 90 s, real machines, one gated apply. @NousResearch
+> "clean" when it couldn't look. 90 s, real machines, the exact commands. @NousResearch
 > github.com/thebangarang/Patch-Sentinel
 
 ## Credits line (end card)
@@ -57,7 +57,7 @@ same lines.
   safety. The pane says `kev_state: measured`, never `safe`.
 - **Not** "EPSS says it will be exploited" — it is a 30-day forecast, shown as a percentage, never as a
   verdict on its own.
-- **Not** "it patched my laptop": the real apply happened on a disposable Fedora VM, and saying so
+- **Not** "it patched my laptop": the real upgrade happened on a disposable Fedora VM, and saying so
   costs nothing.
 - The 109 pending updates are **the image's**, not a machine that was neglected — say "a fresh boot
   of the Fedora cloud image, six days behind" if it comes up.

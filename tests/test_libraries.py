@@ -327,6 +327,11 @@ class LibrariesTool(unittest.TestCase):
         payload = self._run([], {"ok": True, "queried": 0, "results": []}, None)
         self.assertEqual(payload["exit_code"], 2)
         self.assertIn("not the same as clean", payload["reason"])
+        # and the sentence says what would make it actionable, because on a bare VPS this is the
+        # normal state and "could not look" with no next step is noise
+        self.assertIn("command -v", payload["reason"])
+        self.assertIn("PATH", payload["reason"])
+        self.assertTrue(payload["answer"], "a refusal with no sentence renders as nothing in the pane")
 
     def test_an_unreachable_database_is_a_refusal(self):
         answer = {"ok": False, "why": "OSV answered HTTP 503", "results": [], "queried": 2}

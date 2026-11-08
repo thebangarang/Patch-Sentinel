@@ -6,13 +6,15 @@
 - **Owner:** AITurn (internal tool, no customer data)
 - **Security tier:** High (Tier 2). Escalate to Critical if unattended application is ever enabled.
 - **Environment:** development on the beelink; ships as a standalone public repo
-- **Goal:** a Hermes plugin — hackathon entry — that tracks patch posture and proposes/executes fixes
+- **Goal:** a Hermes plugin that answers "are we patched?" with evidence, hands over the commands, and
+  never reports a clean it did not measure
 
 ## Read these first
 
-1. `project-context.md` — why this exists and what already exists to reuse
-2. `docs/design.md` — architecture and the eight rules, each traced to a measured incident
-3. `docs/landscape.md` — what we wrap instead of rebuilding
+1. `project-context.md` — why this exists, what it does today, and the load-bearing constraints
+2. `docs/design.md` — the decisions and the rules, each traced to a measured incident
+3. `docs/coverage.md` — what is proven, on which machine, and what is not
+4. `docs/landscape.md` — what we wrap instead of rebuilding
 
 ## Security rules that always apply
 
@@ -35,9 +37,10 @@ it was supposed to remember. `hermes-admin/scripts/prompt-audit.py` checks this 
 3. **Never invent a source.** The allowlist in `docs/design.md` is closed; adding one requires a test
    that proves its parsing *and* its failure mode.
 4. **A check that could not look is never rendered green.** Three outcomes, always.
-5. **No secrets in the plugin.** Hosts are reached over SSH with the user's own agent key; a token
-   (registry, API) is read through `agent.secret_scope.get_secret`, declared in `requires_env`, and
-   never logged, never returned in a tool payload.
+5. **No credential path at all.** Registry and advisory reads are anonymous; hosts are reached over
+   SSH with the user's own agent key, so the plugin never sees it. No secret is stored, read, logged
+   or returned in a payload — there is no `requires_env`, and adding one is a design decision, not a
+   convenience.
 6. **A remote host is read, never modified, by anything that runs on a schedule.**
 7. **Stdlib only** in v0.1. A dependency is an install-time consent prompt and a version conflict with
    Hermes' own pins.
@@ -51,7 +54,7 @@ it was supposed to remember. `hermes-admin/scripts/prompt-audit.py` checks this 
 3. Parameterized SQL only (the store is SQLite in `data/`).
 4. Validate every external payload (USN JSON, apt output, registry answers) before using it, and test
    the malformed case — a source that changes shape must fail loudly, not parse into an empty list.
-5. Smallest useful version first; the v0.1 slice in `project-context.md` is the boundary.
+5. Smallest useful version first; the surface in `project-context.md` is the boundary.
 6. Document decisions in `decisions.md`, progress in `worklog.md`.
 7. Branch per implementation round; no direct commits to `main` once the repo is public.
 

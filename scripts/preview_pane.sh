@@ -72,7 +72,12 @@ const integrity = device.integrity || bundle.integrity
 
 const body = renderToStaticMarkup(createElement('div', {}, [
   createElement(HowItWorks, { key: 'how', open: process.env.PREVIEW_HOWTO !== 'closed', onToggle: noop }),
-  createElement(VerdictBar, { key: 'v', status: { ...scan, hosts: selected ? { [selected]: deviceEntry || {} } : {} } }),
+  // every measured device, so the header's fleet count matches the servers list below it
+  createElement(VerdictBar, { key: 'v', status: { ...scan,
+    hosts: Object.fromEntries(labels.map((label) => [label,
+      (bundle.devices || {})[label] && (bundle.devices || {})[label].scan
+        ? ((bundle.devices[label].scan.hosts || {})[label] || {})
+        : (label === selected ? (deviceEntry || {}) : {})])) } }),
   createElement(HostsPanel, { key: 'h', onChanged: noop, initialHosts: labels.map((label) => ({
     label, target: (scan.hosts[label] || {}).target || 'local' })) }),
   createElement(UpdatesPanel, { key: 'u', entry: deviceEntry, hostLabel: selected }),

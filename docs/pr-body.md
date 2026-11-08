@@ -25,7 +25,7 @@ applies, then re-measures the host so the receipt says what the machine *is*.
 - A real gated apply on the Fedora VM: 109 pending → stage rc 100 → apply rc 0 (3 installing / 107
   upgrading, 105 s) → re-measured: kernel **installed** 7.2.15, **running** 7.2.11 →
   `reboot_required: true` → after rebooting, `uname -r` reads `7.2.15-300.fc45`.
-- 106 unit tests; the 23 assertions ported from our standing routine (differentially checked against
+- 348 unit tests; the 23 assertions ported from our standing routine (differentially checked against
   it over 770 comparisons) are among them.
 
 ## Disclosure (also in the README and SECURITY.md)

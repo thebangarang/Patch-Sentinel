@@ -13,15 +13,19 @@ repo: https://github.com/thebangarang/Patch-Sentinel
 sha: "640f14681de4ed3bbdafe845bead962967e3c1bb"
 subdir: ""
 description: >
-  Answers "are we patched?" with evidence, for whatever the host runs — apt, dnf, pacman and zypper
-  adapters chosen from the host's own /etc/os-release, plus container image digests and the language
-  stack (npm, pip) through OSV. Three outcomes per check, so an unreachable host, an unimplemented
-  distro or a rate-limited registry reads as unknown rather than clean; a gated apply stages,
-  applies, re-measures and writes a receipt.
+  Answers "are we patched?" with evidence, for whatever the host runs — an adapter chosen from the
+  host's own /etc/os-release (apt, dnf, pacman, zypper, apk), the running kernel against the newest
+  installed and installable, whatever advisory names the fixed version per release (Ubuntu notices,
+  OSV per release, Bodhi, Arch's tracker, SUSE's OVAL), container image digests, the language stack
+  across nine ecosystems through OSV, package checksums and sockets against a recorded baseline, and
+  a CycloneDX SBOM. Every check has three outcomes, so an unreachable host, an unimplemented distro
+  or a rate-limited registry reads as unknown rather than clean. The pane reads one device at a time
+  and hands over the exact commands; a gated cve_apply tool stages, applies, re-measures and writes a
+  receipt for an agent explicitly asked to patch.
 maintainer: thebangarang
 tier: community
 category: automation
 requires_hermes: ">=0.19"
 version: "0.1.0"
 docs_url: "https://github.com/thebangarang/Patch-Sentinel#readme"
-image: ""
+image: "https://raw.githubusercontent.com/thebangarang/Patch-Sentinel/main/docs/screenshot.png"

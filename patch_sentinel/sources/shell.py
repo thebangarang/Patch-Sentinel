@@ -1,8 +1,8 @@
 """Run one command locally or on a remote host — the only place this plugin shells out.
 
 Read-only in the scan: the simulation (`apt-get -s`), `uname`, `dpkg-query`, `apt-cache`,
-`docker ps|inspect|buildx imagetools`. Nothing here writes, installs or restarts anything;
-the apply path is deliberately absent from v0.1 (D6/D9).
+`docker ps|inspect|buildx imagetools`. `cve_apply` is the one caller that may write, it runs only
+`sudo -n`, and it is never reached from the pane.
 
 Failure is a value, never an exception: a command that could not run returns a non-zero code
 plus its text, and the caller turns that into an `unknown` outcome with a reason

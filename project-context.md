@@ -1,87 +1,79 @@
 # patch-sentinel — project context
 
-## What we are building
+## What it is
 
-A **Hermes plugin** that watches the patch posture of the machine Hermes runs on — and of remote
-hosts we manage over SSH — and makes its owner reactive: what is published, what we run, what to do
-next, with the option to apply behind a typed confirmation.
+A **Hermes plugin** that answers *"are we patched?"* with evidence, for the machine Hermes runs on and
+for any host it can reach over SSH, and that hands over the exact commands to close what it finds.
 
-Target: **hackathon entry**. Deadline, rules and judging criteria are not yet known (see *Open
-questions*), so nothing in this project assumes them.
+One rule governs the whole product: **an answer is a measurement, never an assumption.** Every check
+reports one of three outcomes — clean, finding, *could not look* — and a surface that could not be read
+is never shown as patched. `exit_code` 0 means nothing to do, 1 something to patch, 2 something could
+not be looked at.
 
-## Why this, why now
+## Why it exists
 
-We lived the problem for nine days in November 2026 — see `~/hermes-admin/threads/platform--kernel-cve.md`
-and `platform--patch-routine.md`:
+We lived the problem in November 2026:
 
-- CVE-2026-98432 was published 15 Oct; Ubuntu shipped the fix (7.0.0-43.43) on 5–6 Nov.
+- CVE-2026-98432 was published 15 Oct; Ubuntu shipped the fixed kernel (7.0.0-43.43) on 5–6 Nov.
 - **Ubuntu's CVE page still read "vulnerable, work in progress" while the fixed kernel was already
-  published and installable through `-updates`.** Anyone trusting the CVE page alone would still be
-  waiting.
+  published and installable through `-updates`.** Anyone trusting the CVE page alone was still waiting.
 - **`apt-get upgrade` silently keeps a new kernel back** (a new kernel arrives as a new *package*), so
   the box looks handled and is not.
 - The fix arrived through `-updates`, not `-security` — a security-pocket filter would have missed it.
+- The machine had the fixed kernel *installed* and was still *running* the old one. A version list would
+  have called that patched. It was not.
 - A Docker Hub `429` made an image check answer "nothing to do" while four images were out of date: a
   false all-clear that took a second instrument to catch.
 
 Each of those is now a rule in `docs/design.md`. That is the differentiator — not "we scan CVEs", but
 "we refuse to report a clean we did not measure".
 
-## What already exists on this machine (reuse, do not rebuild)
+## What it does
 
-| asset | what it does | how it is reused |
-|---|---|---|
-| `~/hermes-admin/scripts/cve-watch.py` | the standing routine: USN feed + apt simulation + registry digests + kernel currency, per host, with a 23-assertion selftest | **the logic core** — port the pure functions (`parse_inst`, `usn_index`, `kernel_verdict`, `image_state`) and their fixtures |
-| `~/hermes-admin/scripts/pull-pending-images.sh` | 429-aware pull retry; downloads only, never restarts | the "stage, never apply" pattern |
-| `~/hermes-admin/scripts/install-cve-2026-98432-controls.sh` | interim mitigations when no patch exists (idempotent, `--revert`) | the *interim controls* feature (v0.2) |
-| `~/hermes-admin/scripts/notify.py` | the one alert channel, dedup by key, `--dry-run` | notification path, unchanged |
-| `~/hermes-admin/scripts/probe-cve-2026-98432.py` | proves a netfilter control by effect | the "prove by effect, not by config" test pattern |
-
-## Constraints that shape the build
-
-1. **Hermes plugin API** (`hermes-agent` skill → `references/plugin-authoring.md`): `plugin.yaml` +
-   `__init__.py:register(ctx)`; tools return JSON strings and never raise; the desktop half is
-   `desktop/plugin.js` + `dashboard/{manifest.json,plugin_api.py}` and is **opt-in for the user**;
-   validate with `hermes plugins validate .` and `hermes plugins doctor . --ci` — the latter **blocks
-   sockets during registration**, so nothing may touch the network at import time.
-2. **No declared Python dependencies if avoidable** — stdlib only; network calls at call time.
-3. **Project isolation** (root AGENTS.md, 8 dimensions): this folder only, its own `.venv`, `.env`,
-   git repo; services loopback-only.
-4. **Security tier: High (Tier 2)** — see `SECURITY.md`. It reads privileged state and can change a
-   system, so those rules are load-bearing.
-
-## Scope for v0.1 (the hackathon slice)
-
-In:
-- Local host + one remote over SSH (config-driven).
-- Three sources: Ubuntu USN feed, the apt simulation, container image digests.
-- Tools: `cve_scan`, `cve_plan`, `cve_explain`, `cve_coverage`.
-- A dashboard pane: *now*, *pending*, *gaps*.
-- A daily scan with change-only notification.
-
-Out (explicitly, so a fresh session does not drift): applying patches unattended; macOS/Windows;
-in-image CVE scanning; SCAP/OVAL compliance; any SaaS backend.
-
-## The contest (answered 2026-11-06)
-
-**Hermes Agent Plugin Hackathon**, announced by @NousResearch on 4 Nov 2026: 7 days, $20,000 in prizes.
-
-| rule | what it means for us |
+| surface | how it is read |
 |---|---|
-| **Submissions due 5 PM EST, 11 Nov 2026** (= 23:00 CET) | five working days from the day this project opened |
-| Entry = **a PR adding the plugin to the Hermes plugin catalogue** | needs a public repo, **MIT licence** (added), README + SECURITY with a disclosure block, and `plugin-catalog/patch-sentinel.yaml` pinning a full 40-char SHA |
-| plus a **demo video ≤ 90 s on X, tagging @NousResearch** | the video is a product surface, not a formality — the beat sheet is in `docs/design.md` |
-| plus the **Typeform** (`form.typeform.com/to/FwJLvOln`) with both links | can be sent as soon as the PR is open |
-| judged on **usefulness, reliability, polish, creativity**; favours plugins that do more than a prompt or a skill | our differentiator is the honesty layer (three outcomes, installed≠running) — exactly "more than a prompt" |
+| system packages | the host's own manager — apt, dnf, pacman, zypper, apk — through its simulation/dry-run output; never filtered to `-security` |
+| running kernel | running vs newest installed vs newest installable, and the held-back boot |
+| vendor lag | the advisory that names the fixed version, per family: Ubuntu USN, Debian/Alpine/RHEL through OSV per release, Arch's AVG tracker, Fedora's Bodhi, SUSE's OVAL |
+| container images | tag → digest against the registry, anonymously |
+| integrity | package checksums, `/etc/ld.so.preload`, listening sockets against a recorded baseline |
+| language stack | npm, pip (global *and* every virtualenv), PHP, Ruby, Rust, .NET, Maven, Go, Dart, plus jars on disk and lockfile pins, against OSV |
+| SBOM | CycloneDX export of what was read |
+| the commands | the plan, per device, with risk, downtime, how to verify and how to undo |
 
-Repository: **github.com/thebangarang/Patch-Sentinel** (public; empty until the first push).
+The pane has **one control**: `scan all · <device>`. It reads one device at a time, in the order the page
+draws its sections — packages → integrity → libs & runtimes — and every device keeps its own last
+reading. Nothing in the pane changes a machine; it hands over commands. `cve_apply` exists as a tool for
+an agent explicitly asked to patch (typed host name, dry run by default, `sudo -n`).
 
-### Decided
+## Constraints that are load-bearing
 
-- **Auto-apply is out of the demo** (operator, 2026-11-06): the typed-confirmation gate is built, and
-  unattended patching is not. Do not re-ask.
+1. **`hermes plugins validate .` and `hermes plugins doctor . --ci` must stay green** — the latter blocks
+   sockets during registration, so nothing may touch the network at import time.
+2. **Stdlib only.** No declared Python dependencies; network calls happen at call time, never at import.
+3. **Project isolation** (root AGENTS.md, 8 dimensions): this folder only, its own `.venv` and `.env`,
+   its own git repo; services loopback-only.
+4. **Security tier: High (Tier 2)** — see `SECURITY.md`. It reads privileged state and can change a system
+   through `cve_apply`, so those rules are load-bearing.
+5. **No credential path.** Anonymous registry and advisory reads; remote hosts use the operator's own SSH
+   agent. The plugin stores, reads and forwards no secret.
 
-### Still open
+## Provenance
 
-- **Who posts the video and the form** — both need the operator's own X account and the Typeform. The
-  agent writes the script, the credits line and the caption; it never posts them.
+The logic core was ported from a standing routine in `~/hermes-admin/scripts/` (`cve-watch.py` and its
+23-assertion selftest), and the verdict functions in `patch_sentinel/verdict.py` are a differential port
+of it — the same inputs give the same answers, checked in `tests/`.
+
+## Out of scope, deliberately
+
+Applying patches unattended; macOS and Windows (the plugin answers `unsupported` with the OS name); CVE
+scanning inside image layers (needs an image scanner — reported as a stated gap, never as clean);
+SCAP/OVAL compliance scanning; any SaaS backend or telemetry.
+
+## Where the state lives
+
+- `README.md` — what it does and how to run it.
+- `docs/coverage.md` — the verified matrix: which distro, which surface, what was actually run.
+- `docs/design.md` — the decisions, including the ones that were reversed.
+- `docs/verify.md` — the commands that reproduce every claim.
+- `worklog.md` · `decisions.md` — the running record.
