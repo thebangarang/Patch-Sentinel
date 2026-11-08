@@ -314,6 +314,57 @@ class TheBaselineIsAFact(unittest.TestCase):
                              ["package checksums", "preload hook", "listening sockets"])
 
 
+class RepairHints(unittest.TestCase):
+    """A mismatch with no command is a dead end — the owner is resolved on the host, not guessed."""
+
+    def _state(self, tool="dpkg -V"):
+        return {"tamper": {"tool": tool, "changed": ["/etc/apparmor.d/disable"],
+                           "missing": [], "changed_count": 1}}
+
+    def test_the_owner_becomes_a_reinstall_command(self):
+        original = integrity.shell.run
+        integrity.shell.run = lambda *a, **k: (0, "FILE\t/etc/default/ufw\tufw\n")
+        try:
+            state = integrity.repair_hints(self._state(), None, 10)
+        finally:
+            integrity.shell.run = original
+        repair = state["tamper"]["repair"][0]
+        self.assertEqual(repair["package"], "ufw")
+        self.assertEqual(repair["command"], "sudo apt-get install --reinstall ufw")
+        self.assertEqual(state["tamper"]["repair_command"], repair["command"])
+
+    def test_a_directory_the_package_ships_is_named_as_one(self):
+        original = integrity.shell.run
+        integrity.shell.run = lambda *a, **k: (0, "DIR\t/etc/apparmor.d/disable\tapparmor\n")
+        try:
+            state = integrity.repair_hints(self._state(), None, 10)
+        finally:
+            integrity.shell.run = original
+        self.assertEqual(state["tamper"]["repair"][0]["kind"], "directory")
+
+    def test_a_path_no_package_claims_gets_no_command(self):
+        original = integrity.shell.run
+        integrity.shell.run = lambda *a, **k: (0, "FILE\t/opt/local/thing\t\n")
+        try:
+            state = integrity.repair_hints(self._state(), None, 10)
+        finally:
+            integrity.shell.run = original
+        repair = state["tamper"]["repair"][0]
+        self.assertIsNone(repair["package"])
+        self.assertTrue(repair["command"].startswith("#"), "an unowned path got a command")
+        self.assertEqual(state["tamper"]["repair_command"], "")
+
+    def test_an_rpm_host_reinstalls_with_dnf(self):
+        original = integrity.shell.run
+        integrity.shell.run = lambda *a, **k: (0, "FILE\t/usr/bin/bash\tbash\n")
+        try:
+            state = integrity.repair_hints(self._state("rpm -Va"), None, 10)
+        finally:
+            integrity.shell.run = original
+        self.assertEqual(state["tamper"]["repair"][0]["command"],
+                         "sudo dnf reinstall bash")
+
+
 class RootCoverage(unittest.TestCase):
     """A root run the operator did must close the row — and reopen when the package set moves.
 

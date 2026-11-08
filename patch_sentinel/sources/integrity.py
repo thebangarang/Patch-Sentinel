@@ -476,7 +476,8 @@ def collect(target: str | None, data_dir: str, host: str, timeout: int = 120) ->
         state = parse(out, host, data_dir)
     except Exception as err:  # a parser bug must not become a green tick
         return {"state": "unmeasured", "reason": f"the probe output could not be read: {err}"}
-    return _split_missing(state, target, timeout)
+    state = _split_missing(state, target, timeout)
+    return repair_hints(state, target, timeout)
 
 
 def _split_missing(state: dict, target: str | None, timeout: int) -> dict:
@@ -524,6 +525,67 @@ def _split_missing(state: dict, target: str | None, timeout: int) -> dict:
               (state.get("preload") or {}).get("state")]
     state["state"] = ("finding" if "finding" in states
                       else "ok" if all(s in ("ok", "baseline") for s in states) else "unmeasured")
+    return state
+
+
+#: How a package manager puts a file back. The operator's question was the right one: a packaged file
+#: that differs or is gone is a finding, and a finding with no command is a dead end.
+REINSTALL = {"dpkg -V": "sudo apt-get install --reinstall {pkg}",
+             "rpm -Va": "sudo dnf reinstall {pkg}",
+             "apk audit": "sudo apk fix {pkg}",
+             "pacman -Qkk": "sudo pacman -S --noconfirm {pkg}"}
+
+#: Who owns the path, and does the package ship it as a directory? Once the path is gone only the
+#: package's own file list can tell — dpkg marks directories with a trailing slash.
+_OWNER_SH = {
+    # "is it a directory" cannot be answered by stat once the path is gone, and dpkg does not mark
+    # directories in its file list on every version. What is knowable: the package lists children under
+    # it, or it does not. Anything else is reported as *missing*, not guessed.
+    "dpkg -V": ('pkg=$(dpkg -S "$p" 2>/dev/null | head -1 | cut -d: -f1); '
+                'if [ -n "$pkg" ] && dpkg -L "$pkg" 2>/dev/null | grep -qF "$p/"; then k=DIR; fi'),
+    "rpm -Va": ('pkg=$(rpm -qf "$p" 2>/dev/null | head -1); '
+                'case "$pkg" in *"not owned"*|"") pkg="";; '
+                'esac; if [ -n "$pkg" ] && rpm -ql "$pkg" 2>/dev/null | grep -qF "$p/"; then k=DIR; fi'),
+    "apk audit": 'pkg=$(apk info -W "$p" 2>/dev/null | sed -n "s/.*is owned by //p" | head -1)',
+    "pacman -Qkk": (r'pkg=$(pacman -Qo "$p" 2>&1 | sed -n "s/.* is owned by \([^ ]*\) .*/\1/p" '
+                    r'| head -1)'),
+}
+
+
+def repair_hints(state: dict, target: str | None, timeout: int, limit: int = 3) -> dict:
+    """For each mismatched path: the package that owns it, and the command that puts it back.
+
+    A finding an operator cannot act on is a dead end. This resolves the owner against the host and
+    builds the reinstall command for its family — nothing is run here, and a path no package claims
+    is reported as exactly that instead of being given an invented command.
+    """
+    tamper = state.get("tamper") or {}
+    tool = tamper.get("tool") or ""
+    template = REINSTALL.get(tool)
+    paths = list(dict.fromkeys((tamper.get("changed") or []) + (tamper.get("missing") or [])))[:limit]
+    if not template or not paths:
+        return state
+    owner = _OWNER_SH.get(tool, "")
+    quoted = " ".join("'" + p.replace("'", "'\\''") + "'" for p in paths)
+    script = ('for p in ' + quoted + '; do pkg=""; k=FILE; ' + owner + '; '
+              'printf "%s\t%s\t%s\n" "$k" "$p" "$pkg"; done')
+    code, out = shell.run(script, target, timeout=timeout)
+    hints = []
+    for line in (out or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) != 3:
+            continue
+        kind, path_txt, pkg = parts
+        hints.append({
+            "path": path_txt,
+            "kind": "directory" if kind == "DIR" else "missing",
+            "package": pkg or None,
+            "command": template.format(pkg=pkg) if pkg else
+                       f"# {path_txt}: no package claims this path — nothing installs it back",
+        })
+    tamper["repair"] = hints
+    tamper["repair_command"] = next((h["command"] for h in hints
+                                     if h["command"].startswith("sudo ")), "")
     return state
 
 

@@ -277,6 +277,12 @@ what**. Every section below the servers list belongs to that one device.
    pane, and "nothing found" is a result worth showing.
 6. **gaps** — what the run could not see, and why.
 
+A packaged file that no longer matches — or is gone — names the **package that owns it** and the
+command that puts it back (`sudo apt-get install --reinstall apparmor` on dpkg, `dnf reinstall`,
+`apk fix`, `pacman -S` elsewhere). The owner is resolved on the host, not guessed; a path no package
+claims gets a comment saying so instead of an invented command. Reinstalling is not a package
+upgrade, so it is a command in this section rather than a step APPLY runs.
+
 **run it from here instead — optional** stays a collapsed row under the commands: it runs the same
 commands from the pane, for hosts where the account Hermes runs as can patch unattended. The row
 already says whether this host allows it (`not available on beelink — sudo needs a password there`),

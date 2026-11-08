@@ -1443,7 +1443,15 @@ def cve_rescan(args: dict, **kwargs) -> str:
     libraries = results.get("libraries") or {}
     findings = len([row for row in (libraries.get("vulnerable") or []) if row.get("owner") != "hermes"])
     pending = int(((results.get("scan") or {}).get("hosts", {}).get(label) or {}).get("pending_count") or 0)
+    # every command the pane will show: the plan's steps, the reinstall a broken packaged file needs,
+    # and the root verification for files this account cannot read while it is still open
     commands = len(plan_payload.get("steps") or [])
+    state = (results.get("integrity") or {}).get("integrity") or {}
+    tamper = state.get("tamper") or {}
+    commands += len([h for h in (tamper.get("repair") or [])
+                     if str(h.get("command", "")).startswith("sudo ")])
+    if (not tamper.get("covered")) and (tamper.get("unreadable_count") or 0) and tamper.get("command"):
+        commands += 1
     timings = " · ".join(f"{stage['name']} {round(stage['seconds'])}s" for stage in bundle["stages"])
     return _json({"tool": "cve_rescan", "host": label, "exit_code": worst, "bundle": bundle,
                   "pending": pending, "library_findings": findings, "commands": commands,

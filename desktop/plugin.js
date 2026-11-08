@@ -1919,12 +1919,22 @@ function todoRows({ bundle, label, entry }) {
     const unreadableCount = tamper.unreadable_count !== undefined ? tamper.unreadable_count
       : (tamper.unreadable || []).length
     if (changedCount || goneCount) {
-      const first = (tamper.changed || [])[0]
+      // "changed" and "gone" are different sentences, and a gone path may be a directory the package
+      // ships (apparmor's /etc/apparmor.d/disable is one). The repair list says which, and owns the
+      // command that puts it back — a finding with no command is a dead end.
+      const repair = (tamper.repair || [])[0]
+      const parts = []
+      if (changedCount) parts.push(changedCount + ' changed')
+      if (goneCount) parts.push(goneCount + ' gone')
+      const owner = repair && repair.package ? ' · package ' + repair.package : ''
+      const kind = repair && repair.kind === 'directory' ? ' · a directory the package ships' : ''
       rows.push({ level: 'red',
-                  what: (changedCount + goneCount) + ' packaged file(s) no longer match their package'
+                  what: parts.join(', ') + ' packaged path(s) no longer match'
                         + (goneCount && !changedCount ? ' (gone, not edited)' : ''),
-                  why: 'this is the one row that means a file was edited outside the package manager'
-                       + (first ? ' — first: ' + first : '') })
+                  why: (repair ? repair.path : '') + owner + kind
+                       + (repair && repair.command && repair.command.startsWith('sudo ')
+                          ? ' — the reinstall command below puts it back'
+                          : ' — nothing claims this path, so no package puts it back') })
     }
     if ((listeners.new || []).length) {
       rows.push({ level: 'red', what: (listeners.new || []).length + ' listening socket(s) not in the baseline',
@@ -2060,6 +2070,17 @@ function commandsForHost(bundle, name) {
   const integrity = deviceIntegrity(bundle, name)
   if (integrity && integrity.integrity) {
     const tamper = integrity.integrity.tamper || {}
+    // a packaged file that differs or is gone is repaired by reinstalling the package that owns it —
+    // the owner is resolved on the host, so this is a real command and not a guess
+    for (const repair of tamper.repair || []) {
+      if (repair.command && repair.command.startsWith('sudo ')) {
+        out.push({ command: repair.command, kind: 'repair',
+                   why: repair.path + (repair.kind === 'directory' ? ' (a directory)' : '')
+                        + ' does not match ' + (repair.package || 'its package'),
+                   detail: 'put the file back from the package that ships it; nothing else on this '
+                           + 'host can restore it' })
+      }
+    }
     const unreadableOpen = (tamper.unreadable_count || (tamper.unreadable || []).length) && !tamper.covered
     if (unreadableOpen && tamper.command) {
       out.push({ command: tamper.command, kind: 'verify',
