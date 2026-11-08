@@ -77,7 +77,7 @@ const panes = [
   ['updates', createElement(UpdatesPanel, { entry: data.status.hosts[data.hostLabel],
                                             hostLabel: data.hostLabel, onRescan: noop, busy: false })],
   ['libs', createElement(LanguagesPanel, { libraries: data.libraries, onCheck: noop, busy: false })],
-  ['the fix, as commands', createElement(CommandsPanel, {
+  ['the fix commands', createElement(CommandsPanel, {
     bundle: { scan: data.status, plans: { plans: { [data.hostLabel]: data.plan } } },
     selected: data.hostLabel, where: null })],
   ['gaps', createElement(GapsPanel, { coverage: data.coverage, selected: data.hostLabel })]
@@ -195,7 +195,7 @@ const PARTIALS = [
 for (const [name, bundle] of PARTIALS) {
   for (const [section, element] of [
     ['what must be done', createElement(TodoPanel, { bundle, selected: 'beelink', onSelect: noop })],
-    ['the fix, as commands', createElement(CommandsPanel, { bundle, selected: 'beelink', where: null })],
+    ['the fix commands', createElement(CommandsPanel, { bundle, selected: 'beelink', where: null })],
     ['servers', createElement(HostsPanel, { onChanged: noop, bundle, initialHosts: [{ label: 'beelink', target: 'local' }] })]
   ]) {
     try {
@@ -247,7 +247,7 @@ for (const [name, element] of [
     entry: data.status.hosts[data.hostLabel], hostLabel: data.hostLabel, scanning: true })],
   ['libs & runtimes', createElement(LanguagesPanel, {
     libraries: FIXTURE, onCheck: noop, busy: false, scanning: true })],
-  ['the fix, as commands', createElement(CommandsPanel, {
+  ['the fix commands', createElement(CommandsPanel, {
     bundle: bundleForScan, selected: data.hostLabel, where: null, scanning: true })]
 ]) {
   const html = renderToStaticMarkup(element)

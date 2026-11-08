@@ -75,13 +75,13 @@ const body = renderToStaticMarkup(createElement('div', {}, [
   createElement(VerdictBar, { key: 'v', status: { ...scan, hosts: selected ? { [selected]: deviceEntry || {} } : {} } }),
   createElement(HostsPanel, { key: 'h', onChanged: noop, initialHosts: labels.map((label) => ({
     label, target: (scan.hosts[label] || {}).target || 'local' })) }),
-  createElement(TodoPanel, { key: 't', bundle, selected, onSelect: noop }),
-  createElement(CommandsPanel, { key: 'c', bundle, selected, where }),
   createElement(UpdatesPanel, { key: 'u', entry: deviceEntry, hostLabel: selected }),
   createElement(IntegrityPanel, { key: 'i', reading: integrity, busy: false, seconds: 0,
                                   onRead: noop, onRebaseline: noop, onImport: noop }),
   createElement(LanguagesPanel, { key: 'l', libraries, onCheck: noop, busy: false }),
-  createElement(GapsPanel, { key: 'g', coverage: bundle.coverage || null, selected })
+  createElement(GapsPanel, { key: 'g', coverage: bundle.coverage || null, selected }),
+  createElement(TodoPanel, { key: 't', bundle, selected, onSelect: noop }),
+  createElement(CommandsPanel, { key: 'c', bundle, selected, where })
 ]))
 
 writeFileSync(process.env.OUT, `<!doctype html><html><head><meta charset="utf-8">

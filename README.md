@@ -266,19 +266,25 @@ what**. Every section below the servers list belongs to that one device.
 2. **servers** — the list carries a per-device badge (`nothing to do`, `2 to do`, `not measured`) and
    the age of its last reading, so the fleet stays legible without merging five machines into one
    screen. Clicking a name is what selects the device; there is no dropdown.
-3. **what must be done** — that device's rows: pending packages, a kernel that is not running, library
-   findings that name a fix, sockets that appeared, files this account cannot read, and a
-   `cannot see: …` line for any surface that refused. It says `nothing to do` only when the device was
-   measured and nothing is pending — "never measured" is a different sentence.
-4. **the fix, as commands** — every command the rows above imply, numbered:
-   the package steps (with risk, downtime, verify and reverse), the language-store upgrades that have
-   a published fix, and the root verification for files the pane cannot read. *COPY ALL* gives the
-   whole set; each row copies on its own. A finding with no published fix never becomes a command.
-5. **system packages · integrity · libs & runtimes** — always on screen, for the same device. Each keeps its
-   empty state — `nothing available — this host is up to date, as measured`, `not read yet`, `0
-   package(s) read` — because a section that vanishes when it has nothing to say reads as a broken
-   pane, and "nothing found" is a result worth showing.
-6. **gaps** — what the run could not see, and why.
+3. **system packages · integrity · libs & runtimes** — the readings, in the order the scan takes them,
+   always on screen, for the device selected above. Each keeps its empty state — `nothing available —
+   this host is up to date, as measured`, `not read yet`, `0 package(s) read` — because a section that
+   vanishes when it has nothing to say reads as a broken pane, and "nothing found" is a result worth
+   showing.
+4. **gaps** — what the run could not see, and why. A reading too, so it sits with them.
+5. **what must be done** — what those readings imply for that device: pending packages, a kernel that
+   is not running, library findings that name a fix, sockets that appeared, files this account cannot
+   read. It says `nothing to do` only when the device was measured and nothing is pending — "never
+   measured" is a different sentence.
+6. **the fix commands** — every command the rows above imply, numbered: the package steps (with risk,
+   downtime, verify and reverse), the language-store upgrades that have a published fix, and the root
+   verification for files the pane cannot read. *COPY ALL* gives the whole set; each row copies on its
+   own. A finding with no published fix never becomes a command.
+
+The page is read **top to bottom**: the machine list, then what was measured on the selected device in
+the order the scan read it (the sections animate as the run reaches them), then the two sections that
+answer what to do about it. An answer placed above its evidence gets read as a warning list and the
+evidence gets skipped; the commands come last because they are the only thing anyone pastes.
 
 A packaged file that no longer matches — or is gone — names the **package that owns it** and the
 command that puts it back (`sudo apt-get install --reinstall apparmor` on dpkg, `dnf reinstall`,

@@ -139,17 +139,9 @@ const SECTIONS = [
     long: 'This machine plus any host you add. Click a name to make it the one the detail sections '
         + 'below are about. A host is added only after a probe of it succeeds, and only the address is '
         + 'stored — never a key.' },
-  { key: 'todo', title: 'what must be done', blurb: 'the actions, per device',
-    long: 'Everything the measurement turned into something to do, one device at a time: pending '
-        + 'packages, a kernel that is not running, library findings that name a fix, sockets that '
-        + 'appeared, files that could not be read. Nothing here is a command — the commands are the '
-        + 'next section, so a row can be read before anything is pasted.' },
-  { key: 'plan', title: 'the fix, as commands', blurb: 'the commands to paste, in order',
-    long: 'Every command the rows above imply, grouped by device and numbered: the package upgrade '
-        + 'steps (with risk, downtime, how to verify and how to undo), the language-store upgrades '
-        + 'that have a published fix, and the root verification for files this account cannot read. '
-        + 'COPY ALL gives the whole set for every device. Nothing here runs anything: every command is '
-        + 'meant to be pasted into a terminal on the device it names.' },
+  // The readings come first, in the order the scan reads them, so the page can be followed top to
+  // bottom while the run animates. What to do about them, and the commands, come below: an answer
+  // before the evidence ends up read as a warning list, and the evidence gets skipped.
   { key: 'packages', title: 'system packages', blurb: "the distro's update list",
     long: 'Every package apt, dnf, pacman or zypper would upgrade, with which USN or advisory names '
         + 'that exact version. Empty means the package manager listed nothing — it stays on screen so '
@@ -164,6 +156,17 @@ const SECTIONS = [
   { key: 'gaps', title: 'gaps', blurb: 'what this scan could not see',
     long: 'Red here is a fact about the scan, not about the server: a host that did not answer, a feed '
         + 'that refused, a surface with no reader yet.' },
+  { key: 'todo', title: 'what must be done', blurb: 'the actions, per device',
+    long: 'Everything the readings above turned into something to do, one device at a time: pending '
+        + 'packages, a kernel that is not running, library findings that name a fix, sockets that '
+        + 'appeared, files that could not be read. Nothing here is a command — the commands are the '
+        + 'section below, so a row can be read before anything is pasted.' },
+  { key: 'plan', title: 'the fix commands', blurb: 'the commands to paste, in order',
+    long: 'Every command the rows above imply, grouped by device and numbered: the package upgrade '
+        + 'steps (with risk, downtime, how to verify and how to undo), the language-store upgrades '
+        + 'that have a published fix, and the root verification for files this account cannot read. '
+        + 'COPY ALL gives the whole set for every device. Nothing here runs anything: every command is '
+        + 'meant to be pasted into a terminal on the device it names.' },
 ]
 const SECTION = SECTIONS.reduce((acc, section) => { acc[section.key] = section; return acc }, {})
 /** Every section gets the legend's slim bar — one colour for all of them, so the page reads as
@@ -2156,7 +2159,7 @@ function CommandsPanel({ bundle, selected, where, devices, scanning }) {
 
   return jsxs('section', { style: sectionStyle('plan') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '6px' } }, [
-      label('the fix, as commands', null, 'everything above, as the exact lines to paste — in order'),
+      label('the fix commands', null, 'everything above, as the exact lines to paste — in order'),
       jsx('span', { style: { flex: 1 } }),
       total
         ? jsx(Copy, { text: withCommands.flatMap((block) => block.commands.map((row) => row.command)).join('\n'),
@@ -2261,7 +2264,7 @@ function HowItWorks({ open, onToggle }) {
       + 'changes nothing.'),
     step(3, 'read what must be done.', 'Every row is something observed, with the reason it matters. '
       + 'Green: measured, nothing to act on. Grey: it could not look, and says so.'),
-    step(4, 'copy the commands.', 'They are under “the fix, as commands”, in order, and say which device '
+    step(4, 'copy the commands.', 'They are under “the fix commands”, at the bottom, in order, and say which device '
       + 'to run them on. Run them there, then scan again.'),
     jsx('div', {
       style: { fontSize: '0.75rem', color: C.faint, marginTop: '6px', lineHeight: 1.55,
@@ -2833,13 +2836,11 @@ export function PatchSentinel({ compact }) {
     }, label: selected }),
     jsx(HostsPanel, { onChanged: loadBundle, onSelect: setSelected, selected, bundle,
                       onLoaded: setInventory }),
-    jsx(TodoPanel, { bundle, selected, onSelect: setSelected, devices }),
-    jsx(CommandsPanel, { bundle, selected, where, devices, scanning: busy && stage === 'plans' }),
-    // The detail sections stay on screen whether or not they found something: an empty section that
-    // says why it is empty is information, and a section that vanishes reads as a broken pane. The
-    // rows above are the answer; these are the readings it was built from.
-    // No dropdown: the three readings below belong to the selected device, and the two facts a reader
-    // needs are that every device was measured in the same run and that switching does not re-scan.
+    // The readings first, in the order the scan reads them, so the run animates top to bottom. The
+    // sections stay on screen whether or not they found something: an empty section that says why it
+    // is empty is information, and a section that vanishes reads as a broken pane.
+    // No dropdown: the readings below belong to the selected device, and the two facts a reader needs
+    // are that every device was measured in the same run and that switching does not re-scan.
     jsx('div', {
       style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint, marginBottom: '4px' }
     }, selected
@@ -2863,6 +2864,9 @@ export function PatchSentinel({ compact }) {
                           onCheck: checkLibraries, busy: libBusy,
                           scanning: busy && stage === 'libraries' }),
     jsx(GapsPanel, { coverage, selected }),
+    // The answer comes after the evidence it was built from: what must be done, then the commands.
+    jsx(TodoPanel, { bundle, selected, onSelect: setSelected, devices }),
+    jsx(CommandsPanel, { bundle, selected, where, devices, scanning: busy && stage === 'plans' }),
     jsx('div', {
       style: {
         marginTop: '12px', paddingTop: '8px', borderTop: '1px solid ' + C.border,
