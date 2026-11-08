@@ -45,6 +45,7 @@ class DashboardRoutes(unittest.TestCase):
         spec.loader.exec_module(module)
         module.tools.configure({"hosts": "testbox=local", "release": "resolute",
                                 "data_dir": cls._data_dir, "timeout": 30})
+        cls.module = module
         app = FastAPI()
         app.include_router(module.router, prefix="/api/plugins/patch-sentinel")
         cls.client = TestClient(app)
@@ -95,6 +96,25 @@ class DashboardRoutes(unittest.TestCase):
                 return job
             time.sleep(0.05)
         self.fail(f"the {name} job did not finish within {seconds}s")
+
+    def test_the_rescan_route_hands_the_device_to_the_run(self):
+        """The pane posts {host}; the route used to drop it and measure this machine instead."""
+        seen = {}
+        module = self.module
+        original = module.tools.cve_rescan
+
+        def fake(args=None, **kwargs):
+            seen.update(dict(args or {}))
+            return '{"tool": "cve_rescan", "exit_code": 0, "answer": "ok"}'
+
+        module.tools.cve_rescan = fake
+        try:
+            self.client.post(self.base + "/rescan", json={"host": "webasix"})
+            self.follow("rescan")
+        finally:
+            module.tools.cve_rescan = original
+        self.assertEqual(seen.get("host"), "webasix",
+                         "the route dropped the device and would have scanned this machine")
 
     def test_the_gate_refuses_a_wrongly_typed_host(self):
         # the label comes from the test's own inventory, never from this machine's

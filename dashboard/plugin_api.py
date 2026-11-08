@@ -154,8 +154,16 @@ def rescan_cached() -> dict:
 
 @router.post("/rescan")
 def rescan_start(body: dict | None = None) -> dict:
-    """One control for every check. Starts a job and answers immediately."""
-    return _start("rescan", tools.cve_rescan, {})
+    """One control for one device. Starts a job and answers immediately.
+
+    The body carries the host and it must reach the handler: dropping it here meant the pane asked
+    webasix to be scanned and got this machine measured instead — the run looked fine and was about
+    the wrong device.
+    """
+    args = {}
+    if body and body.get("host"):
+        args["host"] = str(body["host"])
+    return _start("rescan", tools.cve_rescan, args)
 
 
 @router.post("/plan")

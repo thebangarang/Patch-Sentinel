@@ -66,6 +66,29 @@ def _not_in_inventory(requested: str) -> dict:
                     expected=close[0] if close else (labels[0] if labels else None))
 
 
+def _registry_cause(text: str) -> str:
+    """A registry failure in words short enough to read.
+
+    The raw text is a urllib message with a full URL in it; cutting it at 80 characters produced
+    "…/v2/li", which reads as a broken product rather than a rate limit.
+    """
+    lowered = (text or "").lower()
+    match = re.search(r"\b(429|401|403|404)\b", text or "") or re.search(r"HTTP\s+(\d{3})", text or "")
+    if match:
+        code = match.group(1)
+        named = {"429": "HTTP 429 — rate limited", "401": "HTTP 401 — needs a login",
+                 "403": "HTTP 403 — refused", "404": "HTTP 404 — no such tag"}.get(code)
+        return named or f"HTTP {code}"
+    if "timed out" in lowered or "timeout" in lowered:
+        return "the registry timed out"
+    if "name or service not known" in lowered or "getaddrinfo" in lowered or "errno -2" in lowered:
+        return "the registry name did not resolve — no network here"
+    host = re.search(r"https?://([^/\s]+)", text or "")
+    if host:
+        return f"{host.group(1)} did not answer"
+    return (text or "no reason given")[:90] + ("…" if len(text or "") > 90 else "")
+
+
 def _gap_advice(klass: str, label: str, reason: str) -> str:
     """What to actually do about a failed check — said in terms of its cause.
 
@@ -85,9 +108,17 @@ def _gap_advice(klass: str, label: str, reason: str) -> str:
                 "runs no containers, nothing is wrong — this row is the scan admitting it could not "
                 "look.")
     if klass == "images":
-        return ("the registry would not answer for one of these images (rate limit, private tag, or "
-                "no network). Nothing changed on the host; the digest simply could not be compared. "
-                "Make the tag pullable anonymously, then rescan.")
+        # the advice has to fit the cause: a rate limit clears by waiting, a private tag needs a login
+        if "429" in reason or "rate" in reason.lower():
+            return ("the registry rate-limited the check (HTTP 429) — Docker Hub does this from shared "
+                    "addresses, and it says nothing about this machine. Nothing changed on the host; "
+                    "the digest could not be compared. Try again in a few minutes.")
+        if any(code in reason for code in ("401", "403", "unauthorized", "denied")):
+            return ("the registry refused the check for this tag (HTTP 401/403): it is private, or it "
+                    "needs a login this plugin does not have. Nothing changed on the host. Make the tag "
+                    "pullable anonymously, or take the digest comparison as unmeasured here.")
+        return ("the registry would not answer for one of these images (private tag, or no network). "
+                "Nothing changed on the host; the digest simply could not be compared.")
     if klass == "kernel":
         return ("no kernel package was found on this host — normal inside a container, where the "
                 "kernel belongs to the host. There is nothing to fix; the row stays unknown by design.")
@@ -408,7 +439,7 @@ def _scan_payload(labels: list[str] | None = None, save: bool = True) -> dict:
         elif outcomes["images"] == "unknown":
             blind.append({"host": label, "class": "images",
                           "reason": f"{len(unknown)} image(s) could not be checked at the registry "
-                                    f"({unknown[0].get('answer', 'no reason given')[:80]})",
+                                    f"({_registry_cause(str(unknown[0].get('answer') or ''))})",
                           "detail": "a refused registry is not a clean image"})
 
         # Is the patch in effect? The kernel comparison answers that for the kernel; this answers it
