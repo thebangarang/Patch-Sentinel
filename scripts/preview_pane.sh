@@ -79,9 +79,10 @@ const body = renderToStaticMarkup(createElement('div', {}, [
   createElement(IntegrityPanel, { key: 'i', reading: integrity, busy: false, seconds: 0,
                                   onRead: noop, onRebaseline: noop, onImport: noop }),
   createElement(LanguagesPanel, { key: 'l', libraries, onCheck: noop, busy: false }),
-  createElement(GapsPanel, { key: 'g', coverage: bundle.coverage || null, selected }),
   createElement(TodoPanel, { key: 't', bundle, selected, onSelect: noop }),
-  createElement(CommandsPanel, { key: 'c', bundle, selected, where })
+  createElement(CommandsPanel, { key: 'c', bundle, selected, where }),
+  createElement('div', { key: 'gaps', style: { marginTop: '38px', paddingTop: '16px' } },
+    createElement(GapsPanel, { coverage: bundle.coverage || null, selected }))
 ]))
 
 writeFileSync(process.env.OUT, `<!doctype html><html><head><meta charset="utf-8">

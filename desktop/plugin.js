@@ -153,9 +153,6 @@ const SECTIONS = [
   { key: 'libs', title: 'libs & runtimes', blurb: 'language packages, against OSV',
     long: 'What each toolchain has installed machine-wide and in every project virtualenv — npm, pip, '
         + 'PHP, Ruby, Rust, .NET, Maven, Go, Dart — plus jars on disk and lockfile pins.' },
-  { key: 'gaps', title: 'gaps', blurb: 'what this scan could not see',
-    long: 'Red here is a fact about the scan, not about the server: a host that did not answer, a feed '
-        + 'that refused, a surface with no reader yet.' },
   { key: 'todo', title: 'what must be done', blurb: 'the actions, per device',
     long: 'Everything the readings above turned into something to do, one device at a time: pending '
         + 'packages, a kernel that is not running, library findings that name a fix, sockets that '
@@ -167,6 +164,11 @@ const SECTIONS = [
         + 'that have a published fix, and the root verification for files this account cannot read. '
         + 'COPY ALL gives the whole set for every device. Nothing here runs anything: every command is '
         + 'meant to be pasted into a terminal on the device it names.' },
+  // Last, and deliberately apart: it is a caveat about the measurement, not a step in it. Sitting
+  // between the readings and the commands it pushed the one section everybody needs below the fold.
+  { key: 'gaps', title: 'gaps', blurb: 'what this scan could not see',
+    long: 'Red here is a fact about the scan, not about the server: a host that did not answer, a feed '
+        + 'that refused, a surface with no reader yet.' },
 ]
 const SECTION = SECTIONS.reduce((acc, section) => { acc[section.key] = section; return acc }, {})
 /** Every section gets the legend's slim bar — one colour for all of them, so the page reads as
@@ -382,8 +384,12 @@ const SCAN_CSS = `
 .ps-scan-track { position: relative; overflow: hidden; height: 2px; border-radius: 2px;
   background: rgba(255,255,255,0.06); }
 .ps-scan-track::after { content: ''; position: absolute; top: 0; left: 0; height: 2px; width: 32%;
-  background: linear-gradient(90deg, transparent, #4de3d0, transparent); animation: ps-sweep 1.15s
-  cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+  background: linear-gradient(90deg, transparent, #4de3d0, transparent);
+  /* the delay is set from the wall clock by ScanLine, so every track on the page is at the same point
+     of the same wave — a section that starts animating mid-run joins the wave instead of starting its
+     own */
+  animation: ps-sweep 1150ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation-delay: var(--ps-phase, 0ms); }
 .ps-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4de3d0;
   margin-right: 6px; animation: ps-breathe 1.2s ease-in-out infinite; }
 .ps-ring { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%;
@@ -399,7 +405,9 @@ function ScanLine({ label }) {
     // mounted here as well as at the page root: a panel rendered alone (a preview, a test) must still
     // animate, and a duplicate <style> is harmless
     jsx('style', { key: 'css' }, SCAN_CSS),
-    jsx('div', { className: 'ps-scan-track' }),
+    // -now % period: the sweep's position becomes a function of the clock rather than of when this
+    // element mounted, which is what makes two lines on the page look like one wave
+    jsx('div', { className: 'ps-scan-track', style: { '--ps-phase': -(Date.now() % 1150) + 'ms' } }),
     label
       ? jsx('div', {
           style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim, marginTop: '4px',
@@ -2863,10 +2871,15 @@ export function PatchSentinel({ compact }) {
     jsx(LanguagesPanel, { libraries: deviceLibraries(bundle, selected) || libraries,
                           onCheck: checkLibraries, busy: libBusy,
                           scanning: busy && stage === 'libraries' }),
-    jsx(GapsPanel, { coverage, selected }),
     // The answer comes after the evidence it was built from: what must be done, then the commands.
     jsx(TodoPanel, { bundle, selected, onSelect: setSelected, devices }),
     jsx(CommandsPanel, { bundle, selected, where, devices, scanning: busy && stage === 'plans' }),
+    // set apart, and last: a caveat about the measurement rather than a step in it. Between the
+    // readings and the commands it pushed the one section everybody needs below the fold.
+    jsx('div', {
+      key: 'gaps',
+      style: { marginTop: '38px', paddingTop: '16px', borderTop: '1px dashed ' + C.border }
+    }, jsx(GapsPanel, { coverage, selected })),
     jsx('div', {
       style: {
         marginTop: '12px', paddingTop: '8px', borderTop: '1px solid ' + C.border,
