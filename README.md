@@ -21,6 +21,13 @@ Restart the desktop app, open the plugin's pane, press **`scan all · <device>`*
 configured: the inventory is this machine, the scan is read-only, and the registry and advisory lookups
 are anonymous.
 
+> **If you would rather use `hermes plugins install`:** installing from a git URL runs Hermes's
+> admission scan, and this plugin is *made of* patch commands — the scan reports `privilege_escalation`
+> on every string that says `sudo apt-get full-upgrade`, 189 findings, and **blocks** a community source
+> until you pass `--force`. That is the product being what it claims to be, not a hidden capability: the
+> pane runs nothing, and the one tool that can (`cve_apply`) runs `sudo -n` on a plan built from the
+> host's own package manager. The clone + symlink above gives you the same plugin without the prompt.
+
 To add machines, give the plugin `label=ssh-target` pairs (`local` is the machine Hermes runs on):
 
 ```yaml
