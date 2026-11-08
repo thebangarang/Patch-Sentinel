@@ -2095,7 +2095,9 @@ function CommandsPanel({ bundle, selected, where }) {
     withCommands.map((block) => jsxs('div', { key: block.name, style: { marginBottom: '10px' } }, [
       jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline', marginBottom: '3px' } }, [
         jsx('span', { style: { display: 'inline-flex' } },
-            deviceIcon(deviceKind((bundle.scan.hosts || {})[block.name] || {}))),
+            // the bundle is written stage by stage, so it is briefly a devices-only shape during a
+            // run: reading `bundle.scan.hosts` unguarded crashed the whole page mid-scan
+            deviceIcon(deviceKind((((bundle || {}).scan || {}).hosts || {})[block.name] || {}))),
         jsx('span', {
           style: { fontFamily: MONO, fontSize: '0.8125rem',
                    color: selected === block.name ? C.accent : C.text }

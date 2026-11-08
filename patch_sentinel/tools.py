@@ -1358,9 +1358,13 @@ def cve_rescan(args: dict, **kwargs) -> str:
 
     data_dir = str(_settings.get("data_dir") or store.data_dir())
     previous = rescan.read(data_dir)
+    # A stable shape from the first write: the pane polls this file mid-run, and a shape that gains
+    # `scan` only at the end made the page crash while the scan was starting.
     bundle = {"started_at": time.time(), "finished_at": None, "stage": "starting",
               "host": label, "current_host": label,
-              "devices": dict(previous.get("devices") or {}), "stages": []}
+              "devices": dict(previous.get("devices") or {}), "stages": [],
+              "scan": {"tool": "cve_scan", "hosts": {}, "blind": [], "exit_code": 0},
+              "libraries": {}, "integrity": {}, "plans": {"plans": {}}}
     device = bundle["devices"].setdefault(label, {})
     rescan.write(data_dir, bundle)
 

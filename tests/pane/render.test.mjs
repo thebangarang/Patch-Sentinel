@@ -172,6 +172,42 @@ if (!/measured (just now|[0-9]+ min ago)/.test(verdictFromBundle)) {
   throw new Error('the verdict line carries no age at all')
 }
 
+// The bundle is written stage by stage, so the pane renders partial shapes while a scan runs. A
+// devices-only bundle (no `scan` key yet) crashed the whole page on `bundle.scan.hosts` when the scan
+// started — every section must render from any of these.
+const PARTIALS = [
+  ['empty', {}],
+  // a plan with a step on purpose: the command block is what read `bundle.scan.hosts` unguarded
+  ['devices only (mid-run)', { devices: { beelink: {
+    libraries: FIXTURE, integrity: null, scan: null, measured_at: null,
+    plan: { steps: [{ action: 'Upgrade bash', command: 'sudo apt-get install bash',
+                      risk: 'low', downtime: 'none', why: 'CVE-2014-6271', verify: 'apt-cache policy bash',
+                      reversal: 'see /var/log/apt/history.log' }] } } } }],
+  ['devices with a scan', { devices: { beelink: { scan: { hosts: { beelink: { label: 'beelink' } } } } } }],
+  // the shape the previous release wrote (one fleet-wide scan): a user who upgrades without scanning
+  // must still get a readable pane
+  ['fleet bundle (previous release)', {
+    scan: { hosts: { beelink: { label: 'beelink', target: 'local', pending_count: 0 } }, blind: [], note: '' },
+    libraries: FIXTURE,
+    plans: { plans: { beelink: { steps: [{ action: 'a', command: 'sudo apt-get install bash',
+                                           risk: 'low', downtime: 'none', why: 'w', verify: 'v', reversal: 'r' }] } } }
+  }]
+]
+for (const [name, bundle] of PARTIALS) {
+  for (const [section, element] of [
+    ['what must be done', createElement(TodoPanel, { bundle, selected: 'beelink', onSelect: noop })],
+    ['the fix, as commands', createElement(CommandsPanel, { bundle, selected: 'beelink', where: null })],
+    ['servers', createElement(HostsPanel, { onChanged: noop, bundle, initialHosts: [{ label: 'beelink', target: 'local' }] })]
+  ]) {
+    try {
+      renderToStaticMarkup(element)
+    } catch (err) {
+      throw new Error(section + ' crashed on a ' + name + ' bundle: ' + err.message)
+    }
+  }
+}
+console.log('  every section renders from a partial bundle')
+
 for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXTURE],
                                  ['libs (nothing read)', null]]) {
   const html = renderToStaticMarkup(createElement(LanguagesPanel, { libraries, onCheck: noop,
