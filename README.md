@@ -283,10 +283,12 @@ command that puts it back (`sudo apt-get install --reinstall apparmor` on dpkg, 
 claims gets a comment saying so instead of an invented command. Reinstalling is not a package
 upgrade, so it is a command in this section rather than a step APPLY runs.
 
-**run it from here instead — optional** stays a collapsed row under the commands: it runs the same
-commands from the pane, for hosts where the account Hermes runs as can patch unattended. The row
-already says whether this host allows it (`not available on beelink — sudo needs a password there`),
-so nothing looks like a final step that would refuse.
+**The pane offers no APPLY control.** It used to: a collapsed "run it from here instead" row. It was
+removed because it only ran where the account Hermes runs as can patch without a prompt — never the
+machine Hermes runs on — so on the host in front of you it could only refuse. A control that exists to
+say no is friction, and every device is patchable from its own terminal with the commands above. The
+gated tool (`cve_apply`, typed host name, dry run by default, `sudo -n` only) stays for an agent that
+is explicitly asked to patch; the pane does not call it.
 
 The system-package list copies commands, not a list of versions — a package list is a reference, and
 the copy control exists to paste something a shell can run.

@@ -106,16 +106,20 @@ Three rules decide what earns the operator's attention, and each was a complaint
   `openssl 3.0.1 → 3.0.2` lines; the operator pasted them and got no command. Copy now emits the
   upgrade sequence, and the reference list is a second, faint control.
 
-### APPLY is a shortcut, never the last step
+### APPLY is a tool for an agent, not a control in the pane
 
 The instinctive reading of a scan → plan → apply flow is that apply is the end of the work. On most
 machines it is not: the plugin runs as the account Hermes runs as (`hermes`), and `sudo -n` there
-fails. So APPLY is not a section at all: it is a collapsed row **under the plan**, labelled *run it from here
-instead — optional*, and the row itself carries the verdict — `GET /apply/preflight` runs
-`sudo -n true` on that host when a server is selected, so it reads *allowed on webasix* or *not
-available on beelink — sudo needs a password there* before anything is typed or clicked. Opening it
-shows the gate; inside, a blocked host points back at the plan instead of repeating its commands
-(two copies of the same three lines is exactly the duplication the operator called out).
+fails. It was tried three ways in the pane — a section, a row under the plan, a collapsed
+"run it from here instead — optional" with a preflight that said whether the host allowed it. Each
+version had the same problem in the end: on the machine Hermes runs on it can only refuse, so it was a
+control that existed to say no, and the operator called it a gadget.
+
+The pane now hands over **commands and nothing else**: every device is patchable from its own terminal,
+the commands section says where each one runs, and nothing in the interface pretends to be the last
+step of a flow. `cve_apply` remains as a tool for an agent that is explicitly asked to patch — typed
+host name, dry run by default, `sudo -n` so a prompt can never hang a call, and a handover with the
+same commands when it refuses. The pane does not call it.
 
 ## Dashboard pane (opt-in, desktop half)
 

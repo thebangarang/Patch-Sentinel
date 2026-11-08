@@ -2293,229 +2293,10 @@ function GapsPanel({ coverage, selected }) {
 
 // --------------------------------------------------------------------------- APPLY GATE
 
-function ApplyGate({ hostLabel, entry, initialResult, probe }) {
-  const [typed, setTyped] = useState('')
-  const [result, setResult] = useState(initialResult || null)
-  const [busy, setBusy] = useState(false)
-  const armed = Boolean(hostLabel) && typed.trim() === hostLabel
-
-  /**
-   * Apply runs as a job too. A real upgrade took 105 s on the Fedora VM; the renderer's bridge cuts a
-   * call at 30 s, so a synchronous apply would report a timeout *while the machine is being patched* —
-   * the one message that invites a second, duplicate apply. Start it, follow it, show what it returned.
-   */
-  const run = useCallback(async (dryRun) => {
-    if (!armed || busy || !entry) return
-    setBusy(true)
-    setResult(null)
-    try {
-      const started = await call('/apply', {
-        method: 'POST',
-        body: { host: hostLabel, confirm: typed.trim(), dry_run: dryRun }
-      })
-      if (started && started.error) {
-        setResult({ applied: false, reason: 'the apply could not start: ' + started.error })
-        return
-      }
-      let job = null
-      for (let tick = 0; tick < 400; tick += 1) {
-        await new Promise((resolve) => { setTimeout(resolve, 1500) })
-        try {
-          const jobs = await call('/jobs')
-          job = (jobs && jobs.apply) || null
-        } catch (err) {
-          continue
-        }
-        if (job && !job.running) break
-      }
-      if (job && job.error) {
-        setResult({ applied: false, reason: 'the apply failed: ' + job.error })
-      } else if (job && job.result) {
-        setResult(job.result)
-      } else {
-        setResult({ applied: false,
-                    reason: 'the apply job is still running — check again in a moment, do not run it twice' })
-      }
-    } catch (err) {
-      setResult({ applied: false, reason: String(err && err.message ? err.message : err) })
-    } finally {
-      setBusy(false)
-    }
-  }, [armed, busy, hostLabel, typed, entry])
-
-  const steps = (result && result.steps) || []
-  const measured = Boolean(entry)
-  const blocked = Boolean(probe && probe.known && !probe.ok)
-  const count = measured ? (entry.pending_count || 0) : null
-  const nothingToDo = measured && count === 0
-  // a host that has not answered the preflight is not a host this control may touch
-  const ready = armed && measured && !nothingToDo && Boolean(probe && probe.ok)
-  return jsxs('div', { style: { borderLeft: '2px solid ' + C.border, paddingLeft: '9px', marginTop: '2px' } }, [
-    jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginBottom: '4px' } },
-      !measured
-        ? 'Nothing has been measured for ' + (hostLabel || 'this host') + ' yet — press rescan above, then come back.'
-        : nothingToDo
-          ? 'The scan found 0 updates on ' + hostLabel + ', so there is nothing to stage and nothing to apply. The buttons are disabled because the work is already done — not because something is broken. Rescan after you change something.'
-          : 'Optional shortcut: it runs the same commands as the plan above, from here, without you '
-            + 'opening a terminal. It can only work where the account Hermes runs as ('
-            + ((probe && probe.where && probe.where.runs_as) || 'the agent user')
-            + ') can patch without a password — root over ssh, or a no-prompt rule. Otherwise the '
-            + 'plan\'s commands are the way, and nothing is lost by that.'),
-    // the precondition, stated before the click instead of after it
-    probe === null && measured && !nothingToDo
-      ? jsx('div', { style: { fontSize: '0.75rem', color: C.faint, marginBottom: '6px' } },
-          'checking whether this host allows it…')
-      : probe && probe.known
-        ? (blocked
-            ? jsxs('div', {
-                style: {
-                  borderLeft: '2px solid ' + C.warn, background: C.panel, padding: '6px 8px',
-                  borderRadius: '3px', marginBottom: '6px'
-                }
-              }, [
-                jsx('div', { style: { fontSize: '0.8125rem', color: C.warn, fontWeight: 600 } },
-                  'not available on ' + hostLabel + ' — and that is expected'),
-                jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginTop: '2px', lineHeight: 1.45 } },
-                  'sudo there asks ' + ((probe.where && probe.where.runs_as) || 'this account')
-                  + ' for a password, and this plugin never asks for, holds or forwards one. Use the '
-                  + 'plan above: copy the commands, run them '
-                  + ((probe.where && probe.where.kind === 'remote')
-                      ? 'on ' + probe.where.machine + (probe.where.ssh ? ' (`' + probe.where.ssh + '`)' : '')
-                      : 'in a terminal on this machine')
-                  + '.'),
-                jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginTop: '2px' } },
-                  'The commands and their copy control are in the plan above — nothing is missing here.')
-              ])
-            : jsx('div', { style: { fontSize: '0.75rem', color: C.ok, marginBottom: '6px' } },
-                'this host allows it: ' + ((probe.where && probe.where.runs_as) || 'this account')
-                + ' can patch without a password'))
-        : null,
-    nothingToDo || blocked ? null : jsxs('div', { style: { fontSize: '0.8125rem', color: C.faint, marginBottom: '6px' } }, [
-      'Type ',
-      jsx('code', {
-        style: {
-          fontFamily: MONO, color: C.accent, background: C.panel,
-          padding: '0 5px', borderRadius: '2px', border: '1px solid ' + C.border
-        }
-      }, hostLabel || 'the host name'),
-      ' exactly — that is the label selected at the top, not the machine\'s hostname. The lock exists so a stray click cannot patch a machine.'
-    ]),
-    armed ? jsx('div', { style: { fontSize: '0.8125rem', color: C.accent, marginBottom: '6px' } },
-      'unlocked — stage first, then apply') : null,
-    blocked ? null : jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
-      jsx('input', {
-        value: typed,
-        onChange: (event) => setTyped(event.target.value),
-        placeholder: hostLabel || 'host name',
-        style: {
-          flex: 1, fontFamily: MONO, fontSize: '0.75rem', padding: '4px 8px',
-          background: 'transparent', color: C.text, border: '1px solid ' + C.border, borderRadius: '3px'
-        }
-      }),
-      jsx('button', {
-        type: 'button',
-        onClick: () => run(true),
-        disabled: !ready || busy,
-        title: !measured ? 'nothing measured for this host yet'
-             : nothingToDo ? 'nothing to stage: the scan found 0 updates'
-             : !armed ? 'type the host label above to unlock' : 'stages the download, prints the command, changes nothing',
-        style: {
-          fontFamily: MONO, fontSize: '0.8125rem', padding: '4px 10px',
-          cursor: ready && !busy ? 'pointer' : 'not-allowed',
-          color: armed ? C.accent : C.faint, background: 'transparent',
-          border: '1px solid ' + (armed ? C.accent : C.border), borderRadius: '3px'
-        }
-      }, busy ? '…' : 'stage (no change)'),
-      jsx('button', {
-        type: 'button',
-        onClick: () => run(false),
-        disabled: !ready || busy,
-        title: !measured ? 'nothing measured for this host yet'
-             : nothingToDo ? 'nothing to apply: the scan found 0 updates'
-             : !armed ? 'type the host label above to unlock' : 'applies for real, writes a receipt with the versions before and after',
-        style: {
-          fontFamily: MONO, fontSize: '0.8125rem', padding: '4px 12px',
-          cursor: ready && !busy ? 'pointer' : 'not-allowed',
-          color: armed ? C.danger : C.faint, background: 'transparent',
-          border: '1px solid ' + (armed ? C.danger : C.border), borderRadius: '3px'
-        }
-      }, busy ? '…' : ready ? 'apply for real' : nothingToDo ? 'nothing to apply' : 'apply — locked')
-    ]),
-    result
-      ? jsxs('div', { style: { marginTop: '8px', borderTop: '1px dashed ' + C.border, paddingTop: '6px' } }, [
-          jsx('div', {
-            style: {
-              fontFamily: MONO, fontSize: '0.8125rem',
-              color: result.applied ? C.ok : (result.dry_run ? C.accent : C.warn)
-            }
-          }, (result.applied ? 'applied — ' : (result.dry_run ? 'staged, nothing changed — ' : 'refused — ')) + (result.reason || '')),
-          result.expected
-            ? jsx('div', { style: { fontSize: '0.75rem', color: C.dim, marginTop: '2px' } },
-                'the name this gate expects: ' + result.expected)
-            : null,
-          steps.length
-            ? jsx('div', { style: { marginTop: '4px' } }, steps.map((step, index) =>
-                jsx('div', {
-                  key: index,
-                  style: { fontFamily: MONO, fontSize: '0.75rem', color: step.ok ? C.dim : C.danger }
-                }, step.action + ' · rc ' + step.rc + ' · ' + step.duration_s + 's' + (step.ok ? '' : ' · ' + (step.output || '').slice(0, 160)))))
-            : null,
-          result.receipt
-            ? jsx('div', { style: { marginTop: '4px', fontSize: '0.75rem', color: C.faint } },
-                'receipt written · ' + (result.receipt.outcome || '') + ' · reboot owed: ' + String(Boolean(result.reboot_required)))
-            : null,
-          // a refusal that hands you the work is worth more than one that ends the conversation
-          result.handoff && (result.handoff.commands || []).length
-            ? jsxs('div', {
-                style: {
-                  marginTop: '6px', padding: '6px 8px', background: C.panel,
-                  border: '1px solid ' + C.border, borderRadius: '3px'
-                }
-              }, [
-                jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } }, [
-                  jsx('span', { style: { fontSize: '0.75rem', color: C.dim } },
-                    'run it yourself — ' + ((result.handoff.where && result.handoff.where.how) || 'by hand')),
-                  jsx('span', { style: { flex: 1 } }),
-                  jsx(Copy, { text: result.handoff.commands.join('\n'), label: 'copy both' })
-                ]),
-                result.handoff.where && result.handoff.where.ssh
-                  ? jsx('div', {
-                      style: {
-                        fontFamily: MONO, fontSize: '0.6875rem', color: C.text, marginTop: '3px',
-                        wordBreak: 'break-all'
-                      }
-                    }, 'connect: ' + result.handoff.where.ssh)
-                  : null,
-                result.handoff.commands.map((command, index) => jsx(Command, {
-                  key: index, text: command, label: 'step ' + (index + 1) + ' — run by hand'
-                })),
-                result.handoff.verify
-                  ? jsx('div', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim, marginTop: '3px', wordBreak: 'break-all' } },
-                      'then check: ' + result.handoff.verify)
-                  : null,
-                result.handoff.reversal
-                  ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '2px', lineHeight: 1.45 } },
-                      'to undo: ' + result.handoff.reversal)
-                  : null,
-                result.handoff.note
-                  ? jsx('div', { style: { fontSize: '0.6875rem', color: C.faint, marginTop: '3px', lineHeight: 1.45 } },
-                      result.handoff.note)
-                  : null,
-                result.handoff.where && result.handoff.where.note
-                  ? jsx('div', { style: { fontSize: '0.6875rem', color: C.warn, marginTop: '2px', lineHeight: 1.45 } },
-                      result.handoff.where.note)
-                  : null
-              ])
-            : null
-        ])
-      : null
-  ])
-}
-
 // --------------------------------------------------------------------------- root
 
 export { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, orderedHosts, todoRows, commandsForHost,
-         fixableRows, UpdatesPanel, LanguagesPanel, IntegrityPanel, GapsPanel, ApplyGate,
+         fixableRows, UpdatesPanel, LanguagesPanel, IntegrityPanel, GapsPanel,
          buildFixCommand, fixBlock, actionableFixes, SECTIONS }
 
 
@@ -2607,10 +2388,10 @@ export function PatchSentinel({ compact }) {
   // a project scan is a different question ("my app's dependencies"), so it is a separate answer kept
   // apart from the machine-wide one instead of overwriting it
   const [libProject, setLibProject] = useState(null)
-  // APPLY stays the optional shortcut: folded, closed, and preflighted so the closed row can say
-  // whether this host allows it before the operator opens anything.
-  const [applyOpen, setApplyOpen] = useState(false)
-  const [applyProbe, setApplyProbe] = useState(null)
+  // No APPLY control in the pane: it only works where the account Hermes runs as can patch without a
+  // prompt, which is never the machine Hermes is on. A control that refuses is friction, and every
+  // device is patchable from its own terminal — so the pane hands over commands and nothing else.
+  // The gated tool (`cve_apply`) stays for the agent.
 
   const loadBundle = useCallback(async () => {
     try {
@@ -2673,16 +2454,6 @@ export function PatchSentinel({ compact }) {
     if (!labels.length) return
     if (!selected || !labels.includes(selected)) setSelected(labels[0])
   }, [labels, selected, setSelected])
-
-  useEffect(() => {
-    let live = true
-    setApplyProbe(null)
-    if (!selected) return () => { live = false }
-    call('/apply/preflight?host=' + encodeURIComponent(selected))
-      .then((state) => { if (live) setApplyProbe(state) })
-      .catch(() => { if (live) setApplyProbe({ ok: false, known: false, reason: 'the preflight did not answer' }) })
-    return () => { live = false }
-  }, [selected])
 
   /**
    * The one control. It starts the backend run and then follows the bundle: each stage is written as
@@ -2989,35 +2760,6 @@ export function PatchSentinel({ compact }) {
     }),
     jsx(LanguagesPanel, { libraries: deviceLibraries(bundle, selected) || libraries,
                           onCheck: checkLibraries, busy: libBusy }),
-    // the optional shortcut, folded under the plan it belongs to — not a step of its own
-    jsxs('div', { style: { marginBottom: '14px' } }, [
-      jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } }, [
-        jsx('button', {
-          type: 'button',
-          onClick: () => setApplyOpen((current) => !current),
-          disabled: !selected,
-          title: 'runs the same commands the plan gives you, from here',
-          style: {
-            fontFamily: MONO, fontSize: '0.75rem', padding: '2px 8px',
-            cursor: selected ? 'pointer' : 'default', color: applyOpen ? C.accent : C.faint,
-            background: 'transparent', border: '1px solid ' + C.border, borderRadius: '3px'
-          }
-        }, (applyOpen ? '▾ ' : '▸ ') + 'run it from here instead — optional'),
-        jsx('span', { style: { flex: 1 } }),
-        jsx('span', {
-          style: {
-            fontFamily: MONO, fontSize: '0.6875rem',
-            color: applyProbe && applyProbe.known && !applyProbe.ok ? C.warn : C.faint
-          }
-        }, applyProbe === null ? 'checking this host…'
-           : !applyProbe.known ? 'unknown'
-           : applyProbe.ok ? 'allowed on ' + selected
-           : 'not available on ' + selected + ' — sudo needs a password there')
-      ]),
-      applyOpen
-        ? jsx(ApplyGate, { hostLabel: selected, probe: applyProbe, entry: hosts[selected] || null })
-        : null
-    ]),
     jsx(GapsPanel, { coverage, selected }),
     jsx('div', {
       style: {

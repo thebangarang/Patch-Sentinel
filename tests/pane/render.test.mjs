@@ -10,7 +10,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, UpdatesPanel, LanguagesPanel, IntegrityPanel,
-         GapsPanel, ApplyGate, PatchSentinel, SECTIONS } from './pane.mjs'
+         GapsPanel, PatchSentinel, SECTIONS } from './pane.mjs'
 
 const dataPath = process.env.PANE_DATA || '../pane-data.json'
 const data = JSON.parse(readFileSync(dataPath, 'utf8'))
@@ -79,9 +79,7 @@ const panes = [
   ['the fix, as commands', createElement(CommandsPanel, {
     bundle: { scan: data.status, plans: { plans: { [data.hostLabel]: data.plan } } },
     selected: data.hostLabel, where: null })],
-  ['gaps', createElement(GapsPanel, { coverage: data.coverage, selected: data.hostLabel })],
-  ['apply', createElement(ApplyGate, { hostLabel: data.hostLabel,
-                                       entry: data.status.hosts[data.hostLabel] })]
+  ['gaps', createElement(GapsPanel, { coverage: data.coverage, selected: data.hostLabel })]
 ]
 
 // The three states that used to be unreachable in a check: a row that carries a finding (the code
@@ -258,29 +256,15 @@ for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXT
   console.log('  ' + name.padEnd(36) + html.length + ' bytes')
 }
 
-// The apply gate's refusal must hand over the commands, and gaps must read as a short list first.
-const refused = renderToStaticMarkup(createElement(ApplyGate, {
-  hostLabel: 'beelink',
-  entry: { pending_count: 3, adapter: 'apt' },
-  initialResult: { applied: false, dry_run: false, steps: [],
-                   reason: 'this user cannot run sudo without a password on that host',
-                   handoff: { commands: ['sudo apt-get update && sudo apt-get -y --download-only full-upgrade',
-                                         'sudo apt-get -y full-upgrade'],
-                              note: 'run these in this order',
-                              verify: "apt-get -s dist-upgrade | grep '^Inst '",
-                              reversal: 're-install the recorded versions',
-                              where: { kind: 'remote',
-                                       how: 'on debian@10.0.0.9, in a terminal there',
-                                       ssh: 'ssh -p 2223 debian@10.0.0.9' } } }
-}))
-if (!refused.includes('run it yourself')) throw new Error('the handoff block is missing')
-if (!refused.includes('apt-get -y full-upgrade')) throw new Error('the handoff commands are missing')
-if (!refused.includes('copy both')) throw new Error('the handoff copy control is missing')
-// the apply control must not look ready before the host has said it allows it
-if (!refused.includes('apply — locked') && !refused.includes('apply for real')) throw new Error(
-  'the apply button has no locked/unlocked label')
-if (!refused.includes('connect: ssh -p 2223 debian@10.0.0.9')) throw new Error('the handoff does not say where')
-if (!refused.includes('then check: apt-get -s dist-upgrade')) throw new Error('the verify command is missing')
+// The pane has no APPLY control: every device is patched from its own terminal, and the commands
+// section is the only place a machine change is offered. The gated tool stays for the agent.
+const paneSource = readFileSync(new URL('./pane.mjs', import.meta.url), 'utf8')
+if (/run it from here instead/i.test(paneSource)) {
+  throw new Error('the pane still offers the apply shortcut')
+}
+if (/apply for real|apply — locked/.test(paneSource)) {
+  throw new Error('the pane still renders an apply control')
+}
 
 const gaps = renderToStaticMarkup(createElement(GapsPanel, {
   selected: 'beelink',
@@ -297,7 +281,7 @@ if (!gaps.includes('2 inherent limits')) throw new Error('the inherent-limit cou
 if (!gaps.includes('explain them')) throw new Error('the detail toggle is missing')
 if (gaps.includes('STRUCTURAL-DETAIL')) throw new Error('inherent limits must start collapsed')
 if (!gaps.includes('add the user to the docker group')) throw new Error('a fixable gap must show its fix')
-console.log('  apply handoff and collapsed gaps render as designed')
+console.log('  no apply control in the pane; gaps render as designed')
 
 // The one-glance verdict: an exploited CVE must outrank everything else on that line.
 const verdict = renderToStaticMarkup(createElement(VerdictBar, {
