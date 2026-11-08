@@ -377,6 +377,10 @@ function dot(level) {
  * with the pane: a sweeping line while a measurement runs, and a breathing dot on the control that
  * started it. No dependency, no canvas, nothing that runs when nothing is being measured.
  */
+// one period, shared by the stylesheet and the phase calculation: two numbers that had to agree would
+// eventually disagree
+const SCAN_PERIOD = 1150
+
 const SCAN_CSS = `
 @keyframes ps-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(320%); } }
 @keyframes ps-breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
@@ -388,7 +392,7 @@ const SCAN_CSS = `
   /* the delay is set from the wall clock by ScanLine, so every track on the page is at the same point
      of the same wave — a section that starts animating mid-run joins the wave instead of starting its
      own */
-  animation: ps-sweep 1150ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: ps-sweep ${SCAN_PERIOD}ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
   animation-delay: var(--ps-phase, 0ms); }
 .ps-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #4de3d0;
   margin-right: 6px; animation: ps-breathe 1.2s ease-in-out infinite; }
@@ -401,13 +405,19 @@ const SCAN_CSS = `
 
 /** The sweeping line, shown while any measurement is running. */
 function ScanLine({ label }) {
+  // The phase is taken from the clock *once*, at mount, and never recomputed. That is what makes two
+  // lines on the page one wave: a section that starts animating mid-run joins the wave where it already
+  // is. Recomputing it on each render looks equivalent and is not — writing a new delay onto a running
+  // animation moves it, so a pane that re-renders while it polls (it does, once a second) shoves the
+  // header line to a different point of the sweep than the section line, which is exactly the drifting
+  // the operator kept seeing. `useMemo` with an empty dependency list freezes it for the life of the
+  // element.
+  const phase = useMemo(() => -(Date.now() % SCAN_PERIOD) + 'ms', [])
   return jsxs('div', { style: { marginBottom: '10px' } }, [
     // mounted here as well as at the page root: a panel rendered alone (a preview, a test) must still
     // animate, and a duplicate <style> is harmless
     jsx('style', { key: 'css' }, SCAN_CSS),
-    // -now % period: the sweep's position becomes a function of the clock rather than of when this
-    // element mounted, which is what makes two lines on the page look like one wave
-    jsx('div', { className: 'ps-scan-track', style: { '--ps-phase': -(Date.now() % 1150) + 'ms' } }),
+    jsx('div', { className: 'ps-scan-track', style: { '--ps-phase': phase } }),
     label
       ? jsx('div', {
           style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.dim, marginTop: '4px',
@@ -2382,7 +2392,8 @@ function GapsPanel({ coverage, selected }) {
 
 // --------------------------------------------------------------------------- root
 
-export { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, HowItWorks, orderedHosts,
+export { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, ScanButton, HowItWorks, ScanLine,
+         orderedHosts,
          todoRows, commandsForHost,
          fixableRows, UpdatesPanel, LanguagesPanel, IntegrityPanel, GapsPanel,
          buildFixCommand, fixBlock, actionableFixes, SECTIONS }

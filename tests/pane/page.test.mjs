@@ -75,6 +75,17 @@ const phaseOf = (element) => {
   const match = renderToStaticMarkup(element).match(/--ps-phase:\s*(-?\d+)ms/)
   return match ? Number(match[1]) : null
 }
+// The phase must be taken once per mount. Recomputing it on each render looks equivalent and is not:
+// writing a new animation-delay onto a running animation moves it, so a pane that polls once a second
+// shoved the header line to a different point of the sweep than the section line. Measured in Chromium
+// with two tracks, one re-rendered every 200 ms: frozen phases stayed together (fraction 1.020 vs
+// 1.018 of their own width), a recomputed phase fell behind (0.232).
+if (!paneSource.includes('const phase = useMemo(')) {
+  throw new Error('the sweep phase is recomputed on every render, which desynchronises the lines')
+}
+if (!paneSource.includes('animation: ps-sweep ${SCAN_PERIOD}ms')) {
+  throw new Error('the stylesheet and the phase calculation do not share one period')
+}
 const phaseA = phaseOf(createElement(UpdatesPanel, { entry: null, hostLabel: 'beelink',
                                                      scanning: true }))
 const phaseB = phaseOf(createElement(LanguagesPanel, { libraries: null, onCheck: noop,
