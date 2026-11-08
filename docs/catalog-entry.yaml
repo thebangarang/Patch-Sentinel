@@ -10,7 +10,7 @@
 #   hermes plugins doctor . --ci
 name: patch-sentinel
 repo: https://github.com/thebangarang/Patch-Sentinel
-sha: "8e39ad09dd517ecf9dac7b6effe3dc5404902466"
+sha: "601c734e1a922aa9f4517cf06594703baddc47bf"
 subdir: ""
 description: >
   Answers "are we patched?" with evidence, for whatever the host runs — an adapter chosen from the
