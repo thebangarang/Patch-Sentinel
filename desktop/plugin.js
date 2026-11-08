@@ -392,6 +392,9 @@ const SCAN_CSS = `
 /** The sweeping line, shown while any measurement is running. */
 function ScanLine({ label }) {
   return jsxs('div', { style: { marginBottom: '10px' } }, [
+    // mounted here as well as at the page root: a panel rendered alone (a preview, a test) must still
+    // animate, and a duplicate <style> is harmless
+    jsx('style', { key: 'css' }, SCAN_CSS),
     jsx('div', { className: 'ps-scan-track' }),
     label
       ? jsx('div', {
@@ -812,7 +815,7 @@ function HostsPanel({ onChanged, startOpen, initialTest, initialHosts, onSelect,
 // --------------------------------------------------------------------------- UPDATES
 
 /** The raw update list for the selected host — every package, searchable, copyable. */
-function UpdatesPanel({ entry, hostLabel }) {
+function UpdatesPanel({ entry, hostLabel, scanning }) {
   const [query, setQuery] = useState('')
   const rows = (entry && entry.pending) || []
   const total = (entry && entry.pending_count) || 0
@@ -841,6 +844,11 @@ function UpdatesPanel({ entry, hostLabel }) {
         : null,
       rows.length ? jsx(Copy, { text, label: 'copy list', what: 'the package list' }) : null
     ]),
+    // this section's own sweep: the top line says a run is going, this one says which part is
+    scanning
+      ? jsx(ScanLine, { label: 'reading the package list — what the archive would install, and which '
+                             + 'advisory names that exact version' })
+      : null,
     entry && entry.where && (rows.length || (entry.vendor_lag || []).length)
       ? jsxs('div', { style: { fontSize: '0.75rem', color: C.faint, marginBottom: '5px', lineHeight: 1.45 } }, [
           jsx('span', { style: { fontFamily: MONO, color: C.dim } },
@@ -992,7 +1000,7 @@ function UpdatesPanel({ entry, hostLabel }) {
 // --------------------------------------------------------------------------- LANGUAGES
 
 /** What the language check actually read, and what it found. Nothing runs until you ask. */
-function LanguagesPanel({ libraries, onCheck, busy }) {
+function LanguagesPanel({ libraries, onCheck, busy, scanning }) {
   const [projectPath, setProjectPath] = useState('')
   const [query, setQuery] = useState('')
   // a list of 130 rows where 127 say "clean" buries the three that matter: findings first, the rest
@@ -1179,7 +1187,7 @@ function LanguagesPanel({ libraries, onCheck, busy }) {
       }, busy ? [jsx('span', { key: 'dot', className: 'ps-dot' }), 'reading']
          : libraries ? 'read again' : 'read it')
     ]),
-    busy
+    busy || scanning
       ? jsx(ScanLine, {
           label: 'reading the installed packages, every project virtualenv, the jars on disk and the '
                  + 'lockfile pins'
@@ -2135,7 +2143,7 @@ function whereLine(where) {
                       : 'run it in a terminal on this machine')
 }
 
-function CommandsPanel({ bundle, selected, where, devices }) {
+function CommandsPanel({ bundle, selected, where, devices, scanning }) {
   const all = devices && devices.length ? devices : orderedHosts(bundle)
   const hosts = all.filter((row) => !selected || row.label === selected)
   if (!hosts.length) return null
@@ -2154,6 +2162,11 @@ function CommandsPanel({ bundle, selected, where, devices }) {
                       what: 'all ' + total + ' commands', label: 'copy all ' + total, primary: true })
         : jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.ok } }, 'nothing to run')
     ]),
+    // the plan is built from the measurement that just ran, so it is the last part to light up
+    scanning
+      ? jsx(ScanLine, { label: 'turning the measurement into ordered commands — with how to verify and '
+                             + 'how to undo each one' })
+      : null,
     // A device with nothing to run is not a block with an empty body: it is one line, and it says why.
     quiet.length
       ? jsx('div', { style: { fontSize: '0.75rem', color: C.faint, marginBottom: '6px' } },
@@ -2405,6 +2418,9 @@ function useSelectedDevice() {
  * it is a component of its own with its own test: a button that says "beelink" while webasix is
  * selected is the failure this had.
  */
+const STAGE_LABEL = { scan: 'packages', libraries: 'language stack', integrity: 'integrity',
+                      plans: 'commands' }
+
 function ScanButton({ selected, busy, stage, currentHost, seconds, onClick }) {
   return jsx('button', {
     type: 'button',
@@ -2422,7 +2438,7 @@ function ScanButton({ selected, busy, stage, currentHost, seconds, onClick }) {
     }
   }, busy
     ? [jsx('span', { key: 'ring', className: 'ps-ring' }),
-       (stage && stage !== 'starting' && stage !== 'done' ? stage : 'measuring')
+       (stage && STAGE_LABEL[stage] ? STAGE_LABEL[stage] : 'measuring')
          + (currentHost ? ' · ' + currentHost : '')
          + (seconds ? ' ' + Math.round(seconds) + ' s' : ' …')]
     : selected ? 'scan all · ' + selected : 'scan all')
@@ -2817,7 +2833,7 @@ export function PatchSentinel({ compact }) {
     jsx(HostsPanel, { onChanged: loadBundle, onSelect: setSelected, selected, bundle,
                       onLoaded: setInventory }),
     jsx(TodoPanel, { bundle, selected, onSelect: setSelected, devices }),
-    jsx(CommandsPanel, { bundle, selected, where, devices }),
+    jsx(CommandsPanel, { bundle, selected, where, devices, scanning: busy && stage === 'plans' }),
     // The detail sections stay on screen whether or not they found something: an empty section that
     // says why it is empty is information, and a section that vanishes reads as a broken pane. The
     // rows above are the answer; these are the readings it was built from.
@@ -2832,7 +2848,8 @@ export function PatchSentinel({ compact }) {
               : ' — not measured yet')
           + ' · the button above reads this device only; each device keeps its own last reading'
         : 'click a device name above to choose whose readings these are'),
-    jsx(UpdatesPanel, { entry: hosts[selected] || null, hostLabel: selected }),
+    jsx(UpdatesPanel, { entry: hosts[selected] || null, hostLabel: selected,
+                        scanning: busy && stage === 'scan' }),
     jsx(IntegrityPanel, {
       reading: deviceIntegrity(bundle, selected), busy: busy && stage === 'integrity',
       seconds: busy && stage === 'integrity' ? seconds : 0,
@@ -2842,7 +2859,8 @@ export function PatchSentinel({ compact }) {
       onAttest: attestIntegrity
     }),
     jsx(LanguagesPanel, { libraries: deviceLibraries(bundle, selected) || libraries,
-                          onCheck: checkLibraries, busy: libBusy }),
+                          onCheck: checkLibraries, busy: libBusy,
+                          scanning: busy && stage === 'libraries' }),
     jsx(GapsPanel, { coverage, selected }),
     jsx('div', {
       style: {

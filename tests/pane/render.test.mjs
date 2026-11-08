@@ -238,6 +238,33 @@ const libsNever = renderToStaticMarkup(createElement(LanguagesPanel, { libraries
 if (!libsNever.includes('read it')) throw new Error('the libs panel does not use the same verb as integrity')
 console.log('  the how-to is in the pane, and both panels use the same verb')
 
+// Every section shows its own sweep while its stage runs, so the operator can see where the run is —
+// the top line is the run, these are the parts.
+const bundleForScan = { scan: data.status, plans: { plans: { [data.hostLabel]: data.plan } },
+                        devices: {} }
+for (const [name, element] of [
+  ['system packages', createElement(UpdatesPanel, {
+    entry: data.status.hosts[data.hostLabel], hostLabel: data.hostLabel, scanning: true })],
+  ['libs & runtimes', createElement(LanguagesPanel, {
+    libraries: FIXTURE, onCheck: noop, busy: false, scanning: true })],
+  ['the fix, as commands', createElement(CommandsPanel, {
+    bundle: bundleForScan, selected: data.hostLabel, where: null, scanning: true })]
+]) {
+  const html = renderToStaticMarkup(element)
+  if (!html.includes('ps-scan-track')) throw new Error(name + ' shows no progress while its stage runs')
+}
+for (const [name, element] of [
+  ['system packages', createElement(UpdatesPanel, {
+    entry: data.status.hosts[data.hostLabel], hostLabel: data.hostLabel, scanning: false })],
+  ['libs & runtimes', createElement(LanguagesPanel, {
+    libraries: FIXTURE, onCheck: noop, busy: false, scanning: false })]
+]) {
+  if (renderToStaticMarkup(element).includes('ps-scan-track')) {
+    throw new Error(name + ' animates when nothing is running')
+  }
+}
+console.log('  every section animates while its own stage runs, and only then')
+
 for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXTURE],
                                  ['libs (nothing read)', null]]) {
   const html = renderToStaticMarkup(createElement(LanguagesPanel, { libraries, onCheck: noop,
