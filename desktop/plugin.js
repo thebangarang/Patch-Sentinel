@@ -555,7 +555,7 @@ function VerdictBar({ status }) {
 // --------------------------------------------------------------------------- HOSTS
 
 /** Add or remove a server. Addresses only — never a credential. */
-function HostsPanel({ onChanged, startOpen, initialTest, initialHosts, onSelect, selected, bundle }) {
+function HostsPanel({ onChanged, startOpen, initialTest, initialHosts, onSelect, selected, bundle, onLoaded }) {
   // `initialHosts` exists so the panel can be rendered (and previewed) before its fetch lands; the
   // live pane never passes it
   const [hosts, setHosts] = useState(initialHosts || null)
@@ -570,7 +570,11 @@ function HostsPanel({ onChanged, startOpen, initialTest, initialHosts, onSelect,
   const load = useCallback(async () => {
     try {
       const answer = await call('/hosts')
-      setHosts((answer && answer.hosts) || [])
+      const list = (answer && answer.hosts) || []
+      setHosts(list)
+      if (onLoaded) {
+        onLoaded(list.map((host) => ({ label: host.label, target: host.target || 'local' })))
+      }
     } catch (err) {
       setHosts([])
     }
@@ -2620,6 +2624,15 @@ export function PatchSentinel({ compact }) {
 
   useEffect(() => { loadBundle(); loadRest() }, [loadBundle, loadRest])
 
+  // One retry if nothing arrived: a gateway restart, a route that answered 503 once, or a first render
+  // that raced the backend all leave `devices` empty, and an empty device list is a pane that can only
+  // say "pick a device first" — a dead end the operator cannot get out of.
+  useEffect(() => {
+    if (inventory.length || Object.keys(bundle.devices || {}).length) return undefined
+    const timer = setTimeout(() => { loadBundle(); loadRest() }, 3000)
+    return () => clearTimeout(timer)
+  }, [bundle, inventory, loadBundle, loadRest])
+
   const devices = useMemo(() => {
     const measured = orderedHosts(bundle)
     const seen = new Set(measured.map((row) => row.label))
@@ -2663,7 +2676,13 @@ export function PatchSentinel({ compact }) {
     if (!selected) {
       // pressing with no device measured *this machine* silently, which reads as "the button ignores
       // my selection". A device has to be named first.
-      setScanError('pick a device first — click its name in the servers list; nothing was scanned')
+      // say what the pane knows: an empty list here is a load problem, not a missing click
+      const known = (devices || []).map((row) => row.label)
+      setScanError(known.length
+        ? 'pick a device first — the pane knows ' + known.length + ' (' + known.join(', ') + '); click '
+          + 'its name in the servers list. Nothing was scanned.'
+        : 'no device is loaded yet — the inventory did not answer. Nothing was scanned; press again in '
+          + 'a moment, and if it persists the gateway is not running the pane route.')
       return
     }
     setBusy(true)
@@ -2726,7 +2745,10 @@ export function PatchSentinel({ compact }) {
       setBusy(false)
       setStage(null)
     }
-  }, [busy, loadRest])
+  // `selected` and `devices` are read inside this callback. Leaving them out of the dependency list
+  // closed over the first render's value — null — so every press hit the "pick a device first" branch
+  // no matter what the operator had clicked. That is a dead button, and it was this.
+  }, [busy, loadRest, selected, devices])
 
   /** Re-read the stored integrity reading without paying for a whole run (after a baseline/paste). */
   const refreshIntegrity = useCallback(async (label) => {
@@ -2906,7 +2928,8 @@ export function PatchSentinel({ compact }) {
         ? Math.max(0, Math.round((Date.now() - Date.parse(hosts[selected].measured_at)) / 1000))
         : null
     }, label: selected }),
-    jsx(HostsPanel, { onChanged: loadBundle, onSelect: setSelected, selected, bundle }),
+    jsx(HostsPanel, { onChanged: loadBundle, onSelect: setSelected, selected, bundle,
+                      onLoaded: setInventory }),
     jsx(TodoPanel, { bundle, selected, onSelect: setSelected, devices }),
     jsx(CommandsPanel, { bundle, selected, where, devices }),
     // The detail sections stay on screen whether or not they found something: an empty section that

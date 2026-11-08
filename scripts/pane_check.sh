@@ -20,6 +20,7 @@ sed "s|from '@hermes/plugin-sdk'|from './sdk-stub.mjs'|g" \
 
 node --check "$work/pane.mjs"
 cd "$work"
+node hooks.test.mjs
 PANE_DATA="${PANE_DATA:-$root/tmp/pane-data.json}" node fixcmd.test.mjs
 node diagnose.test.mjs
 PANE_DATA="${PANE_DATA:-$root/tmp/pane-data.json}" node render.test.mjs
