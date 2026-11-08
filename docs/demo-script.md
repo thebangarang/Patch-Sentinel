@@ -34,13 +34,58 @@ the Fedora VM, which is disposable.
 Narration is optional; if you prefer silence, the six shots still tell it — subtitle them with those
 same lines.
 
-## Caption (X), ≤ 280 characters
+## The X post, counted
 
-Patch Sentinel — a Hermes plugin that answers "are we patched?" with evidence: packages, kernel,
-images, integrity, the language stack. It never calls a machine clean when it couldn't look. 78 s,
-one real run. @NousResearch github.com/thebangarang/Patch-Sentinel
+The first post carries the video and **must** name @NousResearch. Counted the way X counts: links are
+23 characters whatever their length, so these are paste-ready.
 
-*(262 characters — paste as one paragraph; the video carries the rest.)*
+**Post 1 — the one with the video (266 characters)**
+
+```
+A patch scanner that refuses to lie.
+
+Packages, kernel, image digests, integrity, your language stack — three outcomes per check: clean,
+finding, or "could not look". The third one is never drawn green.
+
+78 s demo, one real run. @NousResearch
+github.com/thebangarang/Patch-Sentinel
+```
+
+**Post 1, variant that names the occasion first (248 characters)**
+
+```
+My entry for the @NousResearch Hermes plugin hackathon: a patch scanner that refuses to lie.
+
+Packages, kernel, image digests, integrity, language stack — clean, finding, or "could not look". The
+third is never drawn green.
+
+github.com/thebangarang/Patch-Sentinel
+```
+
+**Replies (a thread, so the first post stays one idea)**
+
+```
+What it reads: apt/dnf/pacman/zypper/apk, the running kernel against the newest installed, registry
+digests, package checksums, sockets, and nine language ecosystems through OSV.
+
+No cloud, no telemetry, no credential path — remote hosts go through your own ssh agent.
+```
+
+```
+What it finds becomes commands, not a button: per device, numbered, with the risk, the downtime, how
+to verify each step and how to undo it.
+
+The pane reads. It never changes a machine.
+```
+
+```
+Honest about what it can't see: no CVE scan inside image layers, no macOS/Windows, Alpine and the RHEL
+family unproven — each written into the pane and the README as a stated gap, not a colour.
+
+Coverage grows by demand, from issues.
+```
+
+Both variants were counted against X's rules (280 limit, 23 per link); the replies are 268, 185 and 233.
 
 ## Credits line (end card)
 
