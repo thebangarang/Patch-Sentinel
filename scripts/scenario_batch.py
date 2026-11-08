@@ -461,36 +461,37 @@ def scenario_bad_inputs(verbose: bool) -> None:
 
 
 def scenario_rescan_bundle(verbose: bool) -> None:
-    """"rescan all" is now the pane's only control: it must write one bundle, in order, and never
-    report a stage as clean when it could not look."""
-    name = "rescan-all"
+    """"scan all" is per device now: one press must read every surface of that one device, keep the
+    other devices' blocks intact, and never report a stage as clean when it could not look."""
+    name = "scan-all-one-device"
     home = tempfile.mkdtemp(prefix="s-home-")
     os.environ["HOME"] = home
     data = f"{home}/data"
     tools.configure(settings_for(name, home, data))
     payload = run(name, "cve_rescan", {})
     bundle = payload.get("bundle") or {}
-    stages = [stage.get("name") for stage in bundle.get("stages") or []]
-    expect(name, stages == ["scan", "libraries", "integrity", "plans"],
-           f"the stages ran out of order or went missing: {stages}")
+    stages = {stage.get("name") for stage in bundle.get("stages") or []}
+    expect(name, stages == {"scan", "libraries", "integrity", "plans"},
+           f"a surface went missing from the run: {sorted(stages)}")
+    expect(name, (bundle.get("stages") or [{}])[-1].get("name") == "plans",
+           "the plan did not run last — it is built from the measurement that just ran")
     expect(name, os.path.exists(f"{data}/rescan.json"), "the bundle was not written to the data dir")
-    for key in ("scan", "libraries", "integrity", "plans"):
-        expect(name, bundle.get(key), f"the bundle carries no {key}")
+    devices = bundle.get("devices") or {}
+    expect(name, len(devices) == 1, f"one press measured {len(devices)} device(s), expected 1")
+    for label, device in devices.items():
+        for surface in ("scan", "libraries", "integrity", "plan"):
+            expect(name, device.get(surface), f"{label} carries no {surface} reading")
+        expect(name, device.get("measured_at"), f"{label} has no measurement time")
     codes = [stage.get("exit_code") for stage in bundle.get("stages") or []]
     expect(name, payload.get("exit_code") == max(codes),
            f"the run reports {payload.get('exit_code')} while its worst stage is {max(codes)}")
     expect(name, bundle.get("stage") == "done", "the bundle does not say it finished")
-    # every device must carry every surface: a host that is simply missing looks clean next to one
-    # that was measured, which is the failure this whole project is about
-    devices = bundle.get("devices") or {}
-    expect(name, bool(devices), "the bundle carries no per-device block at all")
-    for label, device in devices.items():
-        for surface in ("libraries", "integrity", "plan"):
-            expect(name, device.get(surface), f"{label} carries no {surface} reading")
-    # a second run must replace the bundle, not append to it
+    # a second run must replace the stages, and keep the device block it already had
     again = run(name, "cve_rescan", {})
     expect(name, len((again.get("bundle") or {}).get("stages") or []) == 4,
-           "a second run appended stages instead of starting a new bundle")
+           "a second run appended stages instead of starting a new one")
+    expect(name, bool((again.get("bundle") or {}).get("devices")),
+           "a second run dropped the device block")
 
 
 SCENARIOS = [
@@ -512,7 +513,7 @@ SCENARIOS = [
     ("path with spaces and a symlink loop", scenario_awkward_project_path),
     ("data directory is a file", scenario_data_dir_is_a_file),
     ("bad arguments", scenario_bad_inputs),
-    ("rescan all: one bundle, in order", scenario_rescan_bundle),
+    ("scan all: one device, every surface", scenario_rescan_bundle),
 ]
 
 

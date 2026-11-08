@@ -32,7 +32,9 @@ data_dir = str(tools._settings.get("data_dir") or store.data_dir())
 if mode == "--fast":
     bundle = rescan.read(data_dir)
 else:
-    bundle = json.loads(tools.cve_rescan({})).get("bundle") or {}
+    # per device: a preview is for the device named on the command line, or this machine
+    host = next((a for a in sys.argv[4:] if not a.startswith("--")), "")
+    bundle = json.loads(tools.cve_rescan({"host": host} if host else {})).get("bundle") or {}
 
 with open(f"{preview}/bundle.json", "w") as handle:
     json.dump(bundle, handle)
@@ -56,9 +58,12 @@ import { VerdictBar, HostsPanel, TodoPanel, CommandsPanel, IntegrityPanel, Updat
 
 const bundle = JSON.parse(readFileSync(process.env.PREVIEW + '/bundle.json', 'utf8'))
 const scan = bundle.scan || { hosts: {}, blind: [], note: '' }
-const labels = Object.keys(scan.hosts || {})
-const selected = labels[0] || null
-const where = selected && scan.hosts[selected] ? scan.hosts[selected].where : null
+const devices = bundle.devices || {}
+const labels = Object.keys(devices).length ? Object.keys(devices) : Object.keys(scan.hosts || {})
+const selected = process.env.PREVIEW_HOST || labels[0] || null
+const entry = ((devices[selected] || {}).scan || {}).hosts || {}
+const deviceEntry = entry[selected] || (scan.hosts || {})[selected] || null
+const where = deviceEntry ? deviceEntry.where : null
 const noop = () => {}
 
 const device = ((bundle.devices || {})[selected]) || {}
@@ -66,12 +71,12 @@ const libraries = device.libraries || bundle.libraries
 const integrity = device.integrity || bundle.integrity
 
 const body = renderToStaticMarkup(createElement('div', {}, [
-  createElement(VerdictBar, { key: 'v', status: scan }),
+  createElement(VerdictBar, { key: 'v', status: { ...scan, hosts: selected ? { [selected]: deviceEntry || {} } : {} } }),
   createElement(HostsPanel, { key: 'h', onChanged: noop, initialHosts: labels.map((label) => ({
     label, target: (scan.hosts[label] || {}).target || 'local' })) }),
   createElement(TodoPanel, { key: 't', bundle, selected, onSelect: noop }),
   createElement(CommandsPanel, { key: 'c', bundle, selected, where }),
-  createElement(UpdatesPanel, { key: 'u', entry: selected ? scan.hosts[selected] : null, hostLabel: selected }),
+  createElement(UpdatesPanel, { key: 'u', entry: deviceEntry, hostLabel: selected }),
   createElement(IntegrityPanel, { key: 'i', reading: integrity, busy: false, seconds: 0,
                                   onRead: noop, onRebaseline: noop, onImport: noop }),
   createElement(LanguagesPanel, { key: 'l', libraries, onCheck: noop, busy: false }),
@@ -86,7 +91,7 @@ body{margin:0;background:#0a0f13;color:var(--foreground);font-family:Inter,syste
 </style></head><body><div class="wrap">${body}</div></body></html>`)
 console.log('wrote', process.env.OUT)
 JS
-PREVIEW="$preview" OUT="$out" node render.mjs
+PREVIEW="$preview" OUT="$out" PREVIEW_HOST="${2:-}" node render.mjs
 
 chrome="$HOME/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome"
 if [[ -x "$chrome" && -d "$app/node_modules/@playwright/test" ]]; then

@@ -150,7 +150,7 @@ const now = renderToStaticMarkup(createElement(TodoPanel, {
            os: { id: 'debian', codename: 'bookworm' }, status: { exit_code: 1 } },
     vps: { label: 'vps', target: 'root@203.0.113.9', adapter: 'apt', pending_count: 0,
            os: { id: 'ubuntu', codename: 'noble' }, status: { exit_code: 0 } }
-  }, blind: [], note: '' } }, selected: 'beelink', onSelect: noop }))
+  }, blind: [], note: '' } }, selected: null, onSelect: noop }))   // null = every device, for the icon test
 if ((now.match(/<svg/g) || []).length < 3) throw new Error('a server row has no device icon')
 if (!now.includes('the machine Hermes runs on')) throw new Error('the hermes machine icon is missing')
 if (!now.includes('a server on the local network')) throw new Error('the LAN server icon is missing')
@@ -285,11 +285,11 @@ for (const section of SECTIONS) {
 }
 console.log('  legend names all ' + SECTIONS.length + ' sections, in order')
 
-// One refresh control, at the top. Three panels used to carry their own "rescan" button doing the
-// same work; the operator could not tell whether they differed.
-const refreshButtons = (root.match(/>rescan all</g) || []).length
+// One refresh control, at the top, and it names the device it will measure. Three panels used to carry
+// their own "rescan" button doing the same work; the operator could not tell whether they differed.
+const refreshButtons = (root.match(/>scan all</g) || []).length
 if (refreshButtons !== 1) {
-  throw new Error('expected exactly one rescan control, found ' + refreshButtons)
+  throw new Error('expected exactly one scan control, found ' + refreshButtons)
 }
 if (root.includes('measuring…')) {
   throw new Error('a per-panel rescan button is still rendered')

@@ -284,15 +284,17 @@ CVE_INTEGRITY = {
 CVE_RESCAN = {
     "name": "cve_rescan",
     "description": (
-        "The whole posture in one call: packages and kernel (cve_scan), the language and framework "
-        "stack (cve_libraries), the integrity reading (cve_integrity) and the commands each of those "
-        "implies (cve_plan per host), in that order, stored as one bundle. Use it when the question is "
-        "'what is the state of everything' — the individual tools stay for a question about one "
-        "surface. Each stage reports its own exit_code; the call's exit_code is the worst of them, so "
-        "a stage that could not look is never washed out by three that could. Takes a minute or more "
-        "on a full package database; the bundle is written after each stage, so a partial run is "
-        "readable while it is still running."),
-    "parameters": {"type": "object", "properties": {}, "required": []},
+        "Every surface for ONE device, in one call: packages and kernel (cve_scan), the language and "
+        "framework stack (cve_libraries), the integrity reading (cve_integrity) — measured at the same "
+        "time, so the wait is the slowest surface rather than the sum — then the commands the "
+        "measurement implies (cve_plan). Stored as one bundle, one block per device, so a device "
+        "measured earlier keeps its reading while another is scanned. Use it when the question is "
+        "'what is the state of this machine'; run it once per device. Each stage reports its own "
+        "exit_code and the call's is the worst, so a surface that could not look is never washed out."),
+    "parameters": {"type": "object", "properties": {
+        "host": {"type": "string",
+                 "description": "Host label from the inventory. Omit for this machine."}},
+        "required": []},
 }
 
 SCHEMAS = {schema["name"]: schema

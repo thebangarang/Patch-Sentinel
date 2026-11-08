@@ -249,32 +249,33 @@ feed that cannot be read is reported as **unmeasured**, never as clean.
 Not wired, and named as gaps in the pane: Fedora's Bodhi updates, SUSE's CSAF/VEX documents, and any
 form of image scanning (Trivy-class) — the plugin does not pretend to see inside a container.
 
-## One button, one to-do list, one command block
+## One device at a time, one button, one command block
 
-The pane answers two questions and nothing else: **what has to be done**, and **with what**.
+The pane answers two questions about **the device you picked**: **what has to be done**, and **with
+what**. Every section below the servers list belongs to that one device.
 
-1. **rescan all** — the only control, and it reads **every device** in one run: packages, kernel and
-   images for the whole inventory, then the language stack and the integrity reading host by host,
-   then the commands each device's measurement implies. Nothing is left for a second press — selecting
-   another device changes the view, never the measurement, and the pane says so above the readings.
-   The bundle is written after each stage and after each host inside a per-host stage, so the rows
-   fill in as they land and the button names the host it is on (`integrity · webasix 41 s`). Packages
-   land in ~20-50 s depending on the ssh round trip; a two-device run with both integrity readings is
-   about two and a half minutes. It is one press, not one per device.
-2. **what must be done** — one block per device: the pending packages, a kernel that is not running,
-   library findings that name a fix, sockets that appeared, files this account cannot read, and a
+1. **scan all · <device>** — the only control, and it measures that device completely: packages,
+   kernel, images, advisories, the language stack and the integrity reading **at the same time**, then
+   the commands the measurement implies. Because the three surfaces run together, the wait is the
+   slowest one rather than the sum — ~30 s on this machine, ~30-60 s over ssh, instead of the two and
+   a half minutes a fleet-wide run took. Press it once per device; each device keeps its own last
+   reading, and switching devices never re-scans.
+2. **servers** — the list carries a per-device badge (`nothing to do`, `2 to do`, `not measured`) and
+   the age of its last reading, so the fleet stays legible without merging five machines into one
+   screen. Clicking a name is what selects the device; there is no dropdown.
+3. **what must be done** — that device's rows: pending packages, a kernel that is not running, library
+   findings that name a fix, sockets that appeared, files this account cannot read, and a
    `cannot see: …` line for any surface that refused. It says `nothing to do` only when the device was
    measured and nothing is pending — "never measured" is a different sentence.
-3. **the fix, as commands** — every command the rows above imply, grouped by device and numbered:
+4. **the fix, as commands** — every command the rows above imply, numbered:
    the package steps (with risk, downtime, verify and reverse), the language-store upgrades that have
    a published fix, and the root verification for files the pane cannot read. *COPY ALL* gives the
    whole set; each row copies on its own. A finding with no published fix never becomes a command.
-4. **system packages · integrity · libs & runtimes** — always on screen, for the device whose name is
-   underlined in the servers list (click a name to change it; there is no dropdown). Each keeps its
+5. **system packages · integrity · libs & runtimes** — always on screen, for the same device. Each keeps its
    empty state — `nothing available — this host is up to date, as measured`, `not read yet`, `0
    package(s) read` — because a section that vanishes when it has nothing to say reads as a broken
    pane, and "nothing found" is a result worth showing.
-5. **gaps** — what the run could not see, and why.
+6. **gaps** — what the run could not see, and why.
 
 **run it from here instead — optional** stays a collapsed row under the commands: it runs the same
 commands from the pane, for hosts where the account Hermes runs as can patch unattended. The row

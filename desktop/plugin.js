@@ -555,7 +555,7 @@ function VerdictBar({ status }) {
 // --------------------------------------------------------------------------- HOSTS
 
 /** Add or remove a server. Addresses only — never a credential. */
-function HostsPanel({ onChanged, startOpen, initialTest, initialHosts, onSelect, selected }) {
+function HostsPanel({ onChanged, startOpen, initialTest, initialHosts, onSelect, selected, bundle }) {
   // `initialHosts` exists so the panel can be rendered (and previewed) before its fetch lands; the
   // live pane never passes it
   const [hosts, setHosts] = useState(initialHosts || null)
@@ -649,7 +649,7 @@ function HostsPanel({ onChanged, startOpen, initialTest, initialHosts, onSelect,
       onClick: onSelect ? () => onSelect(host.label) : undefined,
       title: onSelect ? 'show this device in the sections below' : undefined,
       style: {
-        display: 'grid', gridTemplateColumns: '10px 1fr auto auto', gap: '8px',
+        display: 'grid', gridTemplateColumns: '10px 1fr auto auto auto', gap: '8px',
         alignItems: 'baseline', fontFamily: MONO, fontSize: '0.75rem', padding: '3px 0',
         borderTop: '1px solid ' + C.border,
         cursor: onSelect ? 'pointer' : 'default'
@@ -663,6 +663,22 @@ function HostsPanel({ onChanged, startOpen, initialTest, initialHosts, onSelect,
                  textDecoration: selected === host.label ? 'underline' : 'none' }
       }, host.label),
       jsx('span', { style: { color: C.dim } }, host.target === 'local' ? 'this machine' : host.target),
+      (() => {
+        // what this device looks like without selecting it: the badge is the only fleet-wide thing
+        // left, and it is deliberately one word plus a count
+        if (!bundle) return jsx('span', {}, '')
+        const scan = ((bundle.devices || {})[host.label] || {}).scan || {}
+        const entry = (scan.hosts || {})[host.label] || null
+        if (!entry) {
+          return jsx('span', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint } },
+                     'not measured')
+        }
+        const todo = todoRows({ bundle, label: host.label, entry })
+        const actions = todo.filter((row) => row.level === 'amber' || row.level === 'red').length
+        return jsx('span', {
+          style: { fontFamily: MONO, fontSize: '0.6875rem', color: actions ? C.warn : C.ok }
+        }, actions ? actions + ' to do' : 'nothing to do')
+      })(),
       removing === host.label
         ? jsxs('span', { style: { display: 'flex', gap: '4px' } }, [
             jsx('input', {
@@ -1787,13 +1803,31 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
 // "the fix", where it can be copied — they carry the reason it exists.
 
 /** Devices in the order a person reads them: the machine in front of them first, then the rest. */
-function orderedHosts(scan) {
-  const hosts = (scan && scan.hosts) || {}
-  return Object.keys(hosts).sort((a, b) => {
-    const localA = (hosts[a] && (hosts[a].target === 'local' || hosts[a].target === null)) ? 0 : 1
-    const localB = (hosts[b] && (hosts[b].target === 'local' || hosts[b].target === null)) ? 0 : 1
+function orderedHosts(bundle) {
+  const devices = (bundle && bundle.devices) || {}
+  const entries = (bundle && bundle.scan && bundle.scan.hosts) || {}
+  const labels = Object.keys(devices).length ? Object.keys(devices) : Object.keys(entries)
+  const target = (label) => {
+    const scan = ((devices[label] || {}).scan || {}).hosts || {}
+    const entry = scan[label] || entries[label] || {}
+    return entry.target === null || entry.target === undefined ? 'local' : String(entry.target)
+  }
+  return labels.sort((a, b) => {
+    const localA = target(a) === 'local' ? 0 : 1
+    const localB = target(b) === 'local' ? 0 : 1
     return localA - localB || a.localeCompare(b)
-  }).map((label) => ({ label, entry: hosts[label] }))
+  }).map((label) => {
+    const scan = ((devices[label] || {}).scan || {}).hosts || {}
+    return { label, entry: scan[label] || entries[label] || {} }
+  })
+}
+
+/** This device's scan entry, whichever bundle shape it came from. */
+function deviceScan(bundle, label) {
+  const device = ((bundle && bundle.devices) || {})[label] || {}
+  const fromDevice = ((device.scan || {}).hosts || {})[label]
+  if (fromDevice) return fromDevice
+  return ((bundle && bundle.scan && bundle.scan.hosts) || {})[label] || null
 }
 
 /**
@@ -1911,7 +1945,10 @@ function todoRows({ bundle, label, entry }) {
 }
 
 function TodoPanel({ bundle, selected, onSelect }) {
-  const rows = orderedHosts(bundle && bundle.scan)
+  // One device, the selected one. A merged list across five machines was the confusion the operator
+  // named: the sections below are per device, so this one is too. The servers list carries the badge
+  // that says which other device needs attention.
+  const rows = orderedHosts(bundle).filter((row) => !selected || row.label === selected)
   if (!rows.length) return null
   return jsxs('section', { style: sectionStyle('now') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '6px' } }, [
@@ -2033,7 +2070,7 @@ function whereLine(where) {
 }
 
 function CommandsPanel({ bundle, selected, where }) {
-  const hosts = orderedHosts(bundle && bundle.scan)
+  const hosts = orderedHosts(bundle).filter((row) => !selected || row.label === selected)
   if (!hosts.length) return null
   const blocks = hosts.map(({ label: name }) => ({ name, commands: commandsForHost(bundle, name) }))
   const withCommands = blocks.filter((block) => block.commands.length)
@@ -2465,9 +2502,15 @@ export function PatchSentinel({ compact }) {
 
   useEffect(() => { loadBundle(); loadRest() }, [loadBundle, loadRest])
 
-  const hosts = (bundle && bundle.scan && bundle.scan.hosts) || {}
+  const devices = useMemo(() => orderedHosts(bundle), [bundle])
   // devices in reading order: this machine first, then the declared hosts
-  const labels = useMemo(() => orderedHosts(bundle.scan).map((row) => row.label), [bundle])
+  const labels = useMemo(() => devices.map((row) => row.label), [devices])
+  const entryOf = (label) => deviceScan(bundle, label) || {}
+  const hosts = useMemo(() => {
+    const out = {}
+    for (const row of devices) out[row.label] = row.entry || {}
+    return out
+  }, [devices])
 
   useEffect(() => {
     if (!selected && labels.length) setSelected(labels[0])
@@ -2495,7 +2538,7 @@ export function PatchSentinel({ compact }) {
     setSeconds(0)
     setStage('starting')
     try {
-      const started = await call('/rescan', { method: 'POST', body: {} })
+      const started = await call('/rescan', { method: 'POST', body: { host: selected } })
       if (started && started.error) {
         setScanError('the run could not start: ' + started.error)
         return
@@ -2628,9 +2671,9 @@ export function PatchSentinel({ compact }) {
         type: 'button',
         onClick: rescanAll,
         disabled: busy,
-        title: 'one control: packages, kernel, container images, advisories, the language stack, the '
-               + 'integrity reading and the commands they imply — in that order, rendered as each one '
-               + 'lands',
+        title: 'measures every surface of the selected device at once — packages, kernel, images, '
+               + 'advisories, the language stack, the integrity reading — then the commands it '
+               + 'implies. One press per device; switching devices never re-scans.',
         style: {
           fontFamily: MONO, fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.06em',
           textTransform: 'uppercase', padding: '7px 16px',
@@ -2643,7 +2686,7 @@ export function PatchSentinel({ compact }) {
            (stage && stage !== 'starting' && stage !== 'done' ? stage : 'measuring')
              + (currentHost ? ' · ' + currentHost : '')
              + (seconds ? ' ' + Math.round(seconds) + ' s' : ' …')]
-        : 'rescan all')
+        : selected ? 'scan all · ' + selected : 'scan all')
     ]),
     // the stylesheet is always mounted; the line appears only while something is being measured
     jsx('style', {}, SCAN_CSS),
@@ -2705,12 +2748,19 @@ export function PatchSentinel({ compact }) {
             fontSize: '0.8125rem', color: C.warn, marginBottom: '12px', padding: '7px 10px',
             border: '1px solid ' + C.border, borderLeft: '2px solid ' + C.warn, borderRadius: '4px'
           }
-        }, 'Nothing measured yet on these servers — press rescan all once. It reads every surface '
-           + 'in order (packages first, about twenty seconds; the whole run takes a minute or two) '
-           + 'and changes nothing.')
+        }, 'Nothing measured yet on these servers — pick a device and press scan all once. It reads '
+           + 'every surface of that device at the same time (about thirty seconds locally, longer over '
+           + 'ssh) and changes nothing.')
       : null,
-    jsx(VerdictBar, { status: bundle.scan }),
-    jsx(HostsPanel, { onChanged: loadBundle, onSelect: setSelected, selected }),
+    jsx(VerdictBar, { status: {
+      ...(bundle.scan || {}),
+      hosts: selected && hosts[selected] ? { [selected]: hosts[selected] } : {},
+      blind: ((bundle.scan && bundle.scan.blind) || []).filter((one) => !one.host || one.host === selected),
+      age_seconds: selected && hosts[selected] && hosts[selected].measured_at
+        ? Math.max(0, Math.round((Date.now() - Date.parse(hosts[selected].measured_at)) / 1000))
+        : null
+    }, label: selected }),
+    jsx(HostsPanel, { onChanged: loadBundle, onSelect: setSelected, selected, bundle }),
     jsx(TodoPanel, { bundle, selected, onSelect: setSelected }),
     jsx(CommandsPanel, { bundle, selected, where }),
     // The detail sections stay on screen whether or not they found something: an empty section that
@@ -2722,8 +2772,10 @@ export function PatchSentinel({ compact }) {
       style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint, marginBottom: '4px' }
     }, selected
         ? 'readings below: ' + selected
-          + ' — all ' + labels.length + ' device(s) were read in the same run (' + labels.join(', ') + ')'
-          + ', so picking another name changes the view, not the measurement'
+          + (hosts[selected] && hosts[selected].measured_at
+              ? ' — measured ' + (agoAt(hosts[selected].measured_at) || 'just now')
+              : ' — not measured yet')
+          + ' · the button above reads this device only; each device keeps its own last reading'
         : 'click a device name above to choose whose readings these are'),
     jsx(UpdatesPanel, { entry: hosts[selected] || null, hostLabel: selected }),
     jsx(IntegrityPanel, {

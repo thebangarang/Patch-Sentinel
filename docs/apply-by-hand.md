@@ -84,7 +84,7 @@ If the account is `root`, drop every `sudo`.
 
 ## After the reboot
 
-Re-run the scan (`rescan all`, or `hermes chat -q "are we patched?"`). Two things must be true before
+Re-run the scan (`scan all · <device>` in the pane, or `hermes chat -q "are we patched?"`). Two things must be true before
 you call it done:
 
 1. **the running kernel is the installed one** — `uname -r` equals the version the plan installed;
