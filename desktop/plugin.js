@@ -2531,6 +2531,9 @@ export function PatchSentinel({ compact }) {
     })
   }, [])
   const [libBusy, setLibBusy] = useState(false)
+  // integrity read on its own: without this, pressing its "read again" showed nothing while the check
+  // ran for a minute — the section's animation was tied only to the scan stage
+  const [integrityBusy, setIntegrityBusy] = useState(false)
   // system packages, read on its own — same control, same animation as the other two sections
   const [pkgBusy, setPkgBusy] = useState(false)
   const [pkgSeconds, setPkgSeconds] = useState(0)
@@ -2706,6 +2709,7 @@ export function PatchSentinel({ compact }) {
 
   const readIntegrity = useCallback(async (action) => {
     if (!selected) return
+    setIntegrityBusy(true)
     try {
       await call('/integrity', { method: 'POST', body: { host: selected, action: action || 'check' } })
       for (let tick = 0; tick < 120; tick += 1) {
@@ -2717,6 +2721,8 @@ export function PatchSentinel({ compact }) {
       await refreshIntegrity(selected)
     } catch (err) {
       // the last reading stays on screen, labelled with its age
+    } finally {
+      setIntegrityBusy(false)
     }
   }, [selected, refreshIntegrity])
 
@@ -2923,17 +2929,21 @@ export function PatchSentinel({ compact }) {
         : 'click a device name above to choose whose readings these are'),
     jsx(UpdatesPanel, { entry: hosts[selected] || null, hostLabel: selected,
                         scanning: busy && stage === 'scan',
-                        busy: pkgBusy, seconds: pkgSeconds, onRead: readPackages }),
+                        busy: pkgBusy || (busy && stage === 'scan'),
+                        seconds: pkgBusy ? pkgSeconds : (busy && stage === 'scan' ? seconds : 0),
+                        onRead: readPackages }),
     jsx(IntegrityPanel, {
-      reading: deviceIntegrity(bundle, selected), busy: busy && stage === 'integrity',
-      seconds: busy && stage === 'integrity' ? seconds : 0,
+      reading: deviceIntegrity(bundle, selected),
+      busy: integrityBusy || (busy && stage === 'integrity'),
+      seconds: integrityBusy ? 0 : (busy && stage === 'integrity' ? seconds : 0),
       onRead: () => readIntegrity('check'),
       onRebaseline: () => readIntegrity('baseline'),
       onImport: importIntegrity,
       onAttest: attestIntegrity
     }),
     jsx(LanguagesPanel, { libraries: deviceLibraries(bundle, selected) || libraries,
-                          onCheck: checkLibraries, busy: libBusy,
+                          onCheck: checkLibraries,
+                          busy: libBusy || (busy && stage === 'libraries'),
                           scanning: busy && stage === 'libraries' }),
     // The answer comes after the evidence it was built from: what must be done, then the commands.
     jsx(TodoPanel, { bundle, selected, onSelect: setSelected, devices }),

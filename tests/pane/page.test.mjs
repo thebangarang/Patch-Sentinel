@@ -54,6 +54,17 @@ if (!paneSource.includes("title: 'the fix commands'")) {
   throw new Error('the commands section is not titled "the fix commands"')
 }
 
+// 3b. a section's read control is busy when *its* stage of a scan is the one reading, not only when
+// the operator pressed it. The operator reported the opposite: "integrity animates, the other two do
+// not" — because only integrity's control was tied to the scan stage at all.
+for (const marker of ["busy: pkgBusy || (busy && stage === 'scan')",
+                      "busy: integrityBusy || (busy && stage === 'integrity')",
+                      "busy: libBusy || (busy && stage === 'libraries')"]) {
+  if (!paneSource.includes(marker)) {
+    throw new Error('a section\'s read control ignores the scan stage: expected ' + marker)
+  }
+}
+
 // 4. the animations are shipped with the page, and respect a reduced-motion preference
 if (!html.includes('ps-sweep')) throw new Error('the scanning keyframes are missing from the page')
 if (!html.includes('prefers-reduced-motion')) throw new Error(
