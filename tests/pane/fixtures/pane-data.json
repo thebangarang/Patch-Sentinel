@@ -1,0 +1,658 @@
+{
+ "status": {
+  "scan": {
+   "at": "2026-11-06T20:18:33+00:00",
+   "hosts": [
+    "beelink",
+    "webasix"
+   ],
+   "release": "resolute",
+   "usn_fetched_at": "2026-11-06T20:18:16+00:00",
+   "usn_ok": true,
+   "usn_url": "https://ubuntu.com/security/notices.json?release=resolute&limit=20"
+  },
+  "age_seconds": 43.710036,
+  "hosts": {
+   "beelink": {
+    "adapter": "apt",
+    "advised_count": 0,
+    "advisory_source": "USN (resolute)",
+    "images": [
+     {
+      "answer": "sha256:ea6ddce051110a0459b9393117a86383771269aac72f89cabe07f3e9e07f892d",
+      "local": "authelia/authelia@sha256:ea6ddce051110a0459b9393117a86383771269aac72f89cabe07f3e9e07f892d",
+      "ref": "authelia/authelia:4.39.27",
+      "registry": "sha256:ea6ddce051110a0459b9393117a86383771269aac72f89cabe07f3e9e07f892d",
+      "state": "current"
+     },
+     {
+      "answer": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+      "local": "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+      "ref": "caddy:2.11.4-alpine",
+      "registry": "sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+      "state": "current"
+     }
+    ],
+    "images_outcome": "measured",
+    "kernel": {
+     "installable": "7.0.0-43-generic",
+     "installed": "7.0.0-43-generic",
+     "installed_packages": {
+      "7.0.0-38-generic": "7.0.0-38.38",
+      "7.0.0-42-generic": "7.0.0-42.42",
+      "7.0.0-43-generic": "7.0.0-43.43"
+     },
+     "reason": "",
+     "running": "7.0.0-43-generic",
+     "verdict": "kernel-current"
+    },
+    "label": "beelink",
+    "measured_at": "2026-11-06T20:17:48+00:00",
+    "os": {
+     "codename": "resolute",
+     "id": "ubuntu"
+    },
+    "outcomes": {
+     "advisories": "ok",
+     "apt": "ok",
+     "images": "ok",
+     "kernel": "ok"
+    },
+    "pending": [],
+    "pending_count": 0,
+    "pending_truncated": false,
+    "summary": "beelink: 0 package update(s) installable, none named by a recent advisory; kernel 7.0.0-43-generic → kernel-current; 0/2 image(s) rebuilt upstream",
+    "target": "local",
+    "vendor_advisories_read": 472,
+    "vendor_counts": {
+     "already_fixed": 35,
+     "fix_available": 0,
+     "not_installed": 437,
+     "vendor_lag": 0
+    },
+    "vendor_lag": []
+   },
+   "webasix": {
+    "adapter": "apt",
+    "advised_count": 0,
+    "advisory_source": "USN (resolute)",
+    "images": [
+     {
+      "answer": "ERROR: pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: a",
+      "local": "",
+      "ref": "721873c34ceb",
+      "registry": "err:no-such-image",
+      "state": "not-comparable"
+     },
+     {
+      "answer": "sha256:1875ddcf815c8a3c981d6d78c67a93452d0abba79b1ab9520b1f5f5238902bd7",
+      "local": "binwiederhier/ntfy@sha256:1875ddcf815c8a3c981d6d78c67a93452d0abba79b1ab9520b1f5f5238902bd7",
+      "ref": "binwiederhier/ntfy",
+      "registry": "sha256:1875ddcf815c8a3c981d6d78c67a93452d0abba79b1ab9520b1f5f5238902bd7",
+      "state": "current"
+     },
+     {
+      "answer": "sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9",
+      "local": "caddy@sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9",
+      "ref": "caddy:2-alpine",
+      "registry": "sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9",
+      "state": "current"
+     },
+     {
+      "answer": "ERROR: pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: a",
+      "local": "deploy-portal@sha256:bdc16a91fcf91e8f5d8a4db31aa16a7fcee5586b2189cd50de4696ef38da62b1",
+      "ref": "deploy-portal",
+      "registry": "err:no-such-image",
+      "state": "not-comparable"
+     },
+     {
+      "answer": "sha256:ab9b4e8cc4ab3f8d1198d2db6aeea66bafea1963b3f2843589e0d163f97d9849",
+      "local": "ghcr.io/goauthentik/server@sha256:ab9b4e8cc4ab3f8d1198d2db6aeea66bafea1963b3f2843589e0d163f97d9849",
+      "ref": "ghcr.io/goauthentik/server:2026.8.3",
+      "registry": "sha256:ab9b4e8cc4ab3f8d1198d2db6aeea66bafea1963b3f2843589e0d163f97d9849",
+      "state": "current"
+     },
+     {
+      "answer": "sha256:67938fbc3da23aa6372f967bdb90e0f38d327086df79d4059193ca15082202d3",
+      "local": "mattermost/mattermost-team-edition@sha256:67938fbc3da23aa6372f967bdb90e0f38d327086df79d4059193ca15082202d3",
+      "ref": "mattermost/mattermost-team-edition:release-11.7",
+      "registry": "sha256:67938fbc3da23aa6372f967bdb90e0f38d327086df79d4059193ca15082202d3",
+      "state": "current"
+     },
+     {
+      "answer": "sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139",
+      "local": "postgres@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139",
+      "ref": "postgres:16-alpine",
+      "registry": "sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139",
+      "state": "current"
+     },
+     {
+      "answer": "ERROR: pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: a",
+      "local": "social-pilot@sha256:49059fd0e2c918f810d990737873ed833d7734762e76fbf1c3e1cc487432c563",
+      "ref": "social-pilot:latest",
+      "registry": "err:no-such-image",
+      "state": "not-comparable"
+     }
+    ],
+    "images_outcome": "measured",
+    "kernel": {
+     "installable": "7.0.0-43-generic",
+     "installed": "7.0.0-43-generic",
+     "installed_packages": {
+      "7.0.0-38-generic": "7.0.0-38.38",
+      "7.0.0-42-generic": "7.0.0-42.42",
+      "7.0.0-43-generic": "7.0.0-43.43"
+     },
+     "reason": "",
+     "running": "7.0.0-43-generic",
+     "verdict": "kernel-current"
+    },
+    "label": "webasix",
+    "measured_at": "2026-11-06T20:17:55+00:00",
+    "os": {
+     "codename": "resolute",
+     "id": "ubuntu"
+    },
+    "outcomes": {
+     "advisories": "ok",
+     "apt": "ok",
+     "images": "ok",
+     "kernel": "ok"
+    },
+    "pending": [],
+    "pending_count": 0,
+    "pending_truncated": false,
+    "summary": "webasix: 0 package update(s) installable, none named by a recent advisory; kernel 7.0.0-43-generic → kernel-current; 0/8 image(s) rebuilt upstream",
+    "target": "webasix",
+    "vendor_advisories_read": 472,
+    "vendor_counts": {
+     "already_fixed": 14,
+     "fix_available": 0,
+     "not_installed": 458,
+     "vendor_lag": 0
+    },
+    "vendor_lag": []
+   }
+  },
+  "blind": [],
+  "exit_code": 0,
+  "answer": "beelink: 0 package update(s) installable, none named by a recent advisory; kernel 7.0.0-43-generic → kernel-current; 0/2 image(s) rebuilt upstream | webasix: 0 package update(s) installable, none named by a recent advisory; kernel 7.0.0-43-generic → kernel-current; 0/8 image(s) rebuilt upstream"
+ },
+ "plan": {
+  "tool": "cve_plan",
+  "executes": false,
+  "host": "beelink",
+  "measured_at": "2026-11-06T20:17:48+00:00",
+  "measurement_reused": true,
+  "kernel": {
+   "installable": "7.0.0-43-generic",
+   "installed": "7.0.0-43-generic",
+   "installed_packages": {
+    "7.0.0-38-generic": "7.0.0-38.38",
+    "7.0.0-42-generic": "7.0.0-42.42",
+    "7.0.0-43-generic": "7.0.0-43.43"
+   },
+   "reason": "",
+   "running": "7.0.0-43-generic",
+   "verdict": "kernel-current"
+  },
+  "pending_count": 0,
+  "steps": [],
+  "refusals": [
+   {
+    "reason": "nothing to do on this host, as measured",
+    "detail": "kernel current or unmeasured, no installable update, no image rebuilt"
+   }
+  ],
+  "proposal_text": "(nothing)",
+  "not_in_this_version": "nothing else: the plan is what this tool returns. Acting on it is cve_apply, which needs the host name typed and dry_run=false"
+ },
+ "coverage": {
+  "tool": "cve_coverage",
+  "measured_at": "2026-11-06T20:18:33+00:00",
+  "reused_measurement": true,
+  "covered": [
+   {
+    "source": "apt simulation (installed vs installable)",
+    "host": "beelink",
+    "measured_at": "2026-11-06T20:17:48+00:00",
+    "outcome": "ok"
+   },
+   {
+    "source": "running kernel vs newest installed",
+    "host": "beelink",
+    "measured_at": "2026-11-06T20:17:48+00:00",
+    "outcome": "ok",
+    "running": "7.0.0-43-generic"
+   },
+   {
+    "source": "container image digests",
+    "host": "beelink",
+    "measured_at": "2026-11-06T20:17:48+00:00",
+    "outcome": "ok"
+   },
+   {
+    "source": "apt simulation (installed vs installable)",
+    "host": "webasix",
+    "measured_at": "2026-11-06T20:17:55+00:00",
+    "outcome": "ok"
+   },
+   {
+    "source": "running kernel vs newest installed",
+    "host": "webasix",
+    "measured_at": "2026-11-06T20:17:55+00:00",
+    "outcome": "ok",
+    "running": "7.0.0-43-generic"
+   },
+   {
+    "source": "container image digests",
+    "host": "webasix",
+    "measured_at": "2026-11-06T20:17:55+00:00",
+    "outcome": "ok"
+   },
+   {
+    "source": "Ubuntu security notices (advisories that name a version)",
+    "host": "-",
+    "measured_at": "2026-11-06T20:18:16+00:00",
+    "outcome": "ok",
+    "url": "https://ubuntu.com/security/notices.json?release=resolute&limit=20"
+   }
+  ],
+  "gaps": [
+   {
+    "gap": "CVEs inside container image layers",
+    "state": "not measured",
+    "hosts": "every",
+    "kind": "limit",
+    "why": "needs an image scanner (trivy) and a vulnerability database; v0.2",
+    "consequence": "a rebuilt image is reported as 'an update exists', never as 'these CVEs are fixed'",
+    "next": "the real fix is outside this pane: rebuild the image on a schedule, because a base-image CVE is only fixed by a newer base. Scanning inside layers needs an image scanner (trivy), which 0.1.0 deliberately does not ship. Until then the digest check still tells you a newer build exists."
+   },
+   {
+    "gap": "language packages outside the global trees",
+    "state": "partly measured",
+    "hosts": "every",
+    "kind": "limit",
+    "why": "cve_libraries reads the machine-wide installs it can list: npm's global tree, the first pip on PATH, composer's global vendor, local gems, cargo's installed binaries, dotnet's global tools, Maven's local repository, and Go's installed binaries. Per-project dependency files (package-lock.json, composer.json, Cargo.toml, go.mod, *.csproj) and other virtualenvs are not read.",
+    "consequence": "a vulnerable dependency of one project can be invisible while the machine-level list is clean",
+    "next": "name the project in chat and I will query OSV for its packages ('which of my node/python dependencies have known CVEs in ~/projects/x?'). Reading lockfiles automatically is a 0.2 item; today it is one question away."
+   },
+   {
+    "gap": "vendor lag on non-Ubuntu hosts",
+    "state": "not measured",
+    "hosts": "every",
+    "kind": "limit",
+    "why": "the vendor-lag comparison needs an advisory source that names a fixed version per release. Only Ubuntu's notice feed is wired, so a Fedora, Debian, Arch or openSUSE host reports a fix the archive does not carry as '0 pending'. Its bundled libraries are still read by cve_libraries.",
+    "consequence": "on a non-Ubuntu host, 'nothing to do' can still mean 'the vendor has not shipped it yet'",
+    "next": "one feed per distro would close it (Fedora's Bodhi, Debian's tracker API). Until then the gap is named here rather than implied by a green row."
+   },
+   {
+    "gap": "operating systems without an adapter",
+    "state": "not measured",
+    "hosts": "every",
+    "kind": "limit",
+    "why": "adapters exist for: apt, dnf, pacman, zypper; every other OS answers 'unsupported' with its own id. Not implemented: Alpine (the apk adapter is written but has never read a real host), macOS, and Windows (which needs a PowerShell transport, not a package-manager block)",
+    "consequence": "such a host is a red gap in this list, never a green 'patched'",
+    "next": "nothing to switch on here: that host answers 'unsupported' on purpose, because reporting it as patched would be a guess. Measuring it means adding an adapter — a code change, not a setting. Until then use the distro's own updater, and open an issue with the distro id from cve_coverage."
+   }
+  ],
+  "hosts_unreachable": [],
+  "exit_code": 0,
+  "note": "the gap list is never empty and never green: an empty list would be a claim that nothing is missed"
+ },
+ "libraries": {
+  "tool": "cve_libraries",
+  "host": "beelink",
+  "target": "local",
+  "measured_at": "2026-11-07T12:31:23+00:00",
+  "outcomes": {
+   "npm": "ok",
+   "PyPI": "ok",
+   "Packagist": "missing",
+   "RubyGems": "missing",
+   "crates.io": "missing",
+   "Maven": "ok",
+   "Go": "missing",
+   "NuGet": "missing",
+   "Pub": "missing"
+  },
+  "details": {
+   "npm": "npm's global tree",
+   "PyPI": "pip3",
+   "Packagist": "composer is not on PATH on this host",
+   "RubyGems": "ruby/gem is not on PATH on this host",
+   "crates.io": "cargo is not on PATH on this host",
+   "Maven": "~/.m2/repository",
+   "Go": "go is not on PATH on this host",
+   "NuGet": "neither ~/.nuget/packages nor the dotnet CLI is on this host",
+   "Pub": "dart is not on PATH on this host"
+  },
+  "by_ecosystem": {
+   "npm": 3,
+   "PyPI": 1,
+   "Packagist": 0,
+   "RubyGems": 0,
+   "crates.io": 0,
+   "Maven": 1,
+   "Go": 0,
+   "NuGet": 0,
+   "Pub": 0
+  },
+  "components": 5,
+  "truncated": false,
+  "installers": {
+   "npm": {
+    "npm's global tree": {
+     "tool": "npm",
+     "path": "/home/you/.local/bin/npm",
+     "upgrade": "{tool} install -g {spec}"
+    }
+   },
+   "PyPI": {
+    "pip3": {
+     "tool": "pip3",
+     "path": "/home/you/.hermes/tools/python-3.14.9+20261021-linux-x64/bin/pip3",
+     "upgrade": "{tool} install -U {spec}"
+    }
+   },
+   "Packagist": {},
+   "RubyGems": {},
+   "crates.io": {},
+   "Maven": {
+    "~/.m2/repository": {
+     "upgrade": null,
+     "why": "a build dependency: the fix belongs in the project's own manifest, not a machine-wide command"
+    }
+   },
+   "Go": {},
+   "NuGet": {},
+   "Pub": {}
+  },
+  "packages": [
+   {
+    "ecosystem": "npm",
+    "package": "@bitwarden/cli",
+    "version": "2026.7.0",
+    "source": "npm's global tree",
+    "owner": "machine",
+    "manager": {
+     "tool": "npm",
+     "path": "/home/you/.local/bin/npm",
+     "upgrade": "{tool} install -g {spec}"
+    }
+   },
+   {
+    "ecosystem": "npm",
+    "package": "sharp-cli",
+    "version": "5.2.0",
+    "source": "npm's global tree",
+    "owner": "machine",
+    "manager": {
+     "tool": "npm",
+     "path": "/home/you/.local/bin/npm",
+     "upgrade": "{tool} install -g {spec}"
+    }
+   },
+   {
+    "ecosystem": "npm",
+    "package": "vtracer",
+    "version": "1.0.8",
+    "source": "npm's global tree",
+    "owner": "machine",
+    "manager": {
+     "tool": "npm",
+     "path": "/home/you/.local/bin/npm",
+     "upgrade": "{tool} install -g {spec}"
+    }
+   },
+   {
+    "ecosystem": "PyPI",
+    "package": "pip",
+    "version": "26.2.2",
+    "source": "pip3",
+    "owner": "machine",
+    "manager": {
+     "tool": "pip3",
+     "path": "/home/you/.hermes/tools/python-3.14.9+20261021-linux-x64/bin/pip3",
+     "upgrade": "{tool} install -U {spec}"
+    }
+   },
+   {
+    "ecosystem": "Maven",
+    "package": "org.apache.logging.log4j:log4j-core",
+    "version": "2.14.1",
+    "source": "~/.m2/repository",
+    "owner": "machine",
+    "manager": {
+     "upgrade": null,
+     "why": "a build dependency: the fix belongs in the project's own manifest, not a machine-wide command"
+    }
+   }
+  ],
+  "hermes_env": {
+   "packages": 0,
+   "note": "read from the interpreter Hermes runs on — upgraded with `hermes update`, not package by package"
+  },
+  "answer": "beelink: 8 advisory match(es) across 1 package(s), from 5 installed language package(s) checked — 2 of them are in CISA's known-exploited list: CVE-2021-44228, CVE-2021-45046",
+  "vulnerable": [
+   {
+    "ecosystem": "Maven",
+    "package": "org.apache.logging.log4j:log4j-core",
+    "version": "2.14.1",
+    "id": "GHSA-3pxv-7cmr-fjr4",
+    "aliases": [
+     "CVE-2026-34480"
+    ],
+    "summary": "Apache Log4j Core: Silent log event loss in XmlLayout due to unescaped XML 1.0 forbidden characters",
+    "severity": "moderate",
+    "published": "2026-04-10T18:31:17Z",
+    "fixed": [
+     "2.25.4"
+    ],
+    "workaround": null,
+    "url": "https://osv.dev/vulnerability/GHSA-3pxv-7cmr-fjr4",
+    "epss": 0.01046
+   },
+   {
+    "ecosystem": "Maven",
+    "package": "org.apache.logging.log4j:log4j-core",
+    "version": "2.14.1",
+    "id": "GHSA-6hg6-v5c8-fphq",
+    "aliases": [
+     "CVE-2026-34477"
+    ],
+    "summary": "Apache Log4j Core: `verifyHostName` attribute silently ignored in TLS configuration",
+    "severity": "moderate",
+    "published": "2026-04-10T18:31:17Z",
+    "fixed": [
+     "2.25.4"
+    ],
+    "workaround": null,
+    "url": "https://osv.dev/vulnerability/GHSA-6hg6-v5c8-fphq",
+    "epss": 0.0056
+   },
+   {
+    "ecosystem": "Maven",
+    "package": "org.apache.logging.log4j:log4j-core",
+    "version": "2.14.1",
+    "id": "GHSA-7rjr-3q55-vv33",
+    "aliases": [
+     "CVE-2021-45046"
+    ],
+    "summary": "Incomplete fix for Apache Log4j vulnerability",
+    "severity": "high (availability impact on a network service)",
+    "published": "2021-12-14T18:01:28Z",
+    "fixed": [
+     "2.16.0",
+     "2.12.2",
+     "2.3.1"
+    ],
+    "workaround": "Log4j 2.16.0 fixes this issue by removing support for message lookup patterns and disabling JNDI functionality by default. This issue can be mitigated in prior releases (< 2.16.0) by removing the JndiLookup class from the classpath (example: zip -q -d log4j-core-*.jar org/apache/logging/log4j/core/lookup/JndiLookup.class). Log4j 2.15.0 restricts JNDI LDAP lookups to localhost by default. Note that previous mitigations involving configuration such as to set the system property `log4j2.formatMsgNoLookups` to `true` do NOT mitigate this specific vulnerability.",
+    "url": "https://osv.dev/vulnerability/GHSA-7rjr-3q55-vv33",
+    "kev": {
+     "cves": [
+      "CVE-2021-45046"
+     ],
+     "name": "Apache Log4j2 Deserialization of Untrusted Data Vulnerability",
+     "added": "2023-05-01",
+     "due": "2023-05-22",
+     "action": "Apply updates per vendor instructions.",
+     "ransomware": true
+    },
+    "epss": 0.99977
+   },
+   {
+    "ecosystem": "Maven",
+    "package": "org.apache.logging.log4j:log4j-core",
+    "version": "2.14.1",
+    "id": "GHSA-8489-44mv-ggj8",
+    "aliases": [
+     "CVE-2021-44832"
+    ],
+    "summary": "Improper Input Validation and Injection in Apache Log4j2",
+    "severity": "high (availability impact on a network service)",
+    "published": "2022-01-04T16:14:20Z",
+    "fixed": [
+     "2.3.2",
+     "2.12.4",
+     "2.17.1"
+    ],
+    "workaround": null,
+    "url": "https://osv.dev/vulnerability/GHSA-8489-44mv-ggj8",
+    "epss": 0.97906
+   },
+   {
+    "ecosystem": "Maven",
+    "package": "org.apache.logging.log4j:log4j-core",
+    "version": "2.14.1",
+    "id": "GHSA-h383-gmxw-35v2",
+    "aliases": [
+     "CVE-2026-34479"
+    ],
+    "summary": "Apache Log4j 1 to Log4j 2 bridge: silent log event loss in Log4j1XmlLayout due to unescaped XML 1.0 forbidden characters",
+    "severity": "moderate",
+    "published": "2026-04-10T18:31:18Z",
+    "fixed": [
+     "2.25.4"
+    ],
+    "workaround": null,
+    "url": "https://osv.dev/vulnerability/GHSA-h383-gmxw-35v2",
+    "epss": 0.00535
+   },
+   {
+    "ecosystem": "Maven",
+    "package": "org.apache.logging.log4j:log4j-core",
+    "version": "2.14.1",
+    "id": "GHSA-jfh8-c2jp-5v3q",
+    "aliases": [
+     "CVE-2021-44228"
+    ],
+    "summary": "Remote code injection in Log4j",
+    "severity": "high (availability impact on a network service)",
+    "published": "2021-12-10T00:40:56Z",
+    "fixed": [
+     "2.15.0",
+     "2.3.1",
+     "2.12.2"
+    ],
+    "workaround": "Advice",
+    "url": "https://osv.dev/vulnerability/GHSA-jfh8-c2jp-5v3q",
+    "kev": {
+     "cves": [
+      "CVE-2021-44228"
+     ],
+     "name": "Apache Log4j2 Remote Code Execution Vulnerability",
+     "added": "2021-12-10",
+     "due": "2021-12-24",
+     "action": "For all affected software assets for which updates exist, the only acceptable remediation actions are: 1) Apply updates; OR 2) remove affected assets from agency networks. Temporary mitigations using one of the measures provided at https://www.cisa.gov/uscert/ed-22-02-apache-log4j-recommended-mitigation-measures are only acceptable until updates are available.",
+     "ransomware": true
+    },
+    "epss": 0.99999
+   },
+   {
+    "ecosystem": "Maven",
+    "package": "org.apache.logging.log4j:log4j-core",
+    "version": "2.14.1",
+    "id": "GHSA-p6xc-xr62-6r2g",
+    "aliases": [
+     "CVE-2021-45105"
+    ],
+    "summary": "Apache Log4j2 vulnerable to Improper Input Validation and Uncontrolled Recursion",
+    "severity": "moderate",
+    "published": "2021-12-18T18:00:07Z",
+    "fixed": [
+     "2.12.3",
+     "2.17.0",
+     "2.3.1"
+    ],
+    "workaround": null,
+    "url": "https://osv.dev/vulnerability/GHSA-p6xc-xr62-6r2g",
+    "epss": 0.99999
+   },
+   {
+    "ecosystem": "Maven",
+    "package": "org.apache.logging.log4j:log4j-core",
+    "version": "2.14.1",
+    "id": "GHSA-vc5p-v9hr-52mj",
+    "aliases": [
+     "CVE-2025-68161"
+    ],
+    "summary": "Apache Log4j does not verify the TLS hostname in its Socket Appender",
+    "severity": "moderate",
+    "published": "2025-12-18T21:31:44Z",
+    "fixed": [
+     "2.25.3"
+    ],
+    "workaround": null,
+    "url": "https://osv.dev/vulnerability/GHSA-vc5p-v9hr-52mj",
+    "epss": 0.00767
+   }
+  ],
+  "vulnerable_count": 8,
+  "threat": {
+   "kev_state": "measured",
+   "kev_catalog": 1769,
+   "kev_count": 2,
+   "exploited": [
+    "CVE-2021-44228",
+    "CVE-2021-45046"
+   ],
+   "ransomware": [
+    "CVE-2021-44228",
+    "CVE-2021-45046"
+   ],
+   "scored": 8
+  },
+  "advisories_examined": 8,
+  "advisories_truncated": false,
+  "exit_code": 1,
+  "limits": {
+   "measured": "npm's global tree, the first pip on PATH, composer's global vendor, local gems, cargo's installed binaries, dotnet's global tools, Maven's local repository and the modules behind Go's installed binaries",
+   "missing_toolchains": "a toolchain that is not installed here is reported as 'missing', never as zero findings",
+   "not_measured": [
+    "per-project lockfiles (package.json, composer.json, Cargo.toml, go.mod, *.csproj)",
+    "virtualenvs other than the first python3 on PATH",
+    "vendor/ and node_modules/ directories inside projects",
+    "anything inside a container image"
+   ],
+   "advisory_source": "api.osv.dev (batched query, one detail fetch per advisory shown)"
+  }
+ },
+ "hostLabel": "beelink",
+ "health": {
+  "ui": {
+   "repo": {
+    "sha": "697ac13d",
+    "bytes": 49573,
+    "mtime": "2026-11-06T20:18:59+00:00"
+   },
+   "served": {
+    "sha": "697ac13d",
+    "bytes": 49573,
+    "mtime": "2026-11-06T20:18:53+00:00"
+   },
+   "in_sync": true
+  },
+  "ok": true
+ }
+}

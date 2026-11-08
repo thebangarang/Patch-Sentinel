@@ -21,8 +21,12 @@ sed "s|from '@hermes/plugin-sdk'|from './sdk-stub.mjs'|g" \
 node --check "$work/pane.mjs"
 cd "$work"
 node hooks.test.mjs
-PANE_DATA="${PANE_DATA:-$root/tmp/pane-data.json}" node fixcmd.test.mjs
+# the fixture is committed under tests/, not in tmp/ (which is gitignored): a fresh clone has to be
+# able to run these checks, and for a while it could not
+DATA="${PANE_DATA:-$root/tests/pane/fixtures/pane-data.json}"
+[[ -f "$DATA" ]] || { echo "no pane fixture at $DATA (set PANE_DATA)"; exit 2; }
+PANE_DATA="$DATA" node fixcmd.test.mjs
 node diagnose.test.mjs
-PANE_DATA="${PANE_DATA:-$root/tmp/pane-data.json}" node render.test.mjs
+PANE_DATA="$DATA" node render.test.mjs
 node page.test.mjs
 echo "pane checks passed"
