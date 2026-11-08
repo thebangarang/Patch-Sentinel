@@ -50,3 +50,6 @@ temp/
 *.bak
 *.backup
 backups/
+
+# screen captures, before the edit
+video/raw/
