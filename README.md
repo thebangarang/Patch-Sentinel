@@ -140,6 +140,21 @@ package names and versions — to OSV, the vendor feeds and the registries. `sud
 `cve_apply` runs only where `sudo -n` works, and otherwise refuses with the commands to run by hand. See
 [`SECURITY.md`](SECURITY.md).
 
+## What it touches
+
+The catalogue asks plugins to disclose this, and it is short:
+
+- **Network, anonymously**: `api.osv.dev`; `ubuntu.com/security/notices.json` and `/cves/<id>` on Ubuntu
+  hosts only; `bodhi.fedoraproject.org` on Fedora; `security.archlinux.org` on Arch; SUSE's OVAL
+  document on SUSE; and the container registries your images already come from, through
+  `docker buildx imagetools`. No telemetry, no analytics, no third party beyond those.
+- **Local commands**: `uname`, `dpkg-query`/`dpkg -V`, `apt-cache`, `apt-get -s`, `rpm -qa`/`rpm -Va`,
+  `dnf -q check-update`, `pacman -Q`/`-Qu`/`-Qkk`, `zypper -q lu`, `apk version`/`apk audit`, `ss`,
+  `docker ps|inspect|buildx`, and `ssh <host>` for remote hosts. All read-only — except `cve_apply`,
+  which runs only `sudo -n` on the plan it just printed.
+- **Files written**: `last_scan.json`, `rescan.json`, `integrity.json`, `acks.json` and the apply
+  receipts, under `$HERMES_HOME/patch-sentinel` (directory 700, files 600). Nothing outside it.
+
 ## Limits, stated
 
 - **CVEs inside image layers** are not scanned — that needs an image scanner. Digest drift is measured;
