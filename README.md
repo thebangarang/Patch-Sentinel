@@ -253,11 +253,14 @@ form of image scanning (Trivy-class) — the plugin does not pretend to see insi
 
 The pane answers two questions and nothing else: **what has to be done**, and **with what**.
 
-1. **rescan all** — the only control. One backend run walks every surface in a fixed order (packages
-   and kernel → language stack → integrity reading → the commands each implies), writes the bundle
-   after each stage and the pane renders it as it lands. Packages appear after ~20 s, the whole run
-   takes a minute or two; there is no second button to press and nothing to press in a particular
-   order.
+1. **rescan all** — the only control, and it reads **every device** in one run: packages, kernel and
+   images for the whole inventory, then the language stack and the integrity reading host by host,
+   then the commands each device's measurement implies. Nothing is left for a second press — selecting
+   another device changes the view, never the measurement, and the pane says so above the readings.
+   The bundle is written after each stage and after each host inside a per-host stage, so the rows
+   fill in as they land and the button names the host it is on (`integrity · webasix 41 s`). Packages
+   land in ~20-50 s depending on the ssh round trip; a two-device run with both integrity readings is
+   about two and a half minutes. It is one press, not one per device.
 2. **what must be done** — one block per device: the pending packages, a kernel that is not running,
    library findings that name a fix, sockets that appeared, files this account cannot read, and a
    `cannot see: …` line for any surface that refused. It says `nothing to do` only when the device was

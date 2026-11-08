@@ -1338,60 +1338,131 @@ def _plans_for_every_host() -> tuple[dict, int]:
 
 
 def cve_rescan(args: dict, **kwargs) -> str:
-    """One control instead of four: walk every surface in the order the pane shows them.
+    """One control for every device and every surface.
 
-    The bundle is written after each stage, so the pane renders what has landed while the integrity
-    reading (the slow one) is still running. Nothing is decided here: each stage calls the same handler
-    the single-purpose tool calls, and its payload is stored verbatim.
+    * packages, kernel and images — every device, in one scan (the package manager is asked once per
+      host, which is what `cve_scan` already does);
+    * the language stack and the integrity reading — every device too, one host at a time, because
+      those two are per-machine questions and a host left unread would look clean on a screen that
+      showed it next to a measured one;
+    * the plan — every device, built from the measurement that just ran.
+
+    A device that cannot be reached keeps its place: it is recorded with its refusal, so the pane shows
+    it as "could not look" rather than dropping the row. The bundle is written after each stage, so the
+    pane renders what has landed while the integrity reading (the slow one) is still running.
     """
     data_dir = str(_settings.get("data_dir") or store.data_dir())
     bundle = rescan.start(data_dir)
-    handlers = {"scan": cve_scan, "libraries": cve_libraries, "integrity": cve_integrity}
+    bundle["devices"] = {}
+    local = _local_label()
+    labels = [host["label"] for host in _inventory()]
     worst = 0
-    for stage in rescan.STAGES:
-        started = time.time()
-        if stage == "plans":
-            payload = {"tool": "cve_plan", "plans": None}
-            payload["plans"], code = _plans_for_every_host()
-            payload["exit_code"] = code
-        else:
-            try:
-                payload = json.loads(handlers[stage]({}))
-            except Exception as exc:                  # noqa: BLE001 - one stage cannot end the run
-                payload = {"tool": f"cve_{stage}", "exit_code": 2,
-                           "answer": f"this stage could not finish: {exc}"}
-        code = int(payload.get("exit_code") or 0)
-        worst = max(worst, code)
-        bundle[stage] = payload
-        bundle["stage"] = stage
-        bundle["stages"].append({"name": stage, "exit_code": code,
+
+    def record(name: str, started: float, code: int, **extra) -> None:
+        bundle["stages"].append({"name": name, "exit_code": code,
                                  "seconds": round(time.time() - started, 1),
-                                 "at": time.time()})
+                                 "at": time.time(), **extra})
+
+    # 1. packages, kernel, images — one scan, every host
+    started = time.time()
+    try:
+        bundle["scan"] = json.loads(cve_scan({}))
+    except Exception as exc:                          # noqa: BLE001 - a stage that dies is reported
+        bundle["scan"] = {"tool": "cve_scan", "exit_code": 2,
+                          "answer": f"the scan could not finish: {exc}"}
+    code = int(bundle["scan"].get("exit_code") or 0)
+    worst = max(worst, code)
+    bundle["stage"] = "scan"
+    record("scan", started, code, hosts=len(labels))
+    rescan.write(data_dir, bundle)
+
+    # 2. the language stack — per host, because it is a property of that machine's stores
+    started = time.time()
+    per_host, code = {}, 0
+    for label in labels:
+        one = time.time()
+        bundle["current_host"] = label
         rescan.write(data_dir, bundle)
+        try:
+            payload = json.loads(cve_libraries({"host": label}))
+        except Exception as exc:                      # noqa: BLE001
+            payload = {"tool": "cve_libraries", "exit_code": 2,
+                       "answer": f"the language stack of {label} could not be read: {exc}"}
+        per_host[label] = {"exit_code": int(payload.get("exit_code") or 0),
+                           "seconds": round(time.time() - one, 1)}
+        code = max(code, per_host[label]["exit_code"])
+        bundle["devices"].setdefault(label, {})["libraries"] = payload
+        if label == local:
+            bundle["libraries"] = payload            # the older key stays: it is this machine's
+        rescan.write(data_dir, bundle)               # written per host, so the rows fill in
+    worst = max(worst, code)
+    bundle["stage"] = "libraries"
+    record("libraries", started, code, per_host=per_host)
+    rescan.write(data_dir, bundle)
+
+    # 3. integrity — per host, the slow one
+    started = time.time()
+    per_host, code = {}, 0
+    for label in labels:
+        one = time.time()
+        bundle["current_host"] = label
+        rescan.write(data_dir, bundle)
+        try:
+            payload = json.loads(cve_integrity({"host": label}))
+        except Exception as exc:                      # noqa: BLE001
+            payload = {"tool": "cve_integrity", "exit_code": 2,
+                       "answer": f"the integrity reading of {label} could not be taken: {exc}"}
+        per_host[label] = {"exit_code": int(payload.get("exit_code") or 0),
+                           "seconds": round(time.time() - one, 1)}
+        code = max(code, per_host[label]["exit_code"])
+        bundle["devices"].setdefault(label, {})["integrity"] = payload
+        if label == local:
+            bundle["integrity"] = payload
+        rescan.write(data_dir, bundle)
+    worst = max(worst, code)
+    bundle["stage"] = "integrity"
+    record("integrity", started, code, per_host=per_host)
+    rescan.write(data_dir, bundle)
+
+    # 4. the commands each device's measurement implies
+    started = time.time()
+    plans, code = _plans_for_every_host()
+    for label, plan in plans.items():
+        bundle["devices"].setdefault(label, {})["plan"] = plan
+    worst = max(worst, code)
+    bundle["plans"] = {"tool": "cve_plan", "plans": plans, "exit_code": code}
+    bundle["stage"] = "plans"
+    record("plans", started, code)
     bundle["stage"] = "done"
+    bundle["current_host"] = None
     bundle["finished_at"] = time.time()
     rescan.write(data_dir, bundle)
 
-    # The answer is the verdict, not a stopwatch. It carries the three counts the sections above are
-    # built from, so a caller that only reads `answer` still gets the state of the fleet.
-    scan = bundle.get("scan") or {}
-    hosts = scan.get("hosts") or {}
+    # The answer is the verdict, not a stopwatch. It carries the counts the sections are built from,
+    # so a caller that only reads `answer` still gets the state of the fleet.
+    hosts = (bundle.get("scan") or {}).get("hosts") or {}
     pending = sum(int((entry or {}).get("pending_count") or 0) for entry in hosts.values())
-    libraries = bundle.get("libraries") or {}
-    findings = len([row for row in (libraries.get("vulnerable") or []) if row.get("owner") != "hermes"])
-    plans = ((bundle.get("plans") or {}).get("plans") or {})
+    findings = 0
+    for device in bundle["devices"].values():
+        for row in ((device.get("libraries") or {}).get("vulnerable") or []):
+            if row.get("owner") != "hermes":
+                findings += 1
     commands = sum(len((plan or {}).get("steps") or []) for plan in plans.values())
+    def failed_hosts(stage: dict) -> list[str]:
+        return [name for name, state in (stage.get("per_host") or {}).items()
+                if state.get("exit_code") == 2]
+
     timings = " · ".join(
         f"{ {'scan': 'packages', 'libraries': 'language stack', 'integrity': 'integrity',
              'plans': 'commands'}[stage['name']] } {round(stage['seconds'])}s"
-        + (" (could not look)" if stage["exit_code"] == 2 else "")
+        + (f" ({', '.join(failed_hosts(stage))} could not look)" if failed_hosts(stage) else "")
         for stage in bundle["stages"])
     return _json({"tool": "cve_rescan", "exit_code": worst, "bundle": bundle,
                   "pending": pending, "library_findings": findings, "commands": commands,
-                  "hosts": len(hosts),
+                  "hosts": len(hosts), "devices": labels,
                   "answer": (f"{len(hosts)} device(s) · {pending} package update(s) pending · "
                              f"{findings} library finding(s) · {commands} command(s) to run — "
-                             "measured once, in order: " + timings),
+                             "every surface read on every device, in order: " + timings),
                   "seconds": round(time.time() - bundle["started_at"], 1)})
 
 

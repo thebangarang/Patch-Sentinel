@@ -159,6 +159,19 @@ if (!now.includes('a remote server')) throw new Error('the remote server icon is
 // the first shape once rendered as "NaN d ago"
 if (now.includes('NaN')) throw new Error('an ISO timestamp rendered as NaN')
 
+// The verdict line used to say "measured never measured" when it was handed a bundle (no
+// age_seconds) instead of the /status route. It must fall back to the newest measured_at.
+const verdictFromBundle = renderToStaticMarkup(createElement(VerdictBar, {
+  status: { hosts: { beelink: { label: 'beelink', measured_at: new Date().toISOString() } },
+            blind: [], note: '' }
+}))
+if (verdictFromBundle.includes('never measured')) {
+  throw new Error('a bundle without age_seconds printed "measured never measured"')
+}
+if (!/measured (just now|[0-9]+ min ago)/.test(verdictFromBundle)) {
+  throw new Error('the verdict line carries no age at all')
+}
+
 for (const [name, libraries] of [['libs (fixture: findings + agent-owned)', FIXTURE],
                                  ['libs (nothing read)', null]]) {
   const html = renderToStaticMarkup(createElement(LanguagesPanel, { libraries, onCheck: noop,

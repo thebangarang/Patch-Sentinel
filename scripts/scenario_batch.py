@@ -480,6 +480,13 @@ def scenario_rescan_bundle(verbose: bool) -> None:
     expect(name, payload.get("exit_code") == max(codes),
            f"the run reports {payload.get('exit_code')} while its worst stage is {max(codes)}")
     expect(name, bundle.get("stage") == "done", "the bundle does not say it finished")
+    # every device must carry every surface: a host that is simply missing looks clean next to one
+    # that was measured, which is the failure this whole project is about
+    devices = bundle.get("devices") or {}
+    expect(name, bool(devices), "the bundle carries no per-device block at all")
+    for label, device in devices.items():
+        for surface in ("libraries", "integrity", "plan"):
+            expect(name, device.get(surface), f"{label} carries no {surface} reading")
     # a second run must replace the bundle, not append to it
     again = run(name, "cve_rescan", {})
     expect(name, len((again.get("bundle") or {}).get("stages") or []) == 4,

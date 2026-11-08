@@ -61,6 +61,10 @@ const selected = labels[0] || null
 const where = selected && scan.hosts[selected] ? scan.hosts[selected].where : null
 const noop = () => {}
 
+const device = ((bundle.devices || {})[selected]) || {}
+const libraries = device.libraries || bundle.libraries
+const integrity = device.integrity || bundle.integrity
+
 const body = renderToStaticMarkup(createElement('div', {}, [
   createElement(VerdictBar, { key: 'v', status: scan }),
   createElement(HostsPanel, { key: 'h', onChanged: noop, initialHosts: labels.map((label) => ({
@@ -68,9 +72,9 @@ const body = renderToStaticMarkup(createElement('div', {}, [
   createElement(TodoPanel, { key: 't', bundle, selected, onSelect: noop }),
   createElement(CommandsPanel, { key: 'c', bundle, selected, where }),
   createElement(UpdatesPanel, { key: 'u', entry: selected ? scan.hosts[selected] : null, hostLabel: selected }),
-  createElement(IntegrityPanel, { key: 'i', reading: bundle.integrity, busy: false, seconds: 0,
+  createElement(IntegrityPanel, { key: 'i', reading: integrity, busy: false, seconds: 0,
                                   onRead: noop, onRebaseline: noop, onImport: noop }),
-  createElement(LanguagesPanel, { key: 'l', libraries: bundle.libraries, onCheck: noop, busy: false }),
+  createElement(LanguagesPanel, { key: 'l', libraries, onCheck: noop, busy: false }),
   createElement(GapsPanel, { key: 'g', coverage: bundle.coverage || null, selected })
 ]))
 

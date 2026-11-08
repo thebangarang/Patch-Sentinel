@@ -537,8 +537,18 @@ function VerdictBar({ status }) {
                          'a kernel was installed but the running one is older') : null,
     blind ? chip(blind + ' could not look', C.danger, 'see gaps — this is a fact about the scan') : null,
     jsx('span', { style: { flex: 1 } }),
+    // /status carries `age_seconds`; a bundle carries `measured_at` per host. Feeding the missing
+    // field to `ago()` printed "measured never measured".
     jsx('span', { style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint } },
-      'measured ' + ago(status.age_seconds))
+      (() => {
+        if (status.age_seconds !== undefined && status.age_seconds !== null) {
+          return 'measured ' + ago(status.age_seconds)
+        }
+        const stamps = Object.values(status.hosts || {})
+          .map((host) => host && host.measured_at).filter(Boolean).sort()
+        return stamps.length ? 'measured ' + (agoAt(stamps[stamps.length - 1]) || 'just now')
+                             : 'not measured yet'
+      })())
   ])
 }
 
@@ -1786,6 +1796,34 @@ function orderedHosts(scan) {
   }).map((label) => ({ label, entry: hosts[label] }))
 }
 
+/**
+ * The answer one device gave for one surface. The bundle keeps a block per device, because "rescan
+ * all" reads every host; the older top-level keys are this machine's, kept for an old bundle.
+ */
+function deviceOf(bundle, label) {
+  return ((bundle && bundle.devices) || {})[label] || {}
+}
+
+function deviceLibraries(bundle, label) {
+  const device = deviceOf(bundle, label)
+  if (device.libraries) return device.libraries
+  const one = bundle && bundle.libraries
+  return one && one.host && one.host.label === label ? one : null
+}
+
+function deviceIntegrity(bundle, label) {
+  const device = deviceOf(bundle, label)
+  if (device.integrity) return device.integrity
+  const one = bundle && bundle.integrity
+  return one && one.host && one.host.label === label ? one : null
+}
+
+function devicePlan(bundle, label) {
+  const device = deviceOf(bundle, label)
+  if (device.plan) return device.plan
+  return ((bundle && bundle.plans && bundle.plans.plans) || {})[label] || null
+}
+
 /** Findings that name a fix ahead of the installed version — the only ones with a command. */
 function fixableRows(libraries) {
   return ((libraries && libraries.vulnerable) || [])
@@ -1808,9 +1846,8 @@ function todoRows({ bundle, label, entry }) {
                       + (kernel.running || '?') + ', installed ' + (kernel.installed || '?'),
                 why: kernel.reason || 'the running kernel is not the one on disk' })
   }
-  const libraries = bundle.libraries
-  const libHost = (libraries && libraries.host && libraries.host.label) || null
-  if (libraries && libHost === label) {
+  const libraries = deviceLibraries(bundle, label)
+  if (libraries) {
     const fixable = fixableRows(libraries)
     const known = (libraries.vulnerable || []).filter((row) => row.owner !== 'hermes')
     const noFix = known.length - fixable.length
@@ -1828,25 +1865,35 @@ function todoRows({ bundle, label, entry }) {
                   why: 'the advisory database named no version of these packages' })
     }
   }
-  const integrity = bundle.integrity
-  const intHost = integrity && integrity.host && integrity.host.label
-  if (integrity && intHost === label && integrity.integrity) {
+  const integrity = deviceIntegrity(bundle, label)
+  if (integrity && integrity.integrity) {
     const state = integrity.integrity
     const tamper = state.tamper || {}
     const listeners = state.listeners || {}
-    if ((tamper.changed || []).length) {
-      rows.push({ level: 'red', what: (tamper.changed || []).length + ' packaged file(s) no longer match their package',
-                  why: 'this is the one row that means a file was edited outside the package manager' })
+    // the payload truncates the lists (12 changed, 6 unreadable) and carries the real totals beside
+    // them; counting the list printed 6 next to a note that said 16
+    const changedCount = tamper.changed_count !== undefined ? tamper.changed_count
+      : (tamper.changed || []).length
+    const goneCount = tamper.missing_count || 0
+    const unreadableCount = tamper.unreadable_count !== undefined ? tamper.unreadable_count
+      : (tamper.unreadable || []).length
+    if (changedCount || goneCount) {
+      const first = (tamper.changed || [])[0]
+      rows.push({ level: 'red',
+                  what: (changedCount + goneCount) + ' packaged file(s) no longer match their package'
+                        + (goneCount && !changedCount ? ' (gone, not edited)' : ''),
+                  why: 'this is the one row that means a file was edited outside the package manager'
+                       + (first ? ' — first: ' + first : '') })
     }
     if ((listeners.new || []).length) {
       rows.push({ level: 'red', what: (listeners.new || []).length + ' listening socket(s) not in the baseline',
                   why: 'opened since the baseline was taken — decide whether you opened them' })
     }
-    if ((tamper.unreadable || []).length) {
-      rows.push({ level: 'grey', what: (tamper.unreadable || []).length + ' packaged file(s) this account cannot read',
+    if (unreadableCount) {
+      rows.push({ level: 'grey', what: unreadableCount + ' packaged file(s) this account cannot read',
                   why: 'not a finding: unreadable is not changed. The command below covers them' })
     }
-    if (state.state === 'ok' && !(tamper.changed || []).length && !(listeners.new || []).length) {
+    if (state.state === 'ok' && !changedCount && !goneCount && !(listeners.new || []).length) {
       rows.push({ level: 'green', what: 'checksums, preload hook and ' + (listeners.count || 0) + ' listening socket(s) read',
                   why: 'no evidence of tampering in the surfaces read — a rootkit that hides is invisible to this' })
     }
@@ -1938,15 +1985,14 @@ function TodoPanel({ bundle, selected, onSelect }) {
 
 function commandsForHost(bundle, name) {
   const out = []
-  const plan = ((bundle && bundle.plans && bundle.plans.plans) || {})[name] || {}
+  const plan = devicePlan(bundle, name) || {}
   for (const step of plan.steps || []) {
     out.push({ command: step.command, why: step.action, kind: 'packages',
                detail: (step.risk ? 'risk ' + step.risk + ' · downtime ' + step.downtime + ' · ' : '')
                        + 'verify: ' + (step.verify || '—') + ' · reverse: ' + (step.reversal || '—') })
   }
-  const libraries = bundle && bundle.libraries
-  const libHost = libraries && libraries.host && libraries.host.label
-  if (libraries && libHost === name) {
+  const libraries = deviceLibraries(bundle, name)
+  if (libraries) {
     for (const row of fixableRows(libraries)) {
       const command = fixCommandFor(row, row.fix)
       if (command && !command.startsWith('#')) {
@@ -1955,12 +2001,13 @@ function commandsForHost(bundle, name) {
       }
     }
   }
-  const integrity = bundle && bundle.integrity
-  if (integrity && integrity.host && integrity.host.label === name && integrity.integrity) {
+  const integrity = deviceIntegrity(bundle, name)
+  if (integrity && integrity.integrity) {
     const tamper = integrity.integrity.tamper || {}
-    if ((tamper.unreadable || []).length && tamper.command) {
+    if ((tamper.unreadable_count || (tamper.unreadable || []).length) && tamper.command) {
       out.push({ command: tamper.command, kind: 'verify',
-                 why: (tamper.unreadable || []).length + ' packaged file(s) this account cannot read',
+                 why: (tamper.unreadable_count || (tamper.unreadable || []).length)
+                      + ' packaged file(s) this account cannot read',
                  detail: 'run it as the account that can read them, then paste the output back into integrity' })
     }
   }
@@ -1989,50 +2036,57 @@ function CommandsPanel({ bundle, selected, where }) {
   const hosts = orderedHosts(bundle && bundle.scan)
   if (!hosts.length) return null
   const blocks = hosts.map(({ label: name }) => ({ name, commands: commandsForHost(bundle, name) }))
+  const withCommands = blocks.filter((block) => block.commands.length)
+  const quiet = blocks.filter((block) => !block.commands.length).map((block) => block.name)
+  const total = withCommands.reduce((sum, block) => sum + block.commands.length, 0)
   const whereText = whereLine(where)
-  const total = blocks.reduce((sum, block) => sum + block.commands.length, 0)
+
   return jsxs('section', { style: sectionStyle('plan') }, [
     jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '6px' } }, [
       label('the fix, as commands', null, 'everything above, as the exact lines to paste — in order'),
       jsx('span', { style: { flex: 1 } }),
       total
-        ? jsx(Copy, { text: blocks.flatMap((block) => block.commands.map((row) => row.command)).join('\n'),
+        ? jsx(Copy, { text: withCommands.flatMap((block) => block.commands.map((row) => row.command)).join('\n'),
                       what: 'all ' + total + ' commands', label: 'copy all ' + total, primary: true })
         : jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.ok } }, 'nothing to run')
     ]),
-    blocks.map((block) => jsxs('div', { key: block.name, style: { marginBottom: '10px' } }, [
+    // A device with nothing to run is not a block with an empty body: it is one line, and it says why.
+    quiet.length
+      ? jsx('div', { style: { fontSize: '0.75rem', color: C.faint, marginBottom: '6px' } },
+          quiet.join(', ') + ' — nothing to run: no package update pending and no published library fix')
+      : null,
+    withCommands.map((block) => jsxs('div', { key: block.name, style: { marginBottom: '10px' } }, [
       jsxs('div', { style: { display: 'flex', gap: '6px', alignItems: 'baseline', marginBottom: '3px' } }, [
         jsx('span', { style: { display: 'inline-flex' } },
             deviceIcon(deviceKind((bundle.scan.hosts || {})[block.name] || {}))),
-        jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.dim } }, block.name),
         jsx('span', {
           style: { fontFamily: MONO, fontSize: '0.8125rem',
                    color: selected === block.name ? C.accent : C.text }
-        }, block.commands.length ? block.commands.length + ' command' + (block.commands.length === 1 ? '' : 's')
-                                 : 'nothing to run')
+        }, block.name),
+        jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.dim } },
+            block.commands.length + ' command' + (block.commands.length === 1 ? '' : 's') + ' — in this order')
       ]),
-      block.commands.length
-        ? block.commands.map((row, index) => jsxs('div', {
-            key: index,
-            style: {
-              border: '1px solid ' + C.border, borderLeft: '2px solid ' + C.accent,
-              borderRadius: '3px', padding: '7px 9px', marginBottom: '5px', background: C.panel
-            }
-          }, [
-            jsxs('div', { style: { display: 'flex', gap: '7px', alignItems: 'baseline' } }, [
-              jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.accent } },
-                  String(index + 1).padStart(2, '0')),
-              jsx('span', { style: { flex: 1, fontSize: '0.8125rem' } }, row.why)
-            ]),
-            jsx(Command, { text: row.command, label: (block.commands.length > 1 ? 'command ' + (index + 1) : 'the command')
-                           + ' — run it in a terminal',
-                           where: index === 0 && block.name === selected ? (whereText || null) : null }),
-            row.detail
-              ? jsx('div', { style: { fontSize: '0.75rem', color: C.faint, marginTop: '3px' } }, row.detail)
-              : null
-          ]))
-        : jsx('div', { style: { paddingLeft: '19px', fontSize: '0.75rem', color: C.faint } },
-            'nothing to install here — no pending package update and no published library fix')
+      block.commands.map((row, index) => jsxs('div', {
+        key: index,
+        style: {
+          border: '1px solid ' + C.border, borderLeft: '2px solid ' + C.accent,
+          borderRadius: '3px', padding: '7px 9px', marginBottom: '5px', background: C.panel
+        }
+      }, [
+        jsxs('div', { style: { display: 'flex', gap: '7px', alignItems: 'baseline' } }, [
+          jsx('span', { style: { fontFamily: MONO, fontSize: '0.75rem', color: C.accent } },
+              String(index + 1).padStart(2, '0')),
+          jsx('span', { style: { flex: 1, fontSize: '0.8125rem' } }, row.why)
+        ]),
+        jsx(Command, { text: row.command,
+                       label: (block.commands.length > 1 ? 'command ' + (index + 1) + ' for ' + block.name
+                                                          : 'the command for ' + block.name)
+                              + ' — run it in a terminal',
+                       where: index === 0 && block.name === selected ? (whereText || null) : null }),
+        row.detail
+          ? jsx('div', { style: { fontSize: '0.75rem', color: C.faint, marginTop: '3px' } }, row.detail)
+          : null
+      ]))
     ]))
   ])
 }
@@ -2365,6 +2419,9 @@ export function PatchSentinel({ compact }) {
   const [bundle, setBundle] = useState({})
   const [busy, setBusy] = useState(false)
   const [stage, setStage] = useState(null)
+  // which device the current stage is on: the integrity stage takes tens of seconds per host, and a
+  // spinner that does not move reads as a hang
+  const [currentHost, setCurrentHost] = useState(null)
   const [seconds, setSeconds] = useState(0)
   const [scanError, setScanError] = useState(null)
   const [selected, setSelected] = useState(null)
@@ -2454,6 +2511,7 @@ export function PatchSentinel({ compact }) {
         if (answer && answer.bundle) {
           setBundle(answer.bundle)
           setStage(answer.bundle.stage || null)
+          setCurrentHost(answer.bundle.current_host || null)
         }
         if (answer && answer.seconds) setSeconds(answer.seconds)
         if (answer && !answer.busy) {
@@ -2582,8 +2640,9 @@ export function PatchSentinel({ compact }) {
         }
       }, busy
         ? [jsx('span', { key: 'ring', className: 'ps-ring' }),
-           (stage && stage !== 'starting' && stage !== 'done' ? stage + ' ' : 'measuring ')
-             + (seconds ? Math.round(seconds) + ' s' : '…')]
+           (stage && stage !== 'starting' && stage !== 'done' ? stage : 'measuring')
+             + (currentHost ? ' · ' + currentHost : '')
+             + (seconds ? ' ' + Math.round(seconds) + ' s' : ' …')]
         : 'rescan all')
     ]),
     // the stylesheet is always mounted; the line appears only while something is being measured
@@ -2657,21 +2716,25 @@ export function PatchSentinel({ compact }) {
     // The detail sections stay on screen whether or not they found something: an empty section that
     // says why it is empty is information, and a section that vanishes reads as a broken pane. The
     // rows above are the answer; these are the readings it was built from.
-    // no dropdown any more, so the three readings below have to say whose they are
+    // No dropdown: the three readings below belong to the selected device, and the two facts a reader
+    // needs are that every device was measured in the same run and that switching does not re-scan.
     jsx('div', {
       style: { fontFamily: MONO, fontSize: '0.6875rem', color: C.faint, marginBottom: '4px' }
     }, selected
-        ? 'the three readings below are ' + selected + ' — click a device name above to change it'
+        ? 'readings below: ' + selected
+          + ' — all ' + labels.length + ' device(s) were read in the same run (' + labels.join(', ') + ')'
+          + ', so picking another name changes the view, not the measurement'
         : 'click a device name above to choose whose readings these are'),
     jsx(UpdatesPanel, { entry: hosts[selected] || null, hostLabel: selected }),
     jsx(IntegrityPanel, {
-      reading: bundle.integrity, busy: busy && stage === 'integrity',
+      reading: deviceIntegrity(bundle, selected), busy: busy && stage === 'integrity',
       seconds: busy && stage === 'integrity' ? seconds : 0,
       onRead: () => readIntegrity('check'),
       onRebaseline: () => readIntegrity('baseline'),
       onImport: importIntegrity
     }),
-    jsx(LanguagesPanel, { libraries, onCheck: checkLibraries, busy: libBusy }),
+    jsx(LanguagesPanel, { libraries: deviceLibraries(bundle, selected) || libraries,
+                          onCheck: checkLibraries, busy: libBusy }),
     // the optional shortcut, folded under the plan it belongs to — not a step of its own
     jsxs('div', { style: { marginBottom: '14px' } }, [
       jsxs('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px' } }, [
