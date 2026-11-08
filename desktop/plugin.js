@@ -693,7 +693,8 @@ function HostsPanel({ onChanged, startOpen, initialTest, initialHosts, onSelect,
             }),
             jsx('button', {
               type: 'button',
-              onClick: () => remove(host),
+              // the row itself selects the device; removing it must not also change what the pane shows
+              onClick: (event) => { if (event && event.stopPropagation) event.stopPropagation(); remove(host) },
               disabled: busy || typed !== host.label,
               title: 'removes the host and its measurement history',
               style: {
