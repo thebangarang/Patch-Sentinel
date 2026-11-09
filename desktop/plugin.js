@@ -1655,7 +1655,12 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
   const answers = (reading && reading.answers) || []
   const tamper = (state && state.tamper) || {}
   const listeners = (state && state.listeners) || {}
-  const coverage = state && state.root_coverage
+  // A stored root run is not a run that still covers: the package database can move under it, and
+  // the reading says so ("covered"). Painting a stale run green *and* hiding the paste control left
+  // the operator holding a command with nowhere to put its output — the dead end he reported.
+  const stored = state && state.root_coverage
+  const staleRun = !!(stored && stored.covered === false)
+  const coverage = stored && !staleRun ? stored : null
   const age = agoAt(reading && reading.read_at)
   const tone = (value) => (value === 'finding' ? C.danger
     : value === 'ok' ? C.ok : value === 'baseline' ? C.warn : C.faint)
@@ -1848,12 +1853,14 @@ function IntegrityPanel({ reading, busy, seconds, onRead, onRebaseline, onImport
                 style: { fontSize: '0.75rem', color: C.danger, marginTop: '5px', lineHeight: 1.5 }
               }, error)
             : null,
-          coverage
+          stored
             ? jsx('div', {
-                style: { fontSize: '0.6875rem', color: C.dim, marginTop: '5px' }
-              }, 'your last root run: ' + (coverage.changed_count || 0) + ' file(s) changed, '
-                 + (coverage.conffile_count || 0) + ' conffile(s), ' + (agoAt(coverage.at) || 'undated')
-                 + (coverage.tool ? ' · ' + coverage.tool : ''))
+                style: { fontSize: '0.6875rem', color: staleRun ? C.warn : C.dim, marginTop: '5px' }
+              }, 'your last root run: ' + (stored.changed_count || 0) + ' file(s) changed, '
+                 + (stored.conffile_count || 0) + ' conffile(s), ' + (agoAt(stored.at) || 'undated')
+                 + (stored.tool ? ' · ' + stored.tool : '')
+                 + (staleRun ? ' — older than the last change to the package database, so it '
+                            + 'describes a different file set. Paste a fresh run to close it.' : ''))
             : null,
           state.note
             ? jsx('div', {

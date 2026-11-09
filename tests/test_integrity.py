@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -423,15 +424,19 @@ class RootCoverage(unittest.TestCase):
     """
 
     def test_a_fresh_root_run_covers_the_set(self):
+        # the live package-database stamp is pinned: without it this test reads the *host's* dpkg
+        # state, and a real install an hour earlier makes it fail for reasons that are not the code
         now = time.time()
         coverage = {"at": now - 60, "changed_count": 0, "conffile_count": 2, "db_mtime": now - 7200}
-        self.assertTrue(integrity.coverage_covers(coverage, "dpkg -V", now=now))
+        with mock.patch.object(integrity, "db_stamp", return_value=now - 7200):
+            self.assertTrue(integrity.coverage_covers(coverage, "dpkg -V", now=now))
 
     def test_an_install_since_the_root_run_reopens_it(self):
         # the database is newer than the run: it described a different package set
         now = time.time()
-        coverage = {"at": now - 60, "db_mtime": 1_000_000}       # ancient stamp
-        self.assertFalse(integrity.coverage_covers(coverage, "dpkg -V", now=now))
+        coverage = {"at": now - 60, "db_mtime": now - 7200}
+        with mock.patch.object(integrity, "db_stamp", return_value=now - 10):
+            self.assertFalse(integrity.coverage_covers(coverage, "dpkg -V", now=now))
 
     def test_a_month_old_run_is_asked_again(self):
         now = time.time()
@@ -441,6 +446,26 @@ class RootCoverage(unittest.TestCase):
     def test_no_coverage_at_all_does_not_cover(self):
         self.assertFalse(integrity.coverage_covers(None, "dpkg -V"))
         self.assertFalse(integrity.coverage_covers({}, "dpkg -V"))
+
+    def test_the_stored_run_says_whether_it_still_covers(self):
+        """The pane must not have to guess: a stored run carries its own verdict.
+
+        The reported dead end: the answer said "run `sudo dpkg -V` again", the pane showed a green
+        "root run 2 h ago", and the paste control was gone — a command with nowhere to put its output.
+        """
+        now = time.time()
+        stored = {"at": now - 60, "changed_count": 0, "conffile_count": 2, "db_mtime": now - 7200,
+                  "tool": "dpkg -V", "source": "pasted by the operator"}
+        self.assertEqual(integrity._with_coverage(stored, True)["covered"], True)
+        self.assertEqual(integrity._with_coverage(stored, True)["stale"], False)
+
+        stale = integrity._with_coverage(stored, False)     # an install moved the database under it
+        self.assertEqual(stale["covered"], False)
+        self.assertEqual(stale["stale"], True)
+        self.assertEqual(stale["changed_count"], 0, "the stored numbers must survive the verdict")
+
+    def test_no_stored_run_stays_none(self):
+        self.assertIsNone(integrity._with_coverage(None, False))
 
     def test_attesting_a_clean_run_marks_the_state_covered(self):
         data = tempfile.mkdtemp()

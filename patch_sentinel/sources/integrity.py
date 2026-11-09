@@ -458,8 +458,12 @@ def parse(text: str, host: str, data_dir: str) -> dict:
                              [_describe(s, processes) for s in drift] if d["address"] in ("0.0.0.0", "[::]")],
             "ephemeral_range": list(ephemeral),
         },
-        # the last root run the operator pasted, with its own timestamp — it survives new readings
-        "root_coverage": read_root_coverage(data_dir, host),
+        # the last root run the operator pasted, with its own timestamp — it survives new readings.
+        # ``covered`` is *this reading's* verdict on that run, not a property of the stored file: the
+        # package database can move under it, and a stale run must never read as coverage. The pane
+        # used to paint any stored run green and take the paste control away, which left the operator
+        # holding a command and nowhere to put its output.
+        "root_coverage": _with_coverage(read_root_coverage(data_dir, host), covered),
     }
 
 
@@ -818,6 +822,13 @@ def save_root_coverage(data_dir: str, host: str, reading: dict) -> dict:
     payload["hosts"].setdefault(str(host).lower(), {})["root"] = reading
     _store(path, payload)
     return reading
+
+
+def _with_coverage(stored: dict | None, covered: bool) -> dict | None:
+    """A stored root run, plus whether it still describes the files this account cannot read."""
+    if not stored:
+        return None
+    return dict(stored, covered=bool(covered), stale=not covered)
 
 
 def read_root_coverage(data_dir: str, host: str) -> dict | None:

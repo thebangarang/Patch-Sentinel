@@ -53,6 +53,36 @@ if (!integrityHtml.includes('If you did, re-baseline so these stop being new')) 
 if (!integrityHtml.includes('ss -lntup')) throw new Error('the advice names no command')
 if (!integrityHtml.includes('could not be read')) throw new Error('the non-root caveat is missing')
 if (integrityHtml.includes('not compromised<')) throw new Error('the panel claimed a host is not compromised')
+
+// A stored root run is not the same as a run that still covers the set. The operator hit the
+// difference: the answer said "run `sudo dpkg -V` again", the pane painted the previous run green and
+// took the paste control away — a command with nowhere to put its output.
+const withCoverage = (covered) => ({
+  ...integrityFinding,
+  integrity: {
+    ...integrityFinding.integrity,
+    root_coverage: { at: Math.floor(Date.now() / 1000) - 5400, changed_count: 0, conffile_count: 2,
+                     tool: 'dpkg -V', source: 'pasted by the operator', covered, stale: !covered }
+  }
+})
+const staleHtml = renderToStaticMarkup(createElement(IntegrityPanel, {
+  reading: withCoverage(false), busy: false, seconds: 0, onRead: noop, onRebaseline: noop,
+  onImport: async () => ({ exit_code: 0, answer: 'read' }), onAttest: async () => ({ exit_code: 0 })
+}))
+if (!staleHtml.includes('paste the root output')) throw new Error(
+  'a stale root run left no way to paste a fresh one — that is the dead end the operator reported')
+if (staleHtml.includes('root run ')) throw new Error(
+  'a root run that no longer covers was still painted as coverage')
+if (!staleHtml.includes('older than the last change to the package database')) throw new Error(
+  'the panel shows a stale run without saying why it no longer counts')
+
+const freshHtml = renderToStaticMarkup(createElement(IntegrityPanel, {
+  reading: withCoverage(true), busy: false, seconds: 0, onRead: noop, onRebaseline: noop,
+  onImport: async () => ({ exit_code: 0 }), onAttest: async () => ({ exit_code: 0 })
+}))
+if (!freshHtml.includes('root run ')) throw new Error('a covering root run is not shown as coverage')
+if (freshHtml.includes('paste the root output')) throw new Error(
+  'the pane still asks for a paste when the stored run already covers the set')
 // a local check animates inside its own section, never at the top of the page
 const libsBusy = renderToStaticMarkup(
   createElement(LanguagesPanel, { libraries: data.libraries || data, onCheck: noop, busy: true }))
