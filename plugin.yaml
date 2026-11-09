@@ -38,7 +38,10 @@ provides_tools:
   - cve_integrity
   # one control for the whole posture: packages, language stack, integrity, then the commands
   - cve_rescan
-provides_hooks: []
+# every real cve_apply escalates to Hermes' human approval gate; the typed host label inside the
+# tool stays as a second guard
+provides_hooks:
+  - pre_tool_call
 config_schema:
   hosts:
     type: str

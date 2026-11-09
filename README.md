@@ -85,7 +85,7 @@ environment by `hermes update`, and only the rest count as yours.
 | `cve_image` | what is inside one image, without starting it |
 | `cve_sbom` | CycloneDX export |
 | `cve_ack` | record a decision about one advisory, with a reason and an end date |
-| `cve_apply` | the only tool that changes a machine: typed host name, `sudo -n`, dry run by default, receipt afterwards |
+| `cve_apply` | the only tool that changes a machine: Hermes' approval prompt, typed host name, `sudo -n`, dry run by default, receipt afterwards |
 
 ## Exit codes
 
@@ -137,7 +137,9 @@ yet.
 Registry and advisory reads are anonymous; remote hosts use **your own SSH agent**, so `ssh` sees the key
 and the plugin never does. No secret is stored, read or forwarded, and the only thing sent anywhere is
 package names and versions — to OSV, the vendor feeds and the registries. `sudo` prompts are not handled:
-`cve_apply` runs only where `sudo -n` works, and otherwise refuses with the commands to run by hand. See
+`cve_apply` escalates a real apply to **Hermes' own approval prompt** (a `pre_tool_call` hook: the host is
+named, and cron fails closed), and then runs only where `sudo -n` works — otherwise it refuses with the
+commands to run by hand. See
 [`SECURITY.md`](SECURITY.md).
 
 ## What it touches

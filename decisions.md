@@ -1,5 +1,23 @@
 # Decisions
 
+## D12 — The catalogue review's three findings (2026-11-09) — decided
+
+**Decision:** a real `cve_apply` escalates through a `pre_tool_call` hook to Hermes' human approval
+gate; every child process gets a minimal environment; the data directory follows the active profile
+through `hermes_constants.get_hermes_home()`.
+**Reason:** the reviewer showed the typed-label guard was the *only* guard — and the model supplies both
+the label and `dry_run=false` itself, so the one tool that upgrades a machine could run in a scheduled
+run with nobody to ask. The gate has to live in the host, not in the tool. The other two are the same
+mistake in smaller form: a package manager inheriting the gateway's provider keys, and a multi-profile
+gateway writing every profile's scans into one directory.
+**Alternatives rejected:** (a) keeping the typed label as the gate — it is a speed bump against a
+mistyped host, not against a model; it stays, as the second guard. (b) `block` instead of `approve` —
+it would make the tool unusable rather than safe. (c) A single `rule_key` for all hosts — "[a]lways"
+on the laptop would silently approve the fleet; the key is per host instead.
+**Cost:** an extra hook on every tool call (one comparison), and a dependency on
+`hermes_constants.get_hermes_home()` that is imported optionally, so the portability probe and the tests
+still run outside Hermes.
+
 ## D1 — Name: **Patch Sentinel** (2026-11-06) — decided
 
 **Decision:** product **Patch Sentinel**; folder, plugin id and repo `patch-sentinel` /

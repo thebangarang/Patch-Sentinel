@@ -49,8 +49,12 @@ tool's credential file, and it must never place a secret in a subprocess environ
 - Everything the **scan** does is unprivileged: `apt-get -s dist-upgrade`, `uname -r`, `docker ps`,
   `docker buildx imagetools inspect`, `ssh <host>` (read-only commands). The pane calls nothing that
   changes a machine — it hands over commands.
-- **One privileged path exists, and it is a tool, not a control:** `cve_apply`. It refuses unless the
-  operator types the host name, `dry_run` is explicitly `false`, and `sudo -n` works on that host; it
+- **One privileged path exists, and it is a tool, not a control:** `cve_apply`. A real apply
+  (`dry_run=false`) first escalates through a `pre_tool_call` hook to Hermes' human approval gate — the
+  typed label is a second guard, not the first, because a model can supply both the label and the flag
+  on its own. Hermes fails the gate closed where nobody can answer (cron, the messaging gateway). It
+  then refuses unless the operator types the host name, `dry_run` is explicitly `false`, and `sudo -n`
+  works on that host; it
   runs `sudo -n` only, so a password prompt can never hang a call, and it hands the same commands over
   when it refuses. It stages, applies, re-measures and writes a receipt, is reversible per step, and is
   never reachable from a schedule. `tests/test_apply.py` holds the gate; `docs/apply-by-hand.md` has the

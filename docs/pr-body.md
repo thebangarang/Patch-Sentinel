@@ -28,7 +28,10 @@ The desktop pane has **one control** — `scan all · <device>` — which reads 
 order the page draws its sections, and then hands over the exact commands per device, numbered, with the
 risk, the downtime, how to verify each step and how to undo it. **The pane changes nothing.**
 
-`cve_apply` is the only tool that changes a machine. It refuses unless the operator types the host label,
+A real `cve_apply` (`dry_run=false`) escalates through a declared `pre_tool_call` hook to Hermes' own
+approval prompt, which fails closed when nobody is there — a model cannot approve its own upgrade in
+cron. Behind that gate, `cve_apply` is the only tool that changes a machine. It refuses unless the
+operator types the host label,
 `sudo -n` works on that host, and `dry_run=false`; it stages, applies, re-measures and writes a receipt,
 and it hands the same commands over when it refuses. It never asks for, holds or forwards a password.
 
@@ -39,7 +42,7 @@ and it hands the same commands over when it refuses. It never asks for, holds or
   read-only data dir, a corrupt state file, clock skew, no network, HTTP 429, a data dir that is a file,
   a host entry shaped like a command, duplicate labels, and two identical runs on an unchanged machine.
 - `./scripts/pane_check.sh` — every panel rendered, both states.
-- `hermes plugins validate .` and `hermes plugins doctor . --ci` — green (11 tools, 0 hooks, no network
+- `hermes plugins validate .` and `hermes plugins doctor . --ci` — green (11 tools, 1 hook, no network
   at import time).
 - `scripts/validate_plugin_catalog.py` on the entry file in this PR — **OK, 1 file(s) valid**.
 
@@ -58,8 +61,9 @@ host) say so in the table, in the pane's gap list, and in every coverage answer.
 - **Subprocesses**: `uname`, `dpkg-query`/`dpkg -V`, `apt-cache`, `apt-get -s`, `rpm -qa`/`rpm -Va`,
   `dnf -q check-update`, `pacman -Q`/`-Qu`/`-Qkk`, `zypper -q lu`, `apk version`/`apk audit`, `ss`,
   `docker ps|inspect|buildx`, and `ssh <host>` for remote hosts. All read-only in the scan; every call is
-  an argv list, never `shell=True`. The one privileged path is `cve_apply`, which runs `sudo -n` on the
-  plan it just printed.
+  an argv list, never `shell=True`, in a minimal environment (`PATH`, `HOME`, the locale, and the two
+  sockets ssh and rootless docker address — never the gateway's provider keys). The one privileged path
+  is `cve_apply`, behind Hermes' approval prompt, which runs `sudo -n` on the plan it just printed.
 - **Credentials**: none. No `requires_env`, no `optional_env`, no credential file read. Registry and
   advisory reads are anonymous; remote hosts use the operator's own SSH agent, so `ssh` sees the key and
   the plugin never does. `docker login` on a host is used by the docker CLI, not read by the plugin.

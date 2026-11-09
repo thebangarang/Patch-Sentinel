@@ -29,14 +29,33 @@ def configure(settings: dict) -> None:
     _settings = dict(settings or {})
 
 
+def hermes_home() -> Path:
+    """The Hermes home this process is serving — per profile, when a gateway multiplexes several.
+
+    ``HERMES_HOME`` in the environment is one process-wide value, so a multi-profile gateway would
+    write every profile's scans into the first one's directory. ``hermes_constants.get_hermes_home``
+    resolves the *active* profile (a context-local override first, then the env var, then the
+    platform default), which is what a plugin should follow. The import is optional: the plugin also
+    runs outside Hermes (the portability probe, the tests), where the env var and the default are all
+    there is.
+    """
+    try:
+        from hermes_constants import get_hermes_home          # type: ignore[import-not-found]
+        resolved = get_hermes_home()
+        if resolved:
+            return Path(resolved)
+    except Exception:                                          # noqa: BLE001 - not inside Hermes
+        pass
+    return Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
+
+
 def data_dir() -> Path:
-    """``PATCH_SENTINEL_DATA`` / config ``data_dir``, else ``$HERMES_HOME/patch-sentinel``."""
+    """``PATCH_SENTINEL_DATA`` / config ``data_dir``, else ``<hermes home>/patch-sentinel``."""
     override = (os.environ.get("PATCH_SENTINEL_DATA") or _settings.get("data_dir") or "").strip()
     if override:
         path = Path(override).expanduser()
     else:
-        home = os.environ.get("HERMES_HOME") or str(Path.home() / ".hermes")
-        path = Path(home) / "patch-sentinel"
+        path = hermes_home() / "patch-sentinel"
     path.mkdir(parents=True, exist_ok=True)
     try:
         os.chmod(path, 0o700)

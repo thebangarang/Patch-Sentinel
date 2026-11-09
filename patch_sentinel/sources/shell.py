@@ -10,10 +10,19 @@ plus its text, and the caller turns that into an `unknown` outcome with a reason
 """
 from __future__ import annotations
 
+import os
 import subprocess
 
 # The scan is read-only, so a hung `apt-get -s` must not hang the agent: 180s, like the routine.
 DEFAULT_TIMEOUT = 180
+
+# What a child process is allowed to see. A package manager or a language tool has no business
+# reading the agent's provider keys, and it only needs a PATH, a home, a locale — plus the two
+# sockets that make the plugin work at all: ssh needs SSH_AUTH_SOCK to reach the operator's agent,
+# and rootless docker needs DOCKER_HOST to find its daemon. Both are paths, not credentials.
+CHILD_ENV_KEYS = ("PATH", "HOME", "LANG", "LC_ALL", "LANGUAGE", "TZ", "TERM",
+                  "SSH_AUTH_SOCK", "DOCKER_HOST")
+_FALLBACK_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 SSH_CONNECT_TIMEOUT = 12
 
 # The OS probe wants the system's own tools, and only those: `apt-get` and `dpkg-query` must be the
@@ -40,6 +49,18 @@ def split_target(target: str) -> tuple[str, str | None]:
     return target, None
 
 
+def child_env() -> dict:
+    """The environment every command this plugin runs inherits — nothing else.
+
+    Measured before this existed: `npm ls -g`, `pip list` and `docker` all inherited the gateway's
+    environment, which holds the model provider's API keys. A package manager does not need them,
+    and a tool that runs someone else's scripts should not be able to read them.
+    """
+    env = {key: os.environ[key] for key in CHILD_ENV_KEYS if os.environ.get(key)}
+    env.setdefault("PATH", os.environ.get("PATH") or _FALLBACK_PATH)
+    return env
+
+
 def run(cmd: str, target: str | None = None, timeout: int = DEFAULT_TIMEOUT,
         path_prefix: str | None = None) -> tuple[int, str]:
     """Execute *cmd* locally (``target is None``) or over ssh; return ``(returncode, stdout)``.
@@ -56,7 +77,8 @@ def run(cmd: str, target: str | None = None, timeout: int = DEFAULT_TIMEOUT,
     else:
         argv = ["/bin/bash", "-c", (path_prefix or _PATH_PREFIX) + cmd]
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                              env=child_env())
     except subprocess.TimeoutExpired:
         return 124, "timeout"
     except (OSError, ValueError) as exc:          # no bash, no ssh binary, bad target string

@@ -170,6 +170,11 @@ class HostRoutes(unittest.TestCase):
             def register_tool(self, **kwargs):
                 pass
 
+            def register_hook(self, name, callback):
+                # the real ctx always has it; register() requires it rather than silently running
+                # without the apply approval gate
+                self.hooks = getattr(self, "hooks", []) + [(name, callback)]
+
         # loaded the way the host loads it: this directory *is* the package
         spec = importlib.util.spec_from_file_location(
             "patch_sentinel_plugin_root", ROOT / "__init__.py",
