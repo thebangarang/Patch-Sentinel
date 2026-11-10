@@ -49,6 +49,12 @@ tool's credential file, and it must never place a secret in a subprocess environ
 - Everything the **scan** does is unprivileged: `apt-get -s dist-upgrade`, `uname -r`, `docker ps`,
   `docker buildx imagetools inspect`, `ssh <host>` (read-only commands). The pane calls nothing that
   changes a machine — it hands over commands.
+- **The gate is a hook, and a hook is only as good as its dispatch.** `pre_tool_call` fires for the
+  name Hermes dispatches; measured on 2026-11-10 against the desktop app, a real `cve_apply` routed
+  through the deferred `tool_call` bridge ran *without* a prompt, while the same call was refused when
+  dispatched directly. The hook now also reads the calls inside a `tool_call` batch, but an invocation
+  the host does not dispatch hooks for is an invocation no plugin can gate. Treat the approval prompt
+  as the guard it is on the direct path, not as a guarantee on every path.
 - **One privileged path exists, and it is a tool, not a control:** `cve_apply`. A real apply
   (`dry_run=false`) first escalates through a `pre_tool_call` hook to Hermes' human approval gate — the
   typed label is a second guard, not the first, because a model can supply both the label and the flag
