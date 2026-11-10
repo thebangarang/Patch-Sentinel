@@ -26,18 +26,15 @@ DEFAULTS = {
 
 
 def _is_real_apply(value) -> bool:
-    """``dry_run`` omitted or true means nothing runs. Anything that reads as false is a real apply.
+    """Whether this ``dry_run`` means business — asked of the same code the tool executes.
 
-    The schema types it as a boolean, but a model may send ``"false"`` or ``0``; treating those as
-    "not false" would let the one dangerous call through the gate that exists for it.
+    This used to be a second, hand-kept copy of the rule, and the copy drifted: the hook listed the
+    false-ish spellings while ``cve_apply`` used ``bool(dry_run)``, so ``dry_run: ""`` walked past the
+    prompt and still ran ``sudo``. One definition now lives in :mod:`patch_sentinel.apply`, and both
+    the hook and the tool call it.
     """
-    if value is None:
-        return False
-    if isinstance(value, bool):
-        return value is False
-    if isinstance(value, (int, float)):
-        return value == 0
-    return str(value).strip().lower() in {"false", "0", "no", "off"}
+    from .patch_sentinel import apply as apply_mod
+    return apply_mod.is_real_apply(value)
 
 
 def pre_tool_call(tool_name: str = "", args=None, **_) -> dict | None:

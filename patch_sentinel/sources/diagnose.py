@@ -51,7 +51,9 @@ def agent_has_keys() -> bool:
     answers the only question worth asking, in public form.
     """
     try:
-        proc = subprocess.run(["ssh-add", "-L"], capture_output=True, text=True, timeout=10)
+        # the agent socket is in the minimal env; the gateway's provider keys are not
+        proc = subprocess.run(["ssh-add", "-L"], capture_output=True, text=True, timeout=10,
+                              env=shell.child_env())
     except (OSError, subprocess.SubprocessError):
         return False
     return proc.returncode == 0 and proc.stdout.strip().startswith(("ssh-", "ecdsa-"))
@@ -73,7 +75,8 @@ def diagnose(target: str | None) -> dict:
         argv += ["-p", port]
     argv += [host, "true"]
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, timeout=CONNECT_TIMEOUT + 12)
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=CONNECT_TIMEOUT + 12,
+                              env=shell.child_env())
     except subprocess.TimeoutExpired:
         return {"ok": False, "stage": "tcp", "reason": "the connection hung past the timeout",
                 "hint": "a firewall is dropping the packets, or the host is unreachable",

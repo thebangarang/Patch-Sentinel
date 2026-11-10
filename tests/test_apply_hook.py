@@ -47,10 +47,12 @@ class ApprovalGate(unittest.TestCase):
                 self.assertIsNotNone(answer, f"{value!r} was read as a dry run")
 
     def test_a_dry_run_does_not_escalate(self):
-        for args in ({"host": "beelink"}, {"host": "beelink", "dry_run": True},
-                     {"host": "beelink", "dry_run": "true"}, {"host": "beelink", "dry_run": None}):
-            with self.subTest(args=args):
-                self.assertIsNone(plugin.pre_tool_call(tool_name="cve_apply", args=args))
+        # "" and the empty containers are the reviewer's case: falsy, but *not* a "false". They must
+        # read as a dry run here and in the tool — otherwise one of the two would act alone.
+        for value in (True, "true", None, "", "  ", [], {}, 1, "1", "yes"):
+            with self.subTest(dry_run=value):
+                self.assertIsNone(plugin.pre_tool_call(tool_name="cve_apply",
+                                                       args={"host": "beelink", "dry_run": value}))
 
     def test_another_tool_is_left_alone(self):
         for name in ("cve_scan", "cve_plan", "read_file", "terminal", ""):
@@ -64,6 +66,35 @@ class ApprovalGate(unittest.TestCase):
                 answer = plugin.pre_tool_call(tool_name="cve_apply", args=args)
                 # either outcome is acceptable for garbage; raising is not
                 self.assertTrue(answer is None or answer.get("action") == "approve", answer)
+
+    def test_the_hook_and_the_tool_ask_the_same_question(self):
+        """One definition, two callers — the whole point of the fix.
+
+        The gap was that the hook kept its own list of false-ish spellings while ``cve_apply`` used
+        ``bool(dry_run)``, so ``dry_run: ""`` skipped the prompt and still ran sudo. Every value now
+        has exactly one answer, and the tool's answer is the inverse of the hook's.
+        """
+        from patch_sentinel import apply as apply_mod
+        values = [None, True, False, 0, 1, 0.0, "false", "False", "  false ", "0", "no", "off",
+                  "", "  ", "true", "yes", [], {}, ["false"], {"dry_run": False}]
+        for value in values:
+            with self.subTest(dry_run=value):
+                real = apply_mod.is_real_apply(value)
+                self.assertEqual(plugin._is_real_apply(value), real,
+                                 "the hook disagrees with the definition")
+                if isinstance(value, str) and not value.strip():
+                    self.assertFalse(real, "a blank string must be a dry run")
+                if isinstance(value, (list, dict)):
+                    self.assertFalse(real, "a container is not a \"false\"")
+
+    def test_the_tool_resolves_dry_run_from_that_same_function(self):
+        import inspect
+        from patch_sentinel import tools
+        source = inspect.getsource(tools.cve_apply)
+        self.assertIn("apply_mod.is_real_apply", source,
+                      "cve_apply must not re-derive what a real apply is")
+        self.assertNotIn("bool(dry_run)", source,
+                         "bool() is what let an empty string through the gate")
 
     def test_the_hook_is_declared_and_registered(self):
         import yaml

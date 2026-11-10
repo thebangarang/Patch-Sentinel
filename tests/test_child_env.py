@@ -47,6 +47,40 @@ class ChildEnvironment(unittest.TestCase):
             self.assertTrue(shell.child_env().get("PATH"), "a child with no PATH finds no tool")
 
 
+class TheOtherCallSites(unittest.TestCase):
+    """The reviewer named three more: `docker save`, `ssh-add -L`, and the ssh reachability probe.
+
+    Each spawned a process with the gateway's whole environment. The check is the same one the shell
+    test makes: plant a key, call the code, look at what the child would have inherited.
+    """
+
+    def capture(self, call):
+        with mock.patch("subprocess.run") as run:
+            run.return_value = mock.Mock(returncode=0, stdout="ssh-ed25519 AAAA", stderr="")
+            with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-not-real"}, clear=False):
+                call()
+            return run.call_args.kwargs.get("env")
+
+    def test_ssh_add_gets_the_minimal_env(self):
+        from patch_sentinel.sources import diagnose
+        env = self.capture(diagnose.agent_has_keys) or {}
+        self.assertIsNotNone(env, "ssh-add inherited the whole environment")
+        self.assertNotIn("OPENROUTER_API_KEY", env)
+
+    def test_the_reachability_probe_gets_it_too(self):
+        from patch_sentinel.sources import diagnose
+        env = self.capture(lambda: diagnose.diagnose("hermes@10.0.0.9")) or {}
+        self.assertIsNotNone(env, "the ssh probe inherited the whole environment")
+        self.assertNotIn("OPENROUTER_API_KEY", env)
+
+    def test_docker_save_gets_it_too(self):
+        from patch_sentinel.sources import image_db
+        target = os.path.join(tempfile.mkdtemp(prefix="ps-save-"), "image.tar")
+        env = self.capture(lambda: image_db.save_image("debian:12", None, target, 30)) or {}
+        self.assertIsNotNone(env, "docker save inherited the whole environment")
+        self.assertNotIn("OPENROUTER_API_KEY", env)
+
+
 class DataDirPerProfile(unittest.TestCase):
     def tearDown(self):
         store.configure({})

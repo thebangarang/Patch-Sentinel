@@ -759,8 +759,10 @@ def cve_apply(args: dict, **kwargs) -> str:
                       **_not_in_inventory(requested)})
 
     confirm = str(args.get("confirm") or "")
-    dry_run = args.get("dry_run")
-    dry_run = True if dry_run is None else bool(dry_run)
+    # The tool and the approval hook must agree on what "real" means, or the gate has a gap: this
+    # used to be a plain truthiness test, which read "" (and [] / {}) as "go ahead" while the hook
+    # read them as a dry run — a real upgrade with no prompt. One definition, two callers.
+    dry_run = not apply_mod.is_real_apply(args.get("dry_run"))
     timeout = max(120, min(int(args.get("timeout") or apply_mod.APPLY_TIMEOUT), 1800))
 
     # The gate is a string comparison; it is checked before the measurement, not after. Typing the

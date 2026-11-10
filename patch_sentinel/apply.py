@@ -16,6 +16,13 @@ this file or it refuses:
 ``dry_run`` defaults to **true**: the tool checks the host is reachable and that it holds the
 privilege, returns the commands it *would* run, and stops — it does not even stage, because the stage
 downloads packages. Applying for real needs ``dry_run=false`` *and* the typed host name.
+
+:func:`is_real_apply` is the **single** definition of "this call changes the machine". The
+``pre_tool_call`` hook in the plugin root asks it whether to raise Hermes' approval prompt, and
+:func:`patch_sentinel.tools.cve_apply` asks it whether to execute — two callers, one answer. They
+drifted once: the hook used a list of false-ish spellings while the tool used ``bool(dry_run)``, so
+``dry_run: ""`` skipped the prompt and still ran ``sudo``. A gate whose two halves disagree is not a
+gate, which is why the definition lives here and both sides import it.
 """
 from __future__ import annotations
 
@@ -28,6 +35,27 @@ import time
 from . import store
 from .plan import COMMANDS as PLAN_COMMANDS
 from .sources import dispatch, services, shell
+
+#: What a caller can send and still mean "do not change anything": the schema says boolean, but a
+#: model may send the spellings below. Every other value — including ``""``, ``[]`` and ``{}``, which
+#: are falsy but are not a "false" — is a **dry run**, because a malformed call must never upgrade a
+#: machine, and the approval hook must never be the only thing standing between a typo and sudo.
+REAL_APPLY_VALUES = frozenset({"false", "0", "no", "off"})
+
+
+def is_real_apply(value) -> bool:
+    """Does this ``dry_run`` argument mean "change the machine"?
+
+    ``True`` here is what arms the approval prompt *and* what arms the upgrade — the two cannot
+    disagree, because both call this.
+    """
+    if value is None or isinstance(value, bool):
+        return value is False
+    if isinstance(value, (int, float)):
+        return value == 0
+    if isinstance(value, str):
+        return value.strip().lower() in REAL_APPLY_VALUES
+    return False
 
 STAGE_TIMEOUT = 300
 APPLY_TIMEOUT = 900

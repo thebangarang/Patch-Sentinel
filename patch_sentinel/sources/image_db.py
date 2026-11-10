@@ -194,11 +194,14 @@ def save_image(image: str, target: str | None, path: str, timeout: int) -> tuple
     """`docker save` into a local file, from this machine or through ssh. Returns (rc, stderr tail)."""
     import subprocess
 
+    from . import shell
+
     command = ("docker save " if not target else "docker save ") + shell_quote(image)
     try:
         with open(path, "wb") as handle:
             proc = subprocess.run(_argv(command, target), stdout=handle,
-                                  stderr=subprocess.PIPE, timeout=timeout)
+                                  stderr=subprocess.PIPE, timeout=timeout,
+                                  env=shell.child_env())
     except subprocess.TimeoutExpired:
         return 124, "docker save timed out"
     except OSError as exc:
