@@ -96,6 +96,49 @@ class ApprovalGate(unittest.TestCase):
         self.assertNotIn("bool(dry_run)", source,
                          "bool() is what let an empty string through the gate")
 
+    def test_a_deferred_bridge_call_escalates_too(self):
+        """The path that got past the gate on 2026-11-10.
+
+        The model called `tool_call` with `cve_apply` inside; Hermes fires `pre_tool_call` for the
+        bridge name, so a hook that only matched "cve_apply" never saw it and a real apply ran with no
+        prompt. The gate follows the call, not the wrapper.
+        """
+        answer = plugin.pre_tool_call(tool_name="tool_call", args={"calls": [
+            {"name": "cve_apply", "arguments": {"host": "beelink", "confirm": "beelink",
+                                                "dry_run": False}}]})
+        self.assertIsNotNone(answer, "a bridged real apply went through with no prompt")
+        self.assertEqual(answer["action"], "approve")
+        self.assertIn("beelink", answer["message"])
+
+    def test_a_bridged_dry_run_stays_quiet(self):
+        for inner in ({"host": "beelink", "confirm": "beelink"},
+                      {"host": "beelink", "confirm": "beelink", "dry_run": True},
+                      {"host": "beelink", "confirm": "beelink", "dry_run": ""}):
+            with self.subTest(inner=inner):
+                self.assertIsNone(plugin.pre_tool_call(
+                    tool_name="tool_call", args={"calls": [{"name": "cve_apply",
+                                                            "arguments": inner}]}))
+
+    def test_a_bridge_of_other_tools_is_left_alone(self):
+        answer = plugin.pre_tool_call(tool_name="tool_call", args={"calls": [
+            {"name": "cve_scan", "arguments": {"host": "beelink"}},
+            {"name": "terminal", "arguments": {"command": "ls"}}]})
+        self.assertIsNone(answer)
+
+    def test_one_real_call_in_a_batch_is_enough(self):
+        answer = plugin.pre_tool_call(tool_name="tool_call", args={"calls": [
+            {"name": "cve_scan", "arguments": {"host": "beelink"}},
+            {"name": "cve_apply", "arguments": {"host": "webasix", "confirm": "webasix",
+                                                "dry_run": False}}]})
+        self.assertIsNotNone(answer)
+        self.assertIn("webasix", answer["message"], "the prompt must name the host that would change")
+
+    def test_a_malformed_bridge_never_raises(self):
+        for bad in ("not a list", [None, 3, "cve_apply"], [{"name": "cve_apply"}],
+                    [{"name": "cve_apply", "arguments": "nope"}]):
+            with self.subTest(calls=bad):
+                plugin.pre_tool_call(tool_name="tool_call", args={"calls": bad})
+
     def test_the_hook_is_declared_and_registered(self):
         import yaml
         manifest = yaml.safe_load((ROOT / "plugin.yaml").read_text())

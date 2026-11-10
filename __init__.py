@@ -37,6 +37,30 @@ def _is_real_apply(value) -> bool:
     return apply_mod.is_real_apply(value)
 
 
+#: The names a call can arrive under. ``tool_call`` is the deferred bridge: the model calls it with
+#: ``{"calls": [{"name": "cve_apply", "arguments": {...}}]}``, and measured on 2026-11-10 the host
+#: fires ``pre_tool_call`` for the *bridge* name only — the inner tool never gets its hook, so a real
+#: apply went through untouched. The gate has to follow the call, not the wrapper.
+APPLY_CALL_NAMES = ("cve_apply",)
+BRIDGE_TOOL_NAMES = ("tool_call",)
+
+
+def _apply_calls(tool_name: str, params: dict) -> list[dict]:
+    """The ``cve_apply`` argument sets inside this call, whoever the caller says it is."""
+    if tool_name in APPLY_CALL_NAMES:
+        return [params]
+    if tool_name not in BRIDGE_TOOL_NAMES:
+        return []
+    calls = params.get("calls")
+    found = []
+    for call in calls if isinstance(calls, list) else []:
+        if not isinstance(call, dict) or call.get("name") not in APPLY_CALL_NAMES:
+            continue
+        inner = call.get("arguments")
+        found.append(inner if isinstance(inner, dict) else {})
+    return found
+
+
 def pre_tool_call(tool_name: str = "", args=None, **_) -> dict | None:
     """Escalate a real ``cve_apply`` to Hermes' approval prompt. Never raises, never blocks.
 
@@ -45,12 +69,12 @@ def pre_tool_call(tool_name: str = "", args=None, **_) -> dict | None:
     "[a]lways" answer, so allowing one host does not silently allow every host.
     """
     try:
-        if tool_name != "cve_apply":
-            return None
         params = args if isinstance(args, dict) else {}
-        if not _is_real_apply(params.get("dry_run")):
+        real = [call for call in _apply_calls(tool_name, params)
+                if _is_real_apply(call.get("dry_run"))]
+        if not real:
             return None
-        host = str(params.get("host") or "").strip() or "this machine"
+        host = str(real[0].get("host") or "").strip() or "this machine"
         return {
             "action": "approve",
             "message": (f"cve_apply will run a full system upgrade with sudo on {host} "
