@@ -1,0 +1,10 @@
+# patch-sentinel — runtime dependencies of the plugin this project holds.
+#
+# Pinned to the versions this project's venv runs (2026-11-11). The plugin's own catalogue entry
+# pins the code (sha 70bbf9d, v0.1.2); this file pins the environment that code imports:
+# fastapi serves the pane's API, httpx reaches the advisory hosts, psutil reads processes.
+# Everything else the module uses is stdlib, and the scanning side deliberately shells out to
+# the host's own tools (dpkg, apt, rpm) rather than importing a package manager.
+fastapi==0.133.1
+httpx==0.28.1
+psutil==7.2.2
