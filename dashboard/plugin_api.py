@@ -439,7 +439,7 @@ def _ui_prints() -> dict:
         try:
             data = path.read_bytes()
             prints[key] = {
-                "sha": hashlib.sha1(data).hexdigest()[:8],
+                "sha": hashlib.sha1(data, usedforsecurity=False).hexdigest()[:8],  # an 8-char build fingerprint for a "<which plugin.js is served>" line, not a signature — `usedforsecurity=False` is the claim, made where a reader can check it
                 "bytes": len(data),
                 "mtime": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
                                  .isoformat(timespec="seconds"),
