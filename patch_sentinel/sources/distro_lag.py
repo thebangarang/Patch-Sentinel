@@ -115,7 +115,9 @@ MAX_INDEX = 600
 #: Has the host refreshed the metadata a "candidate version" comes from? A stale index makes every
 #: advisory look like a lag, because the archive has moved on and this machine has not looked.
 FRESHNESS = {
-    "apt": "find /var/lib/apt/lists -name '*.Packages*' -newermt '-48 hours' 2>/dev/null | head -1",
+    #: apt stores these as `archive.ubuntu.com_..._binary-amd64_Packages` (underscore, no dot):
+    #: a `*.Packages*` glob matches nothing on a real apt host and reads as stale forever.
+    "apt": "find /var/lib/apt/lists -name '*_Packages*' -newermt '-48 hours' 2>/dev/null | head -1",
     "dnf": "find /var/cache/dnf -name '*.solv' -newermt '-48 hours' 2>/dev/null | head -1",
     "apk": "find /var/cache/apk -newermt '-48 hours' 2>/dev/null | head -1",
     "pacman": "find /var/lib/pacman/sync -newermt '-48 hours' 2>/dev/null | head -1",
